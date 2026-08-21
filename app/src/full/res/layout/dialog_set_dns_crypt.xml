@@ -19,13 +19,14 @@
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/dialog_dns_crypt_heading"
+                style="@style/TextAppearance.AppCompat.Subhead"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:padding="10dp"
                 android:text="@string/cd_dns_crypt_dialog_heading"
-                android:textAppearance="?attr/textAppearanceTitleMedium"
-                android:textColor="?attr/primaryTextColor"
+                android:textSize="@dimen/large_font_text_view"
                 app:layout_constraintTop_toTopOf="parent" />
+
 
             <RadioGroup
                 android:id="@+id/dialog_dns_proxy_radio_group"
@@ -42,7 +43,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="10dp"
                     android:text="@string/cd_dns_crypt_resolver_heading"
-                    android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    android:textSize="@dimen/large_font_text_view" />
 
                 <com.google.android.material.radiobutton.MaterialRadioButton
                     android:id="@+id/dialog_dns_crypt_radio_relay"
@@ -50,7 +51,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
                     android:text="@string/cd_dns_crypt_relay_heading"
-                    android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    android:textSize="@dimen/large_font_text_view" />
             </RadioGroup>
 
             <com.google.android.material.textfield.TextInputLayout
@@ -61,13 +62,13 @@
                 app:hintTextColor="?attr/accentGood"
                 app:layout_constraintTop_toBottomOf="@id/dialog_dns_proxy_radio_group">
 
-                <com.google.android.material.textfield.TextInputEditText
+                <androidx.appcompat.widget.AppCompatEditText
                     android:id="@+id/dialog_dns_crypt_name"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="textNoSuggestions"
                     android:maxLines="1"
-                    android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    android:textSize="@dimen/large_font_text_view" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.textfield.TextInputLayout
@@ -78,11 +79,11 @@
                 app:hintTextColor="?attr/accentGood"
                 app:layout_constraintTop_toBottomOf="@id/text_input_layout1">
 
-                <com.google.android.material.textfield.TextInputEditText
+                <androidx.appcompat.widget.AppCompatEditText
                     android:id="@+id/dialog_dns_crypt_url"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    android:textSize="@dimen/large_font_text_view" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.textfield.TextInputLayout
@@ -93,13 +94,13 @@
                 app:hintTextColor="?attr/accentGood"
                 app:layout_constraintTop_toBottomOf="@id/text_input_layout2">
 
-                <com.google.android.material.textfield.TextInputEditText
+                <androidx.appcompat.widget.AppCompatEditText
                     android:id="@+id/dialog_dns_crypt_desc"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="textNoSuggestions"
                     android:maxLines="2"
-                    android:textAppearance="?attr/textAppearanceBodyLarge" />
+                    android:textSize="@dimen/large_font_text_view" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <androidx.appcompat.widget.AppCompatTextView
@@ -107,28 +108,29 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:padding="2dp"
-                android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:textColor="?attr/colorError"
+                android:textColor="@color/colorRed_A400"
+                android:textSize="@dimen/default_font_text_view"
                 app:layout_constraintTop_toBottomOf="@id/text_input_layout3" />
 
         </LinearLayout>
     </ScrollView>
 
-    <com.google.android.material.button.MaterialButton
+    <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/dialog_dns_crypt_ok_btn"
-        style="@style/Widget.Material3.Button.TextButton.Dialog"
+        style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:layout_marginBottom="10dp"
         android:text="@string/lbl_add"
         android:textColor="?attr/accentGood"
+        android:textSize="@dimen/large_font_text_view"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/dialog_dns_crypt_scroll" />
 
-    <com.google.android.material.button.MaterialButton
+    <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/dialog_dns_crypt_cancel_btn"
-        style="@style/Widget.Material3.Button.TextButton.Dialog"
+        style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
@@ -137,10 +139,11 @@
         android:gravity="center"
         android:text="@string/lbl_cancel"
         android:textColor="?attr/accentGood"
+        android:textSize="@dimen/large_font_text_view"
         app:layout_constraintEnd_toStartOf="@id/dialog_dns_crypt_ok_btn"
         app:layout_constraintTop_toBottomOf="@id/dialog_dns_crypt_scroll" />
 
-    <com.google.android.material.progressindicator.CircularProgressIndicator
+    <ProgressBar
         android:id="@+id/dialog_custom_url_loading"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -148,7 +151,6 @@
         android:layout_marginTop="10dp"
         android:layout_marginEnd="10dp"
         android:layout_marginBottom="10dp"
-        android:indeterminate="true"
         android:visibility="invisible"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/dialog_dns_crypt_scroll" />

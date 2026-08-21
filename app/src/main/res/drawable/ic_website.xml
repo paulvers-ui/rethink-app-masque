@@ -4,27 +4,27 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M12,12m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0"
         android:strokeWidth="2"
         android:strokeAlpha="0.5"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M2,12L22,12"
         android:strokeWidth="2"
         android:strokeAlpha="0.5"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M12,2a15.3,15.3 0,0 1,4 10,15.3 15.3,0 0,1 -4,10 15.3,15.3 0,0 1,-4 -10,15.3 15.3,0 0,1 4,-10z"
         android:strokeWidth="2"
         android:strokeAlpha="0.5"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 </vector>

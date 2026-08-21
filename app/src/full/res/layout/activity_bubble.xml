@@ -20,6 +20,7 @@
             android:paddingTop="5dp"
             android:paddingBottom="5dp">
 
+            <!-- Header: keep it compact and consistent with other Rethink screens (no toolbar) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -44,31 +45,7 @@
                     android:textColor="?attr/primaryLightColorText" />
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/bubble_quick_fixes_ll"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginBottom="12dp"
-                android:orientation="vertical"
-                android:visibility="visible">
-
-                <HorizontalScrollView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:scrollbars="none">
-
-                    <LinearLayout
-                        android:id="@+id/bubble_quick_fixes_container"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:paddingVertical="4dp">
-                        <!-- Quick fix icons will be added here dynamically -->
-                    </LinearLayout>
-                </HorizontalScrollView>
-            </LinearLayout>
-
+            <!-- Temporarily allowed apps (15 min) -->
             <LinearLayout
                 android:id="@+id/bubble_allowed_apps_ll"
                 android:layout_width="match_parent"
@@ -117,6 +94,7 @@
 
             </LinearLayout>
 
+            <!-- Blocked header -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -136,6 +114,7 @@
 
             </LinearLayout>
 
+            <!-- Loading -->
             <LinearLayout
                 android:id="@+id/bubble_progress_card"
                 android:layout_width="match_parent"
@@ -156,12 +135,13 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="@string/loading"
+                    android:text="@string/bubble_loading"
                     android:textAppearance="@style/TextAppearance.AppCompat.Body2"
                     android:textColor="?attr/primaryLightColorText" />
 
             </LinearLayout>
 
+            <!-- Blocked list -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/bubble_recycler_view"
                 android:layout_width="match_parent"
@@ -169,6 +149,7 @@
                 android:clipToPadding="false"
                 tools:listitem="@layout/item_blocked_app" />
 
+            <!-- Empty state -->
             <LinearLayout
                 android:id="@+id/bubble_empty_state"
                 android:layout_width="match_parent"

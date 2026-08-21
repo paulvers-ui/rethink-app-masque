@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.celzero.bravedns">
+
+    <!--
+        BUILD FIX: this manifest used tools:ignore on several components but never
+        declared the "tools" namespace. XML namespace prefixes are per-document, so
+        inheriting it from app/src/main/AndroidManifest.xml is not possible and the
+        merge/AAPT step fails with "Namespace prefix 'tools' is not bound".
+
+        AVAILABILITY FIX: RECEIVE_BOOT_COMPLETED is required for the headless
+        (carrier device) build to bring the DNS/VPN tunnel back up automatically
+        after a reboot, an OTA, or an app update. Without it a reboot leaves the
+        device with no resolver at all until someone manually starts the service.
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <permission
+        android:name="com.celzero.bravedns.CONTROL_VPN"
+        android:protectionLevel="normal" />
+
+    <!-- allowBackup/dataExtractionRules/fullBackupContent explicit for SAST coverage. -->
+    <application
+        android:name=".RethinkDnsApplication"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config">
+        <!--
+            ExportedContentProvider suppressed: These three providers are intentionally
+            exported so that the headless/automation API works across process boundaries.
+            Each is guarded by the custom CONTROL_VPN permission (protectionLevel="normal"),
+            so only callers that explicitly declare <uses-permission> for it can access them.
+        -->
+        <provider
+            android:name=".provider.ApplicationProvider"
+            android:authorities="com.celzero.bravedns.appprovider"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.celzero.bravedns.CONTROL_VPN"
+            tools:ignore="ExportedContentProvider" />
+        <provider
+            android:name=".provider.BlocklistProvider"
+            android:authorities="com.celzero.bravedns.blocklistprovider"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.celzero.bravedns.CONTROL_VPN"
+            tools:ignore="ExportedContentProvider" />
+        <provider
+            android:name=".provider.DomainRuleProvider"
+            android:authorities="com.celzero.bravedns.domainrulesprovider"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.celzero.bravedns.CONTROL_VPN"
+            tools:ignore="ExportedContentProvider" />
+
+        <!--
+            ExportedReceiver suppressed: BraveStartReceiver is the public headless API
+            entry point. Access is restricted to callers holding the CONTROL_VPN permission.
+        -->
+        <!--
+            Auto-restart the tunnel after boot / OTA / package replace.
+            Restricted to the OS by android:permission (signature|privileged), so no
+            third-party app can spoof the broadcast.
+        -->
+        <receiver
+            android:name=".receiver.BraveAutoStartReceiver"
+            android:directBootAware="true"
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED"
+            tools:ignore="ExportedReceiver">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.REBOOT" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".receiver.BraveStartReceiver"
+            android:exported="true"
+            android:permission="com.celzero.bravedns.CONTROL_VPN"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.celzero.bravedns.intent.action.START_VPN" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

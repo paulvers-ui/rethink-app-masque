@@ -15,8 +15,8 @@
  */
 package com.celzero.bravedns.data
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_VPN
+import Logger
+import Logger.LOG_TAG_VPN
 import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -45,12 +45,10 @@ import com.celzero.bravedns.database.Severity
 import com.celzero.bravedns.service.EventLogger
 import com.celzero.bravedns.service.PersistentState
 import com.celzero.bravedns.service.TcpProxyHelper
-import com.celzero.bravedns.ui.bottomsheet.BlockFreeDnsModeBottomSheet
 import com.celzero.bravedns.util.Constants
 import com.celzero.bravedns.util.Constants.Companion.MAX_ENDPOINT
 import com.celzero.bravedns.util.InternetProtocol
 import com.celzero.bravedns.util.InternetProtocol.Companion.getInternetProtocol
-import com.celzero.bravedns.util.OrbotHelper
 import com.celzero.bravedns.util.PcapMode
 import com.celzero.bravedns.util.Utilities.isAtleastQ
 import com.celzero.firestack.intra.Bridge
@@ -72,18 +70,15 @@ internal constructor(
     private val dnsLogs: DnsLogRepository,
     private val eventLogger: EventLogger
 ) {
-    private val braveModeObserver: MutableLiveData<Int> = MutableLiveData()
+    private var braveModeObserver: MutableLiveData<Int> = MutableLiveData()
     private var pcapFilePath: String = ""
     private var customSocks5Endpoint: ProxyEndpoint? = null
     private var customHttpEndpoint: ProxyEndpoint? = null
-    private var orbotEndpoint: ProxyEndpoint? = null
 
     companion object {
-        private val connectedDns: MutableLiveData<String> = MutableLiveData()
+        private var connectedDns: MutableLiveData<String> = MutableLiveData()
 
-        private const val ORBOT_DNS = "Orbot"
-
-        const val BOOTSTRAP_DNS_IF_NET_DNS_EMPTY = "9.9.9.9,2620:fe::fe"
+        const val FALLBACK_DNS_IF_NET_DNS_EMPTY = "9.9.9.9,2620:fe::fe"
 
         // used to add index to the transport ids added as part of Plus transport
         // for now only DOH, DoT are supported
@@ -97,12 +92,7 @@ internal constructor(
         // now connectedDnsName has the dns name and url, extract the dns name and update
         // csv is <dns-name,url>, url maybe empty
         val dnsName = persistentState.connectedDnsName.split(",").firstOrNull() ?: ""
-
-        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
-            connectedDns.value = dnsName
-        } else {
-            connectedDns.postValue(dnsName)
-        }
+        connectedDns.postValue(dnsName)
 
         // initialize pcapFilePath from persistent state
         pcapFilePath = persistentState.pcapFilePath
@@ -242,13 +232,8 @@ internal constructor(
         NONE,
         HTTPS,
         SOCKS5,
-        ORBOT,
-        TCP,
+            TCP,
         WIREGUARD;
-
-        fun isTunProxyOrbot(): Boolean {
-            return this == ORBOT
-        }
 
         fun isTunProxySocks5(): Boolean {
             return this == SOCKS5
@@ -268,12 +253,10 @@ internal constructor(
     }
 
     // Provider - Custom - SOCKS5, Http proxy setup.
-    // ORBOT - One touch Orbot integration.
     enum class ProxyProvider {
         NONE,
         CUSTOM,
-        ORBOT,
-        TCP,
+            TCP,
         WIREGUARD;
 
         fun isProxyProviderCustom(): Boolean {
@@ -282,10 +265,6 @@ internal constructor(
 
         fun isProxyProviderNone(): Boolean {
             return NONE.name == name
-        }
-
-        fun isProxyProviderOrbot(): Boolean {
-            return ORBOT.name == name
         }
 
         fun isProxyProviderWireguard(): Boolean {
@@ -301,7 +280,6 @@ internal constructor(
                 return when (name) {
                     WIREGUARD.name -> WIREGUARD
                     CUSTOM.name -> CUSTOM
-                    ORBOT.name -> ORBOT
                     TCP.name -> TCP
                     else -> NONE
                 }
@@ -375,9 +353,7 @@ internal constructor(
     enum class ProtoTranslationMode(val id: Int) {
         PTMODEAUTO(Settings.PtModeAuto),
         PTMODEFORCE64(Settings.PtModeForce64),
-        PTMODEFORCE46(Settings.PtModeForce46),
-        PTMODEFORCE(Settings.PtModeForce),
-        PTMODENONE(Settings.PtModeNone)
+        PTMODENO46(Settings.PtModeNo46)
     }
 
     fun getInternetProtocol(): InternetProtocol {
@@ -385,14 +361,11 @@ internal constructor(
     }
 
     fun getProtocolTranslationMode(): ProtoTranslationMode {
-        // PT mode is now computed in BraveVPNService.calculatePtMode(),
-        // which uses actual underlyingNetworks. This is a fallback, and used only during
-        // vpn startup before the first network change event arrives.
-        if (!persistentState.protocolTranslationType) {
-            return ProtoTranslationMode.PTMODEAUTO
+        if (persistentState.protocolTranslationType && getInternetProtocol().isIPv6()) {
+            return ProtoTranslationMode.PTMODEFORCE64
         }
-        // default until BraveVPNService receives network info and calls setTunMode()
-        return ProtoTranslationMode.PTMODEFORCE
+
+        return ProtoTranslationMode.PTMODEAUTO
     }
 
     fun setPcap(mode: Int, path: String = PcapMode.DISABLE_PCAP) {
@@ -405,11 +378,59 @@ internal constructor(
                     "0"
                 }
                 PcapMode.EXTERNAL_FILE -> {
-                    path
+                    // SECURITY (VULN-H): Reject pcap output paths that escape the
+                    // app-private storage sandbox. A world-readable destination
+                    // (e.g. /sdcard, /storage/emulated/0) would let any app with
+                    // READ_EXTERNAL_STORAGE/MANAGE_EXTERNAL_STORAGE tail every
+                    // packet flowing through the VPN in real time. We restrict
+                    // writes to filesDir or the app-scoped getExternalFilesDir().
+                    if (!isPathInsideAppPrivateDirs(path)) {
+                        Logger.w(
+                            LOG_TAG_VPN,
+                            "Refusing pcap path outside app-private storage: $path"
+                        )
+                        ""
+                    } else {
+                        path
+                    }
                 }
             }
-        persistentState.pcapMode = mode
+        // If we rejected an EXTERNAL_FILE path, fall back to NONE to avoid a
+        // half-configured state where mode says "write to file" but path is empty.
+        val effectiveMode =
+            if (PcapMode.getPcapType(mode) == PcapMode.EXTERNAL_FILE && pcapFilePath.isEmpty()) {
+                PcapMode.NONE.id
+            } else {
+                mode
+            }
+        persistentState.pcapMode = effectiveMode
         persistentState.pcapFilePath = pcapFilePath
+    }
+
+    /**
+     * Returns true if [path] is within either the app's internal filesDir or one of
+     * the app-scoped external files directories. Uses canonical paths so symlinks
+     * and `..` segments cannot trick the check.
+     */
+    private fun isPathInsideAppPrivateDirs(path: String): Boolean {
+        if (path.isBlank()) return false
+        return try {
+            val target = java.io.File(path).canonicalFile
+            val allowed = mutableListOf<java.io.File>()
+            allowed += context.filesDir.canonicalFile
+            // getExternalFilesDirs may contain nulls on devices without secondary storage
+            context.getExternalFilesDirs(null)?.forEach { dir ->
+                if (dir != null) allowed += dir.canonicalFile
+            }
+            allowed.any { root ->
+                val rootPath = root.path + java.io.File.separator
+                val targetPath = target.path
+                targetPath == root.path || targetPath.startsWith(rootPath)
+            }
+        } catch (e: Exception) {
+            Logger.w(LOG_TAG_VPN, "pcap path validation failed for $path: ${e.message}")
+            false
+        }
     }
 
     fun getPcapFilePath(): String {
@@ -511,21 +532,6 @@ internal constructor(
             customHttpEndpoint = proxyEndpointRepository.getHttpProxyDetails()
         }
         return customHttpEndpoint
-    }
-
-    suspend fun getConnectedOrbotProxy(): ProxyEndpoint? {
-        if (orbotEndpoint == null) {
-            orbotEndpoint = proxyEndpointRepository.getConnectedOrbotProxy()
-        }
-        return orbotEndpoint
-    }
-
-    suspend fun getOrbotSocks5Endpoint(): ProxyEndpoint? {
-        return proxyEndpointRepository.getOrbotSocks5Endpoint()
-    }
-
-    suspend fun getOrbotHttpEndpoint(): ProxyEndpoint? {
-        return proxyEndpointRepository.getOrbotHttpEndpoint()
     }
 
     fun isTcpProxyEnabled(): Boolean {
@@ -795,11 +801,6 @@ internal constructor(
         )
     }
 
-    suspend fun isOrbotDns(): Boolean {
-        if (!getDnsType().isDnsProxy()) return false
-
-        return dnsProxyEndpointRepository.getSelectedProxy()?.proxyName == ORBOT_DNS
-    }
 
     suspend fun handleDnscryptChanges(dnsCryptEndpoint: DnsCryptEndpoint) {
         // if the prev connection was not dnscrypt, then remove the connection status from database
@@ -815,10 +816,6 @@ internal constructor(
             "DNSCrypt endpoint changed",
             "DNSCrypt endpoint changed to ${dnsCryptEndpoint.dnsCryptName}, prev: $prev"
         )
-    }
-
-    suspend fun getOrbotDnsProxyEndpoint(): DnsProxyEndpoint? {
-        return dnsProxyEndpointRepository.getOrbotDnsEndpoint()
     }
 
     suspend fun handleDnsrelayChanges(endpoint: DnsCryptRelayEndpoint) {
@@ -1031,11 +1028,6 @@ internal constructor(
             return
         }
 
-        if (provider == ProxyProvider.ORBOT) {
-            setProxy(proxyType, provider)
-            return
-        }
-
         if (provider == ProxyProvider.TCP) {
             setProxy(proxyType, provider)
             return
@@ -1064,14 +1056,9 @@ internal constructor(
     }
 
     fun removeAllProxies() {
-        removeOrbot()
         persistentState.proxyProvider = ProxyProvider.NONE.name
         persistentState.proxyType = ProxyType.NONE.name
         persistentState.updateProxyStatus()
-    }
-
-    private fun removeOrbot() {
-        OrbotHelper.selectedProxyType = ProxyType.NONE.name
     }
 
     fun removeProxy(removeType: ProxyType, removeProvider: ProxyProvider) {
@@ -1091,7 +1078,19 @@ internal constructor(
                 )
             }
         } else {
-            removeAllProxies()
+            // Sprint 12 fix: only wipe proxies if the type being removed matches the current
+            // active type. Previously ANY removeProxy call where currentType != HTTP_SOCKS5
+            // (e.g. removeProxy(WIREGUARD, WIREGUARD) during WG config cleanup) would call
+            // removeAllProxies() and silently nuke an active SOCKS5/WARP config, causing
+            // tunProxyMode=NONE on the next VPN start and 55+ seconds of routing to wrong port.
+            if (removeType == currentProxyType) {
+                removeAllProxies()
+            } else {
+                Logger.w(
+                    LOG_TAG_VPN,
+                    "removeProxy: type mismatch — skipping wipe. current=${currentProxyType.name}, removing=${removeType.name}/${removeProvider.name}"
+                )
+            }
         }
     }
 
@@ -1118,12 +1117,16 @@ internal constructor(
         val provider = persistentState.proxyProvider
         Logger.d(LOG_TAG_VPN, "selected proxy type: $type, with provider as $provider")
 
+        // fix: only treat the tunnel as wireguard when wireguard is the selected proxy type.
+        // earlier a stale/left-over WIREGUARD provider alone forced TunProxyMode.WIREGUARD,
+        // which made the tunnel load and start wireguard proxies on every vpn start even
+        // though the user never selected wireguard.
         if (ProxyProvider.WIREGUARD.name == provider) {
-            return TunProxyMode.WIREGUARD
-        }
-
-        if (ProxyProvider.ORBOT.name == provider) {
-            return TunProxyMode.ORBOT
+            return if (ProxyType.WIREGUARD.name == type) {
+                TunProxyMode.WIREGUARD
+            } else {
+                TunProxyMode.NONE
+            }
         }
 
         when (type) {
@@ -1157,11 +1160,6 @@ internal constructor(
 
         val proxyType = ProxyType.of(persistentState.proxyType)
         return proxyType.isProxyTypeSocks5() || proxyType.isProxyTypeHttpSocks5()
-    }
-
-    fun isOrbotProxyEnabled(): Boolean {
-        val proxyProvider = ProxyProvider.getProxyProvider(persistentState.proxyProvider)
-        return proxyProvider.isProxyProviderOrbot()
     }
 
     fun isWgEnabled(): Boolean {
@@ -1205,12 +1203,6 @@ internal constructor(
             (proxyProvider.isProxyProviderNone() || proxyProvider.isProxyProviderTcp())
     }
 
-    fun canEnableOrbotProxy(): Boolean {
-        val proxyProvider = ProxyProvider.getProxyProvider(persistentState.proxyProvider)
-        return canEnableProxy() &&
-            (proxyProvider.isProxyProviderNone() || proxyProvider.isProxyProviderOrbot())
-    }
-
     suspend fun getConnectedSocks5Proxy(): ProxyEndpoint? {
         return proxyEndpointRepository.getConnectedSocks5Proxy()
     }
@@ -1220,14 +1212,12 @@ internal constructor(
     }
 
     suspend fun updateCustomSocks5Proxy(proxyEndpoint: ProxyEndpoint) {
-        proxyEndpointRepository.update(proxyEndpoint)
+        // Use insert(REPLACE) so the row is created if it doesn't exist yet.
+        // @Update silently does nothing when no row matches the primary key (id=-1 for WARP),
+        // causing the proxy to disappear from the DB on the next read → switch flips back off.
+        proxyEndpointRepository.insert(proxyEndpoint)
         customSocks5Endpoint = proxyEndpoint
         addProxy(ProxyType.SOCKS5, ProxyProvider.CUSTOM)
-    }
-
-    suspend fun updateOrbotProxy(proxyEndpoint: ProxyEndpoint) {
-        proxyEndpointRepository.update(proxyEndpoint)
-        orbotEndpoint = proxyEndpoint
     }
 
     suspend fun updateCustomHttpProxy(proxyEndpoint: ProxyEndpoint) {
@@ -1236,57 +1226,17 @@ internal constructor(
         addProxy(ProxyType.HTTP, ProxyProvider.CUSTOM)
     }
 
-    suspend fun updateOrbotHttpProxy(proxyEndpoint: ProxyEndpoint) {
-        proxyEndpointRepository.update(proxyEndpoint)
-    }
-
     fun stats(): String {
         val sb = StringBuilder()
-        sb.append("   App version: ${persistentState.appVersion}\n")
         sb.append("   Brave mode: ${getBraveMode()}\n")
-
-        sb.append("DNS \n")
-        sb.append("   dns type: ${getDnsType()}\n")
-        sb.append("   preferred: ${persistentState.connectedDnsName}\n")
-        sb.append("   alg: ${persistentState.enableDnsAlg}\n")
-        sb.append("   split: ${persistentState.splitDns}\n")
-        sb.append("   local blocklist enabled: ${persistentState.blocklistEnabled}\n")
-        sb.append("   local blocklist stamp: ${persistentState.localBlocklistStamp}\n")
-        sb.append("   show icons: ${persistentState.fetchFavIcon}\n")
-        sb.append("   dns booster: ${persistentState.enableDnsCache}\n")
-        sb.append("   never proxy dns: ${!persistentState.proxyDns}\n")
-        sb.append("   prevent dns leaks: ${persistentState.preventDnsLeaks}\n")
-        sb.append("   block dns from unknown src: ${persistentState.blockDnsForUnknownApp}\n")
-        sb.append("   use sys dns for undelegated domains: ${persistentState.useSystemDnsForUndelegatedDomains}\n")
-        sb.append("   bypass-dns-mode: ${BlockFreeDnsModeBottomSheet.BlockFreeDnsMode.fromMode(persistentState.blockFreeDnsMode).name}\n")
-
-        sb.append("Proxy \n")
+        sb.append("   DNS type: ${getDnsType()}\n")
         sb.append("   Proxy type: ${ProxyType.of(getProxyType()).name}\n")
         sb.append("   Proxy provider: ${getProxyProvider()}\n")
-
-        sb.append("VPN \n")
-        sb.append("   stall on nw loss: ${persistentState.stallOnNoNetwork}\n")
-        sb.append("   do not route private ips: ${!persistentState.privateIps}\n")
-        sb.append("   use all available nws: ${persistentState.useMultipleNetworks}\n")
-        sb.append("   vpn tun metered? ${persistentState.setVpnBuilderToMetered}\n")
-        sb.append("   meter mobile nw: ${persistentState.treatOnlyMobileNetworkAsMetered}\n")
-        sb.append("   loopback? ${persistentState.routeRethinkInRethink}\n")
-        sb.append("   bootstrap dns: ${persistentState.defaultDnsUrl}\n")
-        sb.append("   conn policy: ${persistentState.vpnBuilderPolicy}\n")
-        sb.append("   loopback proxy fwdr apps: ${!persistentState.excludeAppsInProxy}\n")
-        sb.append("   randomize wg port: ${persistentState.randomizeListenPort}\n")
-        sb.append("   global proxy lockdown: ${persistentState.wgGlobalLockdown}\n")
-        sb.append("   flood wg: ${persistentState.floodWireGuard}\n")
-        sb.append("   persistent keepalive: ${persistentState.smartPersistentKeepalive}\n")
-        sb.append("   shorter TCP keepalive: ${persistentState.tcpKeepAlive}\n")
-        sb.append("   endpoint independent mapping: ${persistentState.endpointIndependence}\n")
-        sb.append("   idle timeout: ${persistentState.dialTimeoutSec}\n")
-        sb.append("   bandwidth booster: ${persistentState.useMaxMtu}\n")
-        sb.append("   socket buffer sz: ${persistentState.socketBufferSizeBytes}\n")
-        sb.append("   internet protocol: ${getInternetProtocol()}\n")
-        sb.append("   protocol translation mode: ${getProtocolTranslationMode()}\n")
-        sb.append("   remember uninstalled apps: ${persistentState.tombstoneApps}\n")
-        sb.append("   pcap mode: ${getPcapFilePath()}\n")
+        sb.append("   Pcap mode: ${getPcapFilePath()}\n")
+        sb.append("   Connected DNS: ${persistentState.connectedDnsName}\n")
+        sb.append("   Prevent DNS leaks: ${persistentState.preventDnsLeaks}\n")
+        sb.append("   Internet protocol: ${getInternetProtocol()}\n")
+        sb.append("   Protocol translation mode: ${getProtocolTranslationMode()}\n")
 
         return sb.toString()
     }

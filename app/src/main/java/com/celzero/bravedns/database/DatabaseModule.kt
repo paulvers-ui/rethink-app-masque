@@ -15,9 +15,6 @@
  */
 package com.celzero.bravedns.database
 
-import com.celzero.bravedns.sponsor.database.SponsorDao
-import com.celzero.bravedns.sponsor.repository.SponsorRepository
-import com.celzero.bravedns.iab.ServerOrderHistoryRepository
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
@@ -37,10 +34,8 @@ object DatabaseModule {
         single { get<AppDatabase>().customDomainEndpointDAO() }
         single { get<AppDatabase>().customIpEndpointDao() }
         single { get<AppDatabase>().rethinkEndpointDao() }
-        single { get<AppDatabase>().rethinkLocalFileTagDao() }
         single { get<AppDatabase>().rethinkRemoteFileTagDao() }
         single { get<AppDatabase>().remoteBlocklistPacksMapDao() }
-        single { get<AppDatabase>().localBlocklistPacksMapDao() }
         single { get<AppDatabase>().wgConfigFilesDAO() }
         single { get<AppDatabase>().wgApplicationMappingDao() }
         single { get<AppDatabase>().tcpProxyEndpointDao() }
@@ -50,7 +45,6 @@ object DatabaseModule {
         single { get<AppDatabase>().wgHopMapDao() }
         single { get<AppDatabase>().subscriptionStatusDao() }
         single { get<AppDatabase>().subscriptionStateHistoryDao()}
-        single { get<AppDatabase>().countryConfigDAO() }
 
         single { get<LogDatabase>().connectionTrackerDAO() }
         single { get<LogDatabase>().dnsLogDAO() }
@@ -60,8 +54,6 @@ object DatabaseModule {
         single { get<LogDatabase>().eventDao() }
 
         single { get<ConsoleLogDatabase>().consoleLogDAO() }
-
-        single { get<AppDatabase>().sponsorDao() }
 
     }
     private val repositoryModule = module {
@@ -76,9 +68,7 @@ object DatabaseModule {
         single { get<AppDatabase>().customIpRepository() }
         single { get<AppDatabase>().rethinkEndpointRepository() }
         single { get<AppDatabase>().rethinkRemoteFileTagRepository() }
-        single { get<AppDatabase>().rethinkLocalFileTagRepository() }
         single { get<AppDatabase>().remoteBlocklistPacksMapRepository() }
-        single { get<AppDatabase>().localBlocklistPacksMapRepository() }
         single { get<AppDatabase>().wgConfigFilesRepository() }
         single { get<AppDatabase>().wgApplicationMappingRepository() }
         single { get<AppDatabase>().tcpProxyEndpointRepository() }
@@ -88,7 +78,6 @@ object DatabaseModule {
         single { get<AppDatabase>().wgHopMapRepository() }
         single { get<AppDatabase>().subscriptionStatusRepository() }
         single { get<AppDatabase>().subscriptionStateHistoryDao() }
-        single { get<AppDatabase>().countryConfigRepository() }
 
         single { get<LogDatabase>().rethinkConnectionLogRepository() }
         single { get<LogDatabase>().connectionTrackerRepository() }
@@ -96,9 +85,6 @@ object DatabaseModule {
         single { get<LogDatabase>().ipInfoRepository() }
 
         single { get<ConsoleLogDatabase>().consoleLogRepository() }
-
-        single { SponsorRepository(get()) }
-        single { ServerOrderHistoryRepository(get()) }
     }
 
     val modules = listOf(databaseModule, daoModule, repositoryModule)

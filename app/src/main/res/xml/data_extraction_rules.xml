@@ -1,8 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Data Extraction Rules (Android 12+ / API 31+)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Controls what is included in cloud backups (Google Drive) and
+    device-to-device transfers (e.g., new phone setup).
+
+    RethinkDNS stores sensitive data — VPN keys, DNS-over-HTTPS/TLS
+    credentials, blocklist configs, and WireGuard private keys — in its
+    internal storage and SharedPreferences.  Allowing automatic cloud
+    backup of this data could leak cryptographic material to Google's
+    servers and to any device the user later restores onto.
+
+    Strategy: exclude everything by default.  If non-sensitive data
+    (e.g., UI preferences, theme choice) should be restorable in a
+    future release, add explicit <include> rules here rather than
+    opening the backup surface broadly.
+
+    See: https://developer.android.com/guide/topics/data/autobackup
+         https://developer.android.com/about/versions/12/backup-restore
+-->
 <data-extraction-rules>
-    <cloud-backup disableIfNoBackup="true">
-        <exclude domain="database" path="rethink_logs.db" />
-        <exclude domain="database" path="rethink_logs.db-wal" />
-        <exclude domain="database" path="rethink_logs.db-shm" />
+
+    <!--
+        Cloud backup (Google Drive Auto Backup).
+        disableIfNoEncryptionCapabilities="true" ensures that if the
+        device / Android version does not support end-to-end encrypted
+        backup, no backup is made at all — rather than sending data
+        unencrypted.
+    -->
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <!-- Exclude all SharedPreferences (may contain keys, tokens, configs). -->
+        <exclude domain="sharedpref" path="." />
+        <!-- Exclude all internal app files (databases, downloaded blocklists, WG keys). -->
+        <exclude domain="file" path="." />
+        <!-- Exclude all databases (DNS logs, app firewall rules, blocklist data). -->
+        <exclude domain="database" path="." />
+        <!-- Exclude external files directory if used for exports. -->
+        <exclude domain="external" path="." />
     </cloud-backup>
+
+    <!--
+        Device-to-device transfer (cable / local WiFi transfer during
+        new device setup).  Sensitive key material should not be
+        transferred this way either; the user should re-configure the
+        new device from scratch or use an encrypted manual export.
+    -->
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="external" path="." />
+    </device-transfer>
+
 </data-extraction-rules>

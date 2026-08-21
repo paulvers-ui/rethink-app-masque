@@ -33,9 +33,10 @@ jobs:
           java -jar detekt-cli-all.jar \
               --build-upon-default-config \
               --config .github/detekt-config.yml \
+              --baseline .github/detekt-baseline.xml \
               --excludes '**/src/test/**,**/src/androidTest/**,**/src/testDebug/**,**/src/testRelease/**,**/src/androidTestDebug/**,**/src/androidTestRelease/**,**/*Test.kt,**/*Tests.kt,**/*Spec.kt' \
               --fail-on-severity ${SEV} \
-              --analysis-mode full \
+              --analysis-mode ${MODE} \
               --api-version ${KOTLIN_VER} \
               --jvm-target ${JVM_TARGET} \
               --language-version ${KOTLIN_VER} \
@@ -50,7 +51,21 @@ jobs:
           # one of:  [1.6, 1.8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
           JVM_TARGET: "17"
           # one of: [Error, Warning, Info, Never]
+          # Kept at Warning: the baseline (.github/detekt-baseline.xml) already
+          # grandfathers the pre-existing findings, so this now gates only NEW
+          # warnings rather than the whole inherited backlog.
           SEV: "Warning"
+          # one of: [light, full]
+          # 'full' enables type-resolution rules, but they need the compiled
+          # classpath (Android SDK + deps) to resolve anything, and this job runs
+          # the CLI standalone with no Gradle build and no --classpath. That is
+          # what produced "There were 29501 compiler errors found during
+          # analysis. This affects accuracy of reporting." -- the type-resolution
+          # findings were being reported off unresolved types, so they could not
+          # be trusted. 'light' skips those rules instead of guessing at them.
+          # To restore 'full' properly, run detekt through the Gradle plugin so
+          # it inherits the variant classpath.
+          MODE: "light"
           # WARNING: Keep major.minor version (e.g., "2.1") in sync with build.gradle (ext.kotlin_version, line 4)!
           # Only the major.minor part is required here, not the full version (e.g., "2.1.20").
           # github.com/celzero/rethink-app/blob/main/build.gradle#L4

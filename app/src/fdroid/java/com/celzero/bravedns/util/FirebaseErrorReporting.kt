@@ -15,62 +15,46 @@
  */
 package com.celzero.bravedns.util
 
-import com.celzero.bravedns.util.Logger.LOG_FIREBASE
+import Logger.LOG_FIREBASE
 import org.koin.core.component.KoinComponent
 
 /**
- * Firebase Error Reporting Manager for fdroid variant
- * This is a stub implementation since Firebase is not available in fdroid builds
+ * Firebase Error Reporting stub for the fdroid variant.
+ * Firebase/Crashlytics is not available in fdroid builds; all methods are no-ops.
  */
 object FirebaseErrorReporting : KoinComponent {
 
     const val TOKEN_REGENERATION_PERIOD_DAYS: Long = 45
     const val TOKEN_LENGTH = 16
-    /**
-     * Initialize Firebase Crashlytics - no-op for fdroid variant
-     */
+
+    /** Always false — Crashlytics is not available in the fdroid variant. */
+    const val IS_AVAILABLE = false
+
     fun initialize() {
         Logger.i(LOG_FIREBASE, "crashlytics not available in fdroid variant")
     }
 
-    /**
-     * Enable or disable Firebase Crashlytics data collection - no-op for fdroid variant
-     */
+    @Suppress("UnusedParameter", "UNUSED_PARAMETER")
     fun setEnabled(enabled: Boolean) {
         Logger.i(LOG_FIREBASE, "crashlytics not available in fdroid variant")
     }
 
-    /**
-     * Check if Firebase Crashlytics is available - Always false for fdroid variant
-     */
-    fun isAvailable(): Boolean {
-        return false
-    }
-
-    /**
-     * Log a custom message - no-op for fdroid variant
-     */
+    @Suppress("UnusedParameter", "UNUSED_PARAMETER")
     fun log(msg: String) {
         // no-op: firebase not available in fdroid variant
     }
 
-    /**
-     * Record a non-fatal exception - no-op for fdroid variant
-     */
+    @Suppress("UnusedParameter", "UNUSED_PARAMETER")
     fun recordException(throwable: Throwable) {
         // no-op: firebase not available in fdroid variant
     }
 
-    /**
-     * Set user ID - no-op for fdroid variant
-     */
+    @Suppress("UnusedParameter", "UNUSED_PARAMETER")
     fun setUserId(uid: String) {
         // no-op: firebase not available in fdroid variant
     }
 
-    /**
-     * Set custom key-value pairs - no-op for fdroid variant
-     */
+    @Suppress("UnusedParameter", "UNUSED_PARAMETER")
     fun setCustomKey(key: String, value: String) {
         // no-op: firebase not available in fdroid variant
     }

@@ -19,16 +19,18 @@
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/settings_activity_vpn_heading_text"
-            android:layout_marginStart="40dp"
-            android:text="@string/firewall_act_universal_tab"
-            style="@style/TextAppearance.Material3.TitleSmall"
+            style="@style/TextAppearance.AppCompat.Subhead"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="5dp"
+            android:layout_marginStart="40dp"
+            android:layout_marginTop="15dp"
+            android:fontFamily="sans-serif-smallcaps"
+            android:lineSpacingExtra="5dp"
             android:padding="5dp"
-            android:textColor="?attr/colorPrimary"
-            />
+            android:text="@string/firewall_act_universal_tab"
+            android:textColor="?attr/accentGood"
+            android:textSize="@dimen/extra_large_font_text_view"
+            android:textStyle="bold" />
 
 
         <androidx.appcompat.widget.AppCompatTextView
@@ -64,9 +66,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_device_lock" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_all_apps_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
@@ -143,9 +145,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_foreground" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_background_mode_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
@@ -223,9 +225,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_unknown_app" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_unknown_connection_mode_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
@@ -302,9 +304,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_udp" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_udp_connection_mode_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
@@ -359,6 +361,51 @@
         </RelativeLayout>
 
         <LinearLayout
+            android:id="@+id/firewall_icmp_connection_ll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginLeft="2dp"
+            android:layout_marginTop="2dp"
+            android:layout_marginRight="2dp">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/firewall_icmp_connection_mode_txt"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.9"
+                android:drawablePadding="10dp"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="start|center"
+                android:padding="10dp"
+                android:text="@string/univ_firewall_rule_icmp"
+                android:textColor="?attr/primaryTextColor"
+                android:textSize="@dimen/large_font_text_view"
+                app:drawableStartCompat="@drawable/ic_network" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/firewall_icmp_connection_mode_check"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:padding="15dp" />
+
+        </LinearLayout>
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/firewall_icmp_connection_desc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="45dp"
+            android:layout_marginEnd="15dp"
+            android:layout_marginBottom="8dp"
+            android:alpha="0.6"
+            android:text="@string/univ_firewall_rule_icmp_desc"
+            android:textColor="?attr/primaryLightColorText"
+            android:textSize="@dimen/small_font_text_view" />
+
+        <LinearLayout
             android:id="@+id/firewall_disallow_dns_bypass_ll"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -380,9 +427,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_prevent_dns_leaks" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_disallow_dns_bypass_mode_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
@@ -458,9 +505,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_app_info" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_block_new_app_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
@@ -537,9 +584,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_ipv6" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_check_ipv4_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
@@ -570,9 +617,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_univ_metered" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_block_metered_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
@@ -649,9 +696,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_http" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_block_http_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
@@ -728,9 +775,9 @@
                 android:textSize="@dimen/large_font_text_view"
                 app:drawableStartCompat="@drawable/ic_global_lockdown" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/firewall_univ_lockdown_check"
-                style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"

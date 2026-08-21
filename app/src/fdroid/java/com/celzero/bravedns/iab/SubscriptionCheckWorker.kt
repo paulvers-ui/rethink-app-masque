@@ -1,38 +1,34 @@
 package com.celzero.bravedns.iab
 
+import Logger
+import Logger.LOG_IAB
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.celzero.bravedns.service.PersistentState
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_IAB
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 
 class SubscriptionCheckWorker(
     val context: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(context, workerParams), KoinComponent {
 
-    @Suppress("UNUSED_PRIVATE_PROPERTY")
-    private val persistentState by inject<PersistentState>()
-    @Suppress("UNUSED_PRIVATE_PROPERTY")
-    private val attempts = 0
-
     companion object {
         const val WORK_NAME = "SubscriptionCheckWorker"
+        private const val MAX_REINITIATE_ATTEMPTS = 3
     }
 
     override suspend fun doWork(): Result {
         return withContext(Dispatchers.IO) {
             try {
                 initiate()
-                // by default, return success
                 Result.success()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Logger.e(LOG_IAB, "$WORK_NAME; failed: ${e.message}")
+                Logger.e(LOG_IAB, "$WORK_NAME; failed: ${e.message ?: "unknown error"}")
                 Result.retry()
             }
         }
@@ -41,15 +37,4 @@ class SubscriptionCheckWorker(
     private fun initiate() {
         // implement check for stripe subscription
     }
-
-    @Suppress("unused")
-    private fun reinitiate(attempt: Int = 0) {
-        if (attempt > 3) {
-            Logger.e(LOG_IAB, "$WORK_NAME; reinitiate failed after 3 attempts")
-            return
-        }
-        // reinitiate the billing client
-        initiate()
-    }
-
 }

@@ -28,7 +28,16 @@ app/src/headless/assets
 /tools
 /.kotlin/sessions
 app/google-services.json
-/app/release
 app/fdroidFull/release
 app/playFull/release
 app/websiteFull/release
+
+# Root-level stray artifacts (never commit these)
+/*.txt
+/*.png
+/*.bak
+/*.orig
+/*.xml
+!README.md
+!LICENSE
+!SECURITY-FIXES.md

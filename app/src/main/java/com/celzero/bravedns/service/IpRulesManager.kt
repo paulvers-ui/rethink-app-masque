@@ -15,8 +15,8 @@
  */
 package com.celzero.bravedns.service
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_FIREWALL
+import Logger
+import Logger.LOG_TAG_FIREWALL
 import android.content.Context
 import androidx.lifecycle.LiveData
 import com.celzero.bravedns.R
@@ -25,7 +25,10 @@ import com.celzero.bravedns.database.CustomIp
 import com.celzero.bravedns.database.CustomIpRepository
 import com.celzero.bravedns.util.Constants
 import com.celzero.bravedns.util.Constants.Companion.UNSPECIFIED_PORT
+import com.celzero.bravedns.util.Utilities.togs
+import com.celzero.bravedns.util.Utilities.tos
 import com.celzero.firestack.backend.Backend
+import com.celzero.firestack.backend.Gostr
 import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import inet.ipaddr.IPAddress
@@ -40,9 +43,7 @@ object IpRulesManager : KoinComponent {
     // max size of ip request look-up cache
     private const val CACHE_MAX_SIZE = 10000L
 
-    // separate tries are used internally for ip4 and ip6, if the implementation changes in the
-    // future, ensure both cases continue to be handled correctly.
-    private val iptree = Backend.newIpTree()
+    private var iptree = Backend.newIpTree()
 
     // key-value object for ip look-up
     data class CacheKey(val ipNetPort: String, val uid: Int)
@@ -123,15 +124,14 @@ object IpRulesManager : KoinComponent {
             val v = treeVal(it.uid, port, it.status, it.proxyId, it.proxyCC)
             if (k != null) {
                 try {
-                    Logger.vv(LOG_TAG_FIREWALL, "iptree.add($k, $v)")
-                    iptree.add(k, v)
+                    Logger.i(LOG_TAG_FIREWALL, "iptree.add($k, $v)")
+                    iptree.add(k.togs(), v)
                     if (it.proxyCC.isNotEmpty()) selectedCCs.add(it.proxyCC)
                 } catch (e: Exception) {
                     Logger.e(LOG_TAG_FIREWALL, "err iptree.add($k, $v)", e)
                 }
             }
         }
-        Logger.i(LOG_TAG_FIREWALL, "ip rules loaded, count: ${iptree.len()}")
         return iptree.len()
     }
 
@@ -175,32 +175,18 @@ object IpRulesManager : KoinComponent {
         val pair = hostAddr(ipstr)
         val ipAddr = pair.first
         return if (ipstr.contains("*")) {
-            val singleBlock = ipAddr.assignPrefixForSingleBlock()
-            if (singleBlock == null) {
-                // The wildcard range cannot be expressed as a single CIDR block
-                // (e.g. *.255.255.255 varies high-order bits while fixing low-order
-                // bits, the opposite of CIDR structure). The rule is preserved in
-                // the database (see padAndNormalize) but cannot be matched by the
-                // CIDR-only ip trie, so it will not be enforced until edited to a
-                // CIDR-able form.
-                Logger.w(LOG_TAG_FIREWALL, "wildcard '$ipstr' has no single CIDR block; rule stored but not enforced")
-            }
-            singleBlock?.toCanonicalString()
+            ipAddr.assignPrefixForSingleBlock()?.toCanonicalString()
         } else {
             ipAddr.toNormalizedString()
         }
     }
 
-    private fun treeValLike(uid: Int, port: Int): String {
-        return ("$uid$KV_SEP$port")
+    private fun treeValLike(uid: Int, port: Int): Gostr? {
+        return ("$uid$KV_SEP$port").togs()
     }
 
-    private fun treeValLike(uid: Int): String {
-        return ("$uid$KV_SEP")
-    }
-
-    private fun treeVal(uid: Int, port: Int, rule: Int, proxyId: String, proxyCC: String): String? {
-        return ("$uid$KV_SEP$port$KV_SEP$rule$KV_SEP$proxyId$KV_SEP$proxyCC")
+    private fun treeVal(uid: Int, port: Int, rule: Int, proxyId: String, proxyCC: String): Gostr? {
+        return ("$uid$KV_SEP$port$KV_SEP$rule$KV_SEP$proxyId$KV_SEP$proxyCC").togs()
     }
 
     suspend fun removeIpRule(uid: Int, ipstr: String, port: Int) {
@@ -212,23 +198,21 @@ object IpRulesManager : KoinComponent {
         db.deleteRule(uid, ipstr, port)
 
         val k = treeKey(ipstr)
-        if (!k.isNullOrEmpty()) iptree.escLike(k, treeValLike(uid, port))
+        if (!k.isNullOrEmpty()) iptree.escLike(k.togs(), treeValLike(uid, port))
 
         resultsCache.invalidateAll()
     }
 
     private suspend fun updateRule(ci: CustomIp) {
+        Logger.i(LOG_TAG_FIREWALL, "ip rule, update: ${ci.ipAddress} for uid: ${ci.uid}; status: ${ci.status}")
         // ensure modified time is updated for ordering
         ci.modifiedDateTime = System.currentTimeMillis()
         db.update(ci)
-        val ipaddr = normalize(ci.getCustomIpAddress()?.first)
-        val k = treeKey(ipaddr)
-        Logger.i(LOG_TAG_FIREWALL, "ip rule, update: $ipaddr for uid: ${ci.uid}; status: ${ci.status}")
-
+        val k = treeKey(ci.ipAddress)
         if (!k.isNullOrEmpty()) {
             // escape old entries and add updated rule using ci.port (not android attr)
-            iptree.escLike(k, treeValLike(ci.uid, ci.port))
-            iptree.add(k, treeVal(ci.uid, ci.port, ci.status, ci.proxyId, ci.proxyCC))
+            iptree.escLike(k.togs(), treeValLike(ci.uid, ci.port))
+            iptree.add(k.togs(), treeVal(ci.uid, ci.port, ci.status, ci.proxyId, ci.proxyCC))
         }
         resultsCache.invalidateAll()
     }
@@ -270,7 +254,7 @@ object IpRulesManager : KoinComponent {
 
         resultsCache.getIfPresent(ck)?.let {
             // return only if both ip and app(uid) matches
-            logv("match in cache $uid $ipstr: $it")
+            Logger.i(LOG_TAG_FIREWALL, "match in cache $uid $ipstr: $it")
             return it
         }
 
@@ -282,7 +266,7 @@ object IpRulesManager : KoinComponent {
             }
         }
         getMostSpecificRuleMatch(uid, ipstr).let {
-            logv("ip rule for $uid $ipstr => ${it.name}")
+            logv("ip rule for $uid $ipstr => ${it.name} ??")
             if (it != IpRuleStatus.NONE) {
                 resultsCache.put(ck, it)
                 return it
@@ -368,16 +352,16 @@ object IpRulesManager : KoinComponent {
             val vlike = treeValLike(uid, port)
             // rules at the end of the list have higher precedence as they're more specific
             // (think: 0.0.0.0/0 vs 1.1.1.1/32)
-            val x = iptree.getLike(k, vlike)
+            val x = iptree.getLike(k.togs(), vlike).tos()
             logv("getMostSpecificRuleMatch: $uid, $k, $vlike => $x")
             val treeValues = x?.split(Backend.Vsep) ?: return IpRuleStatus.NONE
-            treeValues.reversed().forEach {
+            treeValues.forEach {
                 val treeVal = convertStringToTreeVal(it)
                 if (treeVal == null) {
-                    logv("getMostSpecificRuleMatch: $uid, $k, $vlike => no match for $it")
+                    logv("getMostSpecificRuleMatch: $uid, $k, $vlike => treeVal is null for $it")
                     return@forEach
                 }
-                if (treeVal.uid == uid && treeVal.port == port && treeVal.status != IpRuleStatus.NONE) {
+                if (treeVal.uid == uid && treeVal.port == port) {
                     logv("getMostSpecificRuleMatch: $uid, $k, $vlike($it) => status ${treeVal.status}")
                     return treeVal.status
                 }
@@ -387,29 +371,24 @@ object IpRulesManager : KoinComponent {
     }
 
     private fun convertStringToTreeVal(s: String): TreeVal? {
-        try {
-            val items = s.split(KV_SEP)
-            if (items.size == 3) {
-                // backward compatibility, return a default TreeVal
-                val uid = items[0].toIntOrNull() ?: 0
-                val port = items[1].toIntOrNull() ?: 0
-                val status = IpRuleStatus.getStatus(items[2].toIntOrNull())
-                return TreeVal(uid, port, status, "", "")
-            }
-            if (items.size != 5) {
-                // backward compatibility, return a default TreeVal
-                return null
-            }
+        val items = s.split(KV_SEP)
+        if (items.size == 3) {
+            // backward compatibility, return a default TreeVal
             val uid = items[0].toIntOrNull() ?: 0
             val port = items[1].toIntOrNull() ?: 0
             val status = IpRuleStatus.getStatus(items[2].toIntOrNull())
-            val proxyId = items[3]
-            val proxyCC = items[4]
-            return TreeVal(uid, port, status, proxyId, proxyCC)
-        } catch (e: Exception) {
-            Logger.e(LOG_TAG_FIREWALL, "err converting string to TreeVal: $s, ${e.message}")
+            return TreeVal(uid, port, status, "", "")
+        }
+        if (items.size != 5) {
+            // backward compatibility, return a default TreeVal
             return null
         }
+        val uid = items[0].toIntOrNull() ?: 0
+        val port = items[1].toIntOrNull() ?: 0
+        val status = IpRuleStatus.getStatus(items[2].toIntOrNull())
+        val proxyId = items[3]
+        val proxyCC = items[4]
+        return TreeVal(uid, port, status, proxyId, proxyCC)
     }
 
     fun getMostSpecificMatchProxies(uid: Int, ipstr: String, port: Int = 0): Pair<String, String> {
@@ -418,14 +397,14 @@ object IpRulesManager : KoinComponent {
             val vlike = treeValLike(uid, port)
             // rules at the end of the list have higher precedence as they're more specific
             // (think: 0.0.0.0/0 vs 1.1.1.1/32)
-            val x = iptree.getLike(k, vlike)
+            val x = iptree.getLike(k.togs(), vlike).tos()
             if (DEBUG) logv("getMostSpecificRuleMatch: $uid, $k, $vlike => $x")
             val treeVals = x?.split(Backend.Vsep) ?: return Pair("","")
 
-            treeVals.reversed().forEach {
+            treeVals.forEach {
                 val treeVal = convertStringToTreeVal(it)
                 if (treeVal == null) {
-                    logv("getMostSpecificMatchProxies: $uid, $k, $vlike => no match for $it")
+                    logv("getMostSpecificMatchProxies: $uid, $k, $vlike => treeVal is null for $it")
                     return Pair("", "")
                 }
                 if (treeVal.uid == uid && treeVal.port == port) {
@@ -443,18 +422,18 @@ object IpRulesManager : KoinComponent {
             val vlike = treeValLike(uid, port)
             // rules at the end of the list have higher precedence as they're more specific
             // (think: 0.0.0.0/0 vs 1.1.1.1/32)
-            val x = iptree.valuesLike(k, vlike)
+            val x = iptree.valuesLike(k.togs(), vlike).tos()
             // ex: uid: 10169, k: 142.250.67.78, vlike: 10169:443 => x: 10169:443:0
             // (10169:443:0) => (uid : port : rule[0->none, 1-> block, 2 -> trust, 3 -> bypass])
             logv("getMostSpecificRouteMatch: $uid, $k, $vlike => $x")
             val treeVals = x?.split(Backend.Vsep) ?: return IpRuleStatus.NONE
-            treeVals.reversed().forEach {
+            treeVals.forEach {
                 val treeVal = convertStringToTreeVal(it)
                 if (treeVal == null) {
-                    logv("getMostSpecificRouteMatch: $uid, $k, $vlike => no match for $it")
+                    logv("getMostSpecificRouteMatch: $uid, $k, $vlike => treeVal is null for $it")
                     return@forEach
                 }
-                if (treeVal.uid == uid && treeVal.port == port && treeVal.status != IpRuleStatus.NONE) {
+                if (treeVal.uid == uid && treeVal.port == port) {
                     logv("getMostSpecificRouteMatch: $uid, $k, $vlike => found match for $it")
                     return treeVal.status
                 }
@@ -469,15 +448,15 @@ object IpRulesManager : KoinComponent {
             val vlike = treeValLike(uid, port)
             // rules at the end of the list have higher precedence as they're more specific
             // (think: 0.0.0.0/0 vs 1.1.1.1/32)
-            val x = iptree.valuesLike(k, vlike)
+            val x = iptree.valuesLike(k.togs(), vlike).tos()
             // ex: uid: 10169, k: 142.250.67.78, vlike: 10169:443 => x: 10169:443:0
             // (10169:443:0) => (uid : port : rule[0->none, 1-> block, 2 -> trust, 3 -> bypass])
             logv("getMostSpecificRouteMatch: $uid, $k, $vlike => $x")
             val treeVals = x?.split(Backend.Vsep) ?: return Pair("","")
-            treeVals.reversed().forEach {
+            treeVals.forEach {
                 val treeVal = convertStringToTreeVal(it)
                 if (treeVal == null) {
-                    logv("getMostSpecificRouteProxies: $uid, $k, $vlike => no match for $it")
+                    logv("getMostSpecificRouteProxies: $uid, $k, $vlike => treeVal is null for $it")
                     return Pair("", "")
                 }
                 if (treeVal.uid == uid && treeVal.port == port) {
@@ -496,7 +475,7 @@ object IpRulesManager : KoinComponent {
             val port = pair.second
             val k = normalize(ipaddr)
             if (!k.isNullOrEmpty()) {
-                iptree.esc(k, treeVal(it.uid, port, it.status, it.proxyId, it.proxyCC))
+                iptree.esc(k.togs(), treeVal(it.uid, port, it.status, it.proxyId, it.proxyCC))
             }
         }
         db.deleteRulesByUid(uid)
@@ -511,7 +490,7 @@ object IpRulesManager : KoinComponent {
             val port = pair.second
             val k = normalize(ipaddr)
             if (!k.isNullOrEmpty()) {
-                iptree.esc(k, treeVal(it.uid, port, it.status, it.proxyId, it.proxyCC))
+                iptree.esc(k.togs(), treeVal(it.uid, port, it.status, it.proxyId, it.proxyCC))
             }
         }
         db.deleteRules(list)
@@ -526,16 +505,6 @@ object IpRulesManager : KoinComponent {
 
     suspend fun getObj(uid: Int, ipAddress: String, port: Int = 0): CustomIp? {
         return db.getCustomIpDetail(uid, ipAddress, port)
-    }
-
-    /**
-     * Returns true if a rule already exists for the given [uid] / [ipstr] / [port].
-     * Applies the same normalization as [addIpRule] so the DB lookup uses the stored form.
-     * Used by the DEBUG-only import feature to skip duplicates before bulk insertion.
-     */
-    suspend fun isIpRuleExists(uid: Int, ipstr: IPAddress, port: Int = 0): Boolean {
-        val normalizedIp = padAndNormalize(ipstr)
-        return db.getCustomIpDetail(uid, normalizedIp, port) != null
     }
 
     suspend fun mkCustomIp(uid: Int, ipAddress: String, port: Int = UNSPECIFIED_PORT): CustomIp {
@@ -598,16 +567,7 @@ object IpRulesManager : KoinComponent {
                 ipStr = padIpv4Cidr(ipaddr.toNormalizedString())
             }
             val pair = hostAddr(ipStr)
-            // normalize() (which delegates to treeKey) returns null for wildcard
-            // patterns whose range cannot be expressed as a single CIDR block —
-            // e.g. *.255.255.255 because assignPrefixForSingleBlock()
-            // returns null for such addresses. Collapsing to "" here would
-            // silently corrupt the stored rule (empty ipAddress, displayed as
-            // ":0", and an empty edit field). Fall back to the padded string so
-            // the user-supplied wildcard is preserved in the database.  The rule
-            // will simply be skipped by the CIDR-only ip trie (treeKey returns
-            // null) rather than being silently destroyed.
-            return normalize(pair.first) ?: ipStr
+            return normalize(pair.first) ?: ""
         } catch (e: NullPointerException) {
             Logger.e(Logger.LOG_TAG_VPN, "Invalid IP address added", e)
         }
@@ -666,8 +626,8 @@ object IpRulesManager : KoinComponent {
         db.insert(c)
         val k = treeKey(normalizedIp)
         if (!k.isNullOrEmpty()) {
-            iptree.escLike(k, treeValLike(uid, port ?: 0))
-            iptree.add(k, treeVal(uid, port ?: 0, status.id, proxyId, proxyCC))
+            iptree.escLike(k.togs(), treeValLike(uid, port ?: 0))
+            iptree.add(k.togs(), treeVal(uid, port ?: 0, status.id, proxyId, proxyCC))
             Logger.d(LOG_TAG_FIREWALL, "iptree.add($k, ${treeVal(uid, port ?: 0, status.id, proxyId, proxyCC)})")
         }
         resultsCache.invalidateAll()
@@ -711,31 +671,29 @@ object IpRulesManager : KoinComponent {
 
         val prevIpaddr = pair.first
         val prevPort = pair.second
-        // normalize() returns null for non-CIDR-able wildcards (e.g. *.255.255.255).
-        // Fall back to the raw stored string so the old DB row can still be located
-        // and deleted during an edit, otherwise the replacement silently leaks the
-        // stale rule.
-        val prevIpAddrStr = normalize(prevIpaddr) ?: prevRule.ipAddress
+        val prevIpAddrStr = normalize(prevIpaddr)
         val newIpAddrStr = padAndNormalize(ipaddr)
         Logger.i(
             LOG_TAG_FIREWALL,
             "ip rule, replace (${prevRule.uid}); ${prevIpAddrStr}:${prevPort}; new: $ipaddr:$port, ${newStatus.name}"
         )
-        val isDeleted = db.deleteRule(prevRule.uid, prevIpAddrStr, prevRule.port)
-        if (isDeleted == 0) {
-            // delete didn't occur with normalized addr, use ip from prevRule obj
-            db.deleteRule(prevRule.uid, prevRule.ipAddress, prevRule.port)
+        if (prevIpAddrStr != null) { // prev addr should never be null
+            val isDeleted = db.deleteRule(prevRule.uid, prevIpAddrStr, prevRule.port)
+            if (isDeleted == 0) {
+                // delete didn't occur with normalized addr, use ip from prevRule obj
+                db.deleteRule(prevRule.uid, prevRule.ipAddress, prevRule.port)
+            }
         }
         val newRule = makeCustomIp(prevRule.uid, newIpAddrStr, port, newStatus, wildcard = false, proxyId, proxyCC)
         db.insert(newRule)
         val pk = treeKey(prevIpAddrStr)
         if (!pk.isNullOrEmpty()) {
-            iptree.escLike(pk, treeValLike(prevRule.uid, prevRule.port))
+            iptree.escLike(pk.togs(), treeValLike(prevRule.uid, prevRule.port))
         }
         val nk = treeKey(newIpAddrStr)
         if (!nk.isNullOrEmpty()) {
-            iptree.escLike(nk, treeValLike(newRule.uid, port ?: 0))
-            iptree.add(nk, treeVal(newRule.uid, port ?: 0, newStatus.id, proxyId, proxyCC))
+            iptree.escLike(nk.togs(), treeValLike(newRule.uid, port ?: 0))
+            iptree.add(nk.togs(), treeVal(newRule.uid, port ?: 0, newStatus.id, proxyId, proxyCC))
         }
         resultsCache.invalidateAll()
     }
@@ -856,33 +814,8 @@ object IpRulesManager : KoinComponent {
         val sb = StringBuilder()
         sb.append("   iptree len: ${iptree.len()}\n")
         sb.append("   db len: ${db.getRulesCount()}\n")
+        sb.append("   cache len: ${resultsCache.size()}\n")
 
         return sb.toString()
-    }
-
-    suspend fun isPortRuleSetForIp(ipcsv: String, uid: Int): Boolean {
-        // see if there is any port based rules available for the given ip, use RoutesLike and
-        // parse the returned list and see if there is any port based rule
-        return ipcsv.split(",").any { ip ->
-            val ipaddr = getIpNetPort(ip).first ?: return@any false // ignore the port
-            val normalized = normalize(ipaddr).orEmpty()
-            if (normalized.isEmpty()) return@any false
-
-            val res = iptree.valuesLike(normalized, treeValLike(uid)) ?: return@any false
-            val reversed = res.split(Backend.Vsep).reversed()
-            if (reversed.isEmpty()) return@any false
-
-            var isAnyTrusted = false
-            reversed.forEach {
-                val a = convertStringToTreeVal(it)
-                if (a?.port != 0 && (a?.status == IpRuleStatus.TRUST || a?.status == IpRuleStatus.BYPASS_UNIVERSAL)) {
-                    isAnyTrusted = true
-                }
-            }
-            if (!isAnyTrusted) Logger.vv(LOG_TAG_FIREWALL, "isPortRuleSetForIp: $ip, $uid => false")
-            else Logger.i(LOG_TAG_FIREWALL, "isPortRuleSetForIp: $ip, $uid => true")
-
-            return isAnyTrusted
-        }
     }
 }

@@ -1,6 +1,7 @@
 package com.celzero.bravedns.util
 
-import com.celzero.bravedns.util.Logger.LOG_TAG_CONNECTION
+import Logger
+import Logger.LOG_TAG_CONNECTION
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.TrafficStats

@@ -5,38 +5,38 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M4,8v-2a2,2 0,0 1,2 -2h2"
         android:strokeWidth="2"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M4,16v2a2,2 0,0 0,2 2h2"
         android:strokeWidth="2"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M16,4h2a2,2 0,0 1,2 2v2"
         android:strokeWidth="2"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M16,20h2a2,2 0,0 0,2 -2v-2"
         android:strokeWidth="2"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M12,12m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"
         android:strokeWidth="2"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 </vector>

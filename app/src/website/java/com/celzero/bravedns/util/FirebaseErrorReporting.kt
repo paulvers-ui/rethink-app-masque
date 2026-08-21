@@ -15,7 +15,8 @@
  */
 package com.celzero.bravedns.util
 
-import com.celzero.bravedns.util.Logger.LOG_FIREBASE
+import Logger
+import Logger.LOG_FIREBASE
 import com.celzero.bravedns.service.PersistentState
 import com.celzero.bravedns.util.Utilities.getRandomString
 import com.google.firebase.crashlytics.FirebaseCrashlytics
@@ -36,6 +37,10 @@ object FirebaseErrorReporting : KoinComponent {
      * Initialize Firebase Crashlytics if available and enabled
      */
     fun initialize() {
+        if (!isAvailable()) {
+            Logger.w(LOG_FIREBASE, "crashlytics not available in this build variant")
+            return
+        }
         if (!persistentState.firebaseErrorReportingEnabled) {
             Logger.i(LOG_FIREBASE, "crashlytics disabled in settings")
             return
@@ -47,10 +52,10 @@ object FirebaseErrorReporting : KoinComponent {
                 val newToken = getRandomString(TOKEN_LENGTH)
                 persistentState.firebaseUserToken = newToken
                 persistentState.firebaseUserTokenTimestamp = System.currentTimeMillis()
-                setUserId(newToken)
+                crashlytics.setUserId(newToken)
                 Logger.i(LOG_FIREBASE, "generated new firebase token: $newToken")
             } else {
-                setUserId(token)
+                crashlytics.setUserId(token)
                 Logger.i(LOG_FIREBASE, "existing firebase token found: $token")
             }
             setEnabled(persistentState.firebaseErrorReportingEnabled)
@@ -79,10 +84,21 @@ object FirebaseErrorReporting : KoinComponent {
     }
 
     /**
+     * Check if Firebase Crashlytics is available in current build variant
+     */
+    fun isAvailable(): Boolean {
+        return try {
+            FirebaseCrashlytics.getInstance() != null
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Log a custom message to Firebase Crashlytics
      */
     fun log(message: String) {
-        if (!persistentState.firebaseErrorReportingEnabled) return
+        if (!isAvailable() || !persistentState.firebaseErrorReportingEnabled) return
 
         try {
             val crashlytics = FirebaseCrashlytics.getInstance()
@@ -96,7 +112,7 @@ object FirebaseErrorReporting : KoinComponent {
      * Record a non-fatal exception to Firebase Crashlytics
      */
     fun recordException(throwable: Throwable) {
-        if (!persistentState.firebaseErrorReportingEnabled) return
+        if (!isAvailable() || !persistentState.firebaseErrorReportingEnabled) return
 
         try {
             val crashlytics = FirebaseCrashlytics.getInstance()
@@ -110,12 +126,11 @@ object FirebaseErrorReporting : KoinComponent {
      * Set user ID for Firebase Crashlytics
      */
     fun setUserId(userId: String) {
-        if (!persistentState.firebaseErrorReportingEnabled) return
+        if (!isAvailable() || !persistentState.firebaseErrorReportingEnabled) return
 
         try {
             val crashlytics = FirebaseCrashlytics.getInstance()
             crashlytics.setUserId(userId)
-            Logger.d(LOG_FIREBASE, "crashlytics user-id set to: $userId")
         } catch (e: Exception) {
             Logger.w(LOG_FIREBASE, "err; set user-id crashlytics: ${e.message}")
         }
@@ -125,7 +140,7 @@ object FirebaseErrorReporting : KoinComponent {
      * Set custom key-value pairs for Firebase Crashlytics
      */
     fun setCustomKey(key: String, value: String) {
-        if (!persistentState.firebaseErrorReportingEnabled) return
+        if (!isAvailable() || !persistentState.firebaseErrorReportingEnabled) return
 
         try {
             val crashlytics = FirebaseCrashlytics.getInstance()

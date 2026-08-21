@@ -25,7 +25,7 @@ class ProxyEndpoint {
     @PrimaryKey(autoGenerate = true) var id: Int = 0
     var proxyName: String = ""
 
-    // 0 - SOCKS5, 1 - HTTP, 2 - Orbot (SOCKS5), 3 - Orbot (HTTP)
+    // 0 - SOCKS5, 1 - HTTP
     var proxyMode: Int = 0
     // NONE for now, later we can add other types
     // ideally this should be an enum (ProxyType)

@@ -17,6 +17,7 @@
 package com.celzero.bravedns.receiver
 
 import android.content.Intent
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -24,6 +25,7 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.koin.core.context.stopKoin
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -32,14 +34,24 @@ import org.robolectric.annotation.Config
  * Tests the auto-start logic for VPN on boot and Private Space unlock
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+// Use the plain Android Application so no app-level startKoin() is called during
+// Robolectric's Application.onCreate(); otherwise a Koin leak from a prior class
+// causes KoinApplicationAlreadyStartedException here.
+@Config(sdk = [28], application = android.app.Application::class)
 class BraveAutoStartReceiverTest {
 
     private lateinit var receiver: BraveAutoStartReceiver
     
     @Before
     fun setUp() {
+        // Defensively stop any Koin that may have leaked from a prior test class.
+        try { stopKoin() } catch (_: Exception) {}
         receiver = BraveAutoStartReceiver()
+    }
+
+    @After
+    fun tearDown() {
+        try { stopKoin() } catch (_: Exception) {}
     }
 
     @Test
@@ -48,6 +60,7 @@ class BraveAutoStartReceiverTest {
         val supportedActions = listOf(
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_REBOOT,
+            "android.intent.action.LOCKED_BOOT_COMPLETED",
             Intent.ACTION_USER_UNLOCKED,
             Intent.ACTION_MY_PACKAGE_REPLACED
         )

@@ -16,8 +16,9 @@
 
 package com.celzero.bravedns.util
 
-import com.celzero.bravedns.util.Logger.LOG_BATCH_LOGGER
+import Logger.LOG_BATCH_LOGGER
 import android.util.Log
+import com.celzero.bravedns.RethinkDnsApplication
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -30,7 +31,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.time.Duration.Companion.milliseconds
 
 // channel buffer receives batched entries of batchsize or once every waitms from a batching
 // producer or a time-based monitor (signal) running in a single-threaded co-routine context.
@@ -42,7 +42,7 @@ class NetLogBatcher<T, V>(
     private val updator: suspend (List<V>) -> Unit = { _ -> },
 ) {
     companion object {
-        private const val DEBUG = true
+        private val DEBUG get() = RethinkDnsApplication.DEBUG
     }
 
     // i keeps track of currently in-use buffer
@@ -69,8 +69,8 @@ class NetLogBatcher<T, V>(
     // signal channel, holds at most 1 signal, and drops the oldest
     private val signal = Channel<Int>(Channel.Factory.CONFLATED)
 
-    private val batches: AtomicReference<MutableList<T>> = AtomicReference(mutableListOf())
-    private val updates: AtomicReference<MutableList<V>> = AtomicReference(mutableListOf())
+    private var batches: AtomicReference<MutableList<T>> = AtomicReference(mutableListOf())
+    private var updates: AtomicReference<MutableList<V>> = AtomicReference(mutableListOf())
 
     fun begin(scope: CoroutineScope) {
         // launch suspend fns sig and consume asynchronously
@@ -93,22 +93,14 @@ class NetLogBatcher<T, V>(
     private suspend fun consumeAdd() =
         withContext(Dispatchers.IO + ncons) {
             for (y in buffersCh) {
-                try {
-                    processor(y)
-                } catch (e: Exception) {
-                    Log.e(LOG_BATCH_LOGGER, "$tag; consumeAdd error: ${e.message}")
-                }
+                processor(y)
             }
         }
 
     private suspend fun consumeUpdate() =
         withContext(Dispatchers.IO + ncons) {
             for (y in updatesCh) {
-                try {
-                    updator(y)
-                } catch (e: Exception) {
-                    Log.e(LOG_BATCH_LOGGER, "$tag; consumeUpdate error: ${e.message}")
-                }
+                updator(y)
             }
         }
 
@@ -118,10 +110,6 @@ class NetLogBatcher<T, V>(
     }
 
     private suspend fun txswap(reason: String) {
-        if (closed.get()) {
-            logd("txswap skip, closed; reason: $reason")
-            return
-        }
         // increment lsn before any potential suspension or delays; because add() and update()
         // only signals the current lsn when the buffer size is 1, and might end up racing
         lsn = (lsn + 1)
@@ -133,7 +121,7 @@ class NetLogBatcher<T, V>(
             buffersCh.send(b)
         }
         if (u.isNotEmpty()) {
-            delay((waitms / 5).milliseconds)
+            delay(waitms / 5)
             updatesCh.send(u)
         }
 
@@ -142,10 +130,6 @@ class NetLogBatcher<T, V>(
 
     suspend fun add(payload: T) =
         withContext(looper + nprod) {
-            if (closed.get()) {
-                logd("add skip, closed")
-                return@withContext
-            }
             val b = batches.get()
             b.add(payload)
             // if the batch size is met, dispatch it to the consumer
@@ -158,10 +142,6 @@ class NetLogBatcher<T, V>(
 
     suspend fun update(payload: V) =
         withContext(looper + nprod) {
-            if (closed.get()) {
-                logd("update skip, closed")
-                return@withContext
-            }
             val u = updates.get()
             u.add(payload)
             if (u.size >= batchSize) {
@@ -192,7 +172,7 @@ class NetLogBatcher<T, V>(
                 }
 
                 // wait for 'batch' to dispatch
-                delay(waitms.milliseconds)
+                delay(waitms)
                 logd("signal wait over, sz(b: ${b.size}, u: ${u.size}) / cur(${lsn}), track(${tracklsn})")
 
                 // 'l' is the current buffer, that is, 'l == i',

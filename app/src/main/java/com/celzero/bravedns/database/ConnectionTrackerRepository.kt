@@ -37,7 +37,7 @@ class ConnectionTrackerRepository(private val connectionTrackerDAO: ConnectionTr
     suspend fun updateBatch(summary: List<ConnectionSummary>) {
         summary.forEach {
             if (!it.targetIp.isNullOrEmpty()) {
-                val flag = it.flag.orEmpty()
+                val flag = it.flag ?: ""
                 connectionTrackerDAO.updateSummary(
                     it.connId,
                     it.pid,
@@ -97,7 +97,7 @@ class ConnectionTrackerRepository(private val connectionTrackerDAO: ConnectionTr
         return connectionTrackerDAO.getDataUsage(before, current)
     }
 
-    suspend fun getBlockedUniversalRulesCount(): List<String> {
+    suspend fun getBlockedUniversalRulesCount(): List<ConnectionTracker> {
         return connectionTrackerDAO.getBlockedUniversalRulesCount()
     }
 

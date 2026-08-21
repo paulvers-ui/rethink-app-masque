@@ -18,37 +18,20 @@ package com.celzero.bravedns.service
 import android.app.KeyguardManager
 import android.content.Context
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import androidx.lifecycle.MutableLiveData
 import com.celzero.bravedns.R
 import com.celzero.bravedns.database.AppInfo
 import com.celzero.bravedns.database.AppInfoRepository
+import com.celzero.bravedns.database.AppInfoRepository.Companion.NO_PACKAGE_PREFIX
 import com.celzero.bravedns.util.AndroidUidConfig
 import com.celzero.bravedns.util.Constants.Companion.RETHINK_PACKAGE
-import io.mockk.Runs
-import io.mockk.clearAllMocks
-import io.mockk.coEvery
-import io.mockk.every
-import io.mockk.just
-import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkAll
+import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
-import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
-import org.junit.Before
-import org.junit.Rule
-import org.junit.Test
+import kotlinx.coroutines.test.*
+import org.junit.*
+import org.junit.Assert.*
 import org.junit.runner.RunWith
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -57,10 +40,11 @@ import org.koin.test.KoinTest
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import kotlinx.coroutines.delay
 
 @ExperimentalCoroutinesApi
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [28], application = android.app.Application::class)
 class FirewallManagerTest : KoinTest {
 
     @get:Rule
@@ -68,9 +52,13 @@ class FirewallManagerTest : KoinTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()
 
-    private lateinit var mockDb: AppInfoRepository
-    private lateinit var mockPersistentState: PersistentState
-    private lateinit var mockKeyguardManager: KeyguardManager
+    // Declared as val so the same mock instances survive across setUp() calls.
+    // FirewallManager is a Kotlin object whose 'db by inject<>()' lazy is cached on
+    // first access; if setUp() creates a NEW mock each time, FirewallManager still
+    // holds the OLD (now clearAllMocks()-wiped) instance → MockKException "no answer found".
+    private val mockDb: AppInfoRepository = mockk(relaxed = true)
+    private val mockPersistentState: PersistentState = mockk(relaxed = true)
+    private val mockKeyguardManager: KeyguardManager = mockk(relaxed = true)
     private lateinit var context: Context
 
     // Test data
@@ -91,18 +79,25 @@ class FirewallManagerTest : KoinTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
 
-        // Clear any existing Koin state first
+        // Get the application context FIRST — Application.onCreate() may call startKoin internally.
+        // Retrieving it before our stopKoin ensures any Application-initiated Koin is still running
+        // when the application is created, so we can stop it cleanly right after.
+        context = RuntimeEnvironment.getApplication()
+
+        // Now stop whatever Koin is running (ours or the Application's) before starting fresh
         try {
             stopKoin()
         } catch (_: Exception) {
             // Ignore if Koin wasn't started
         }
 
-        // Initialize mocks
-        mockDb = mockk(relaxed = true)
-        mockPersistentState = mockk(relaxed = true)
-        mockKeyguardManager = mockk(relaxed = true)
-        context = RuntimeEnvironment.getApplication()
+        // Reset recorded calls only — do NOT clear answers (answers = false).
+        // Clearing answers (answers = true) destroys the relaxed-fallback that mockk(relaxed=true)
+        // provides, so any DB method not explicitly registered in setupDatabaseMocks() would
+        // throw MockKException instead of returning a safe default. The explicit stubs in
+        // setupDatabaseMocks() are re-applied immediately after this call, so there is no
+        // risk of stale answers bleeding between tests.
+        clearMocks(mockDb, mockPersistentState, mockKeyguardManager, answers = false, recordedCalls = true, childMocks = false)
 
         // Initialize test data first
         setupTestData()
@@ -141,9 +136,11 @@ class FirewallManagerTest : KoinTest {
     fun tearDown() {
         Dispatchers.resetMain()
         stopKoin()
-        unmockkAll()
+        // Unmock only the objects we explicitly mocked; unmockkAll() would de-mock
+        // our persistent class-level mocks and break the FirewallManager injection cache fix.
+        unmockkObject(VpnController)
+        unmockkObject(AndroidUidConfig)
         clearFirewallManagerState()
-        clearAllMocks()
     }
 
     private fun setupTestData() {
@@ -340,11 +337,13 @@ class FirewallManagerTest : KoinTest {
         assertTrue(FirewallManager.FirewallStatus.BYPASS_DNS_FIREWALL.bypassDnsFirewall())
         assertTrue(FirewallManager.FirewallStatus.EXCLUDE.isExclude())
         assertTrue(FirewallManager.FirewallStatus.ISOLATE.isolate())
+        assertTrue(FirewallManager.FirewallStatus.UNTRACKED.isUntracked())
 
         assertFalse(FirewallManager.FirewallStatus.NONE.bypassUniversal())
         assertFalse(FirewallManager.FirewallStatus.NONE.bypassDnsFirewall())
         assertFalse(FirewallManager.FirewallStatus.NONE.isExclude())
         assertFalse(FirewallManager.FirewallStatus.NONE.isolate())
+        assertFalse(FirewallManager.FirewallStatus.NONE.isUntracked())
     }
 
     // Test ConnectionStatus enum
@@ -487,50 +486,6 @@ class FirewallManagerTest : KoinTest {
         assertNull(FirewallManager.getAppInfoByPackage("   "))
     }
 
-    // Regression: same packageName under multiple uids (work-profile / cloned app) must each be
-    // resolvable by (uid, packageName). getAppInfoByPackage collapses them to one; the uid-aware
-    // lookup must return the correct AppInfo per uid. This is the root cause of apps going missing
-    // from ProxyApplicationMapping (and hence from WgIncludeAppsAdapter).
-    @Test
-    fun testGetAppInfoByUidAndPackage_multiUidPerPackage() = runBlocking {
-        clearFirewallManagerState()
-        val dualPkg = "com.dual.app"
-        val user0Uid = 10042
-        val workProfileUid = 1010042 // user 10 (100000 + 10042)
-        val aiUser0 = AppInfo(
-            packageName = dualPkg, appName = "Dual User0", uid = user0Uid,
-            isSystemApp = false, firewallStatus = FirewallManager.FirewallStatus.NONE.id,
-            appCategory = "Other", wifiDataUsed = 0L, mobileDataUsed = 0L,
-            connectionStatus = FirewallManager.ConnectionStatus.ALLOW.id,
-            isProxyExcluded = false, screenOffAllowed = true, backgroundAllowed = true, tombstoneTs = 0L
-        )
-        val aiWork = AppInfo(
-            packageName = dualPkg, appName = "Dual Work", uid = workProfileUid,
-            isSystemApp = false, firewallStatus = FirewallManager.FirewallStatus.NONE.id,
-            appCategory = "Other", wifiDataUsed = 0L, mobileDataUsed = 0L,
-            connectionStatus = FirewallManager.ConnectionStatus.ALLOW.id,
-            isProxyExcluded = false, screenOffAllowed = true, backgroundAllowed = true, tombstoneTs = 0L
-        )
-        FirewallManager.GlobalVariable.appInfos.put(user0Uid, aiUser0)
-        FirewallManager.GlobalVariable.appInfos.put(workProfileUid, aiWork)
-
-        // getAppInfoByPackage can only ever return ONE of the two
-        val collapsed = FirewallManager.getAppInfoByPackage(dualPkg)
-        assertNotNull(collapsed)
-        assertEquals(dualPkg, collapsed!!.packageName)
-
-        // uid-aware lookup must return the exact entry for each uid
-        assertEquals(user0Uid, FirewallManager.getAppInfoByUidAndPackage(user0Uid, dualPkg)?.uid)
-        assertEquals(workProfileUid, FirewallManager.getAppInfoByUidAndPackage(workProfileUid, dualPkg)?.uid)
-
-        // null/blank guards
-        assertNull(FirewallManager.getAppInfoByUidAndPackage(user0Uid, ""))
-        assertNull(FirewallManager.getAppInfoByUidAndPackage(user0Uid, null))
-        assertNull(FirewallManager.getAppInfoByUidAndPackage(99999, dualPkg))
-        // mismatched uid/pkg combo must not return a sibling entry
-        assertNull(FirewallManager.getAppInfoByUidAndPackage(user0Uid, "com.other.pkg"))
-    }
-
     // Test trackForegroundApp edge cases
     @Test
     fun testTrackForegroundApp_nonExistentApp() = runBlocking {
@@ -605,7 +560,7 @@ class FirewallManagerTest : KoinTest {
             )
             assertTrue(true)
         } catch (e: Exception) {
-            fail("updateFirewallStatus should not throw exception: ${e.message}")
+            fail("updateFirewallStatus should not throw exception: ${e::class.qualifiedName}: ${e.message}\n${e.stackTraceToString()}")
         }
     }
 
@@ -615,7 +570,7 @@ class FirewallManagerTest : KoinTest {
             FirewallManager.updateUidAndResetTombstone(testUid1, testUid3, "com.test.app1")
             assertTrue(true)
         } catch (e: Exception) {
-            fail("updateUidAndResetTombstone should not throw exception: ${e.message}")
+            fail("updateUidAndResetTombstone should not throw exception: ${e::class.qualifiedName}: ${e.message}\n${e.stackTraceToString()}")
         }
     }
 
@@ -640,7 +595,7 @@ class FirewallManagerTest : KoinTest {
             FirewallManager.persistAppInfo(newApp)
             assertTrue(true)
         } catch (e: Exception) {
-            fail("persistAppInfo should not throw exception: ${e.message}")
+            fail("persistAppInfo should not throw exception: ${e::class.qualifiedName}: ${e.message}\n${e.stackTraceToString()}")
         }
     }
 
@@ -721,6 +676,12 @@ class FirewallManagerTest : KoinTest {
 
         assertEquals(R.string.isolate, FirewallManager.getLabelForStatus(
             FirewallManager.FirewallStatus.ISOLATE,
+            FirewallManager.ConnectionStatus.ALLOW,
+            FirewallManager.ConnectionStatus.ALLOW
+        ))
+
+        assertEquals(R.string.untracked, FirewallManager.getLabelForStatus(
+            FirewallManager.FirewallStatus.UNTRACKED,
             FirewallManager.ConnectionStatus.ALLOW,
             FirewallManager.ConnectionStatus.ALLOW
         ))
@@ -821,14 +782,6 @@ class FirewallManagerTest : KoinTest {
     }
 
     @Test
-    fun testIsOrbotInstalled() = runBlocking {
-        // Test with existing data
-        val result = FirewallManager.isOrbotInstalled()
-        // Just verify method executes without error
-        assertNotNull("isOrbotInstalled should return a boolean", result)
-    }
-
-    @Test
     fun testGetNonFirewalledAppsPackageNames() = runBlocking {
         // Test with existing data
         val nonFirewalled = FirewallManager.getNonFirewalledAppsPackageNames()
@@ -871,6 +824,7 @@ class FirewallManagerTest : KoinTest {
         assertEquals(FirewallManager.FirewallStatus.NONE, FirewallManager.appStatus(testUid1))
         assertEquals(FirewallManager.FirewallStatus.ISOLATE, FirewallManager.appStatus(testUid2))
         assertEquals(FirewallManager.FirewallStatus.BYPASS_UNIVERSAL, FirewallManager.appStatus(systemUid))
+        assertEquals(FirewallManager.FirewallStatus.UNTRACKED, FirewallManager.appStatus(invalidUid))
     }
 
     // Test connectionStatus method

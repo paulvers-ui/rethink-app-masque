@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network Security Configuration
+    - Disables cleartext (HTTP) traffic for all domains
+    - Trusts only system CAs (no user-installed certificates)
+    - Prevents MITM attacks via rogue user CAs
+    See: https://developer.android.com/training/articles/security-config
+-->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

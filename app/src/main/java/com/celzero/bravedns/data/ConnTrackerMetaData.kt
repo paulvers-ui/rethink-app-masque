@@ -39,5 +39,6 @@ data class ConnTrackerMetaData(
     var downloadBytes: Long = 0,
     var uploadBytes: Long = 0,
     var duration: Int = 0,
-    var synack: Long = 0 // treat it as rtt (round trip time
+    var synack: Long = 0, // treat it as rtt (round trip time
+    @Transient var isProcessed: Boolean = false
 ) : Serializable

@@ -15,7 +15,6 @@
  */
 package com.celzero.bravedns.database
 
-import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
@@ -35,31 +34,20 @@ interface SubscriptionStateHistoryDao {
     @Query("SELECT * FROM SubscriptionStateHistory ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getRecentHistory(limit: Int = 100): List<SubscriptionStateHistory>
 
-    /**
-     *
-     * Applies the noise-filter rules defined at the top of this file:
-     *  - same-state rows excluded
-     *  - fromState = STATE_UNKNOWN(4) or negative (-1 sentinel) excluded
-     *  - toState   = STATE_UNKNOWN(4) or STATE_INITIAL(0) excluded
-     * Initial(0) → Active(1) is intentionally shown (fromState=0 is still a valid source).
-     */
+    @Query("DELETE FROM SubscriptionStateHistory WHERE timestamp < :cutoffTime")
+    suspend fun deleteOldHistory(cutoffTime: Long): Int
+
+    @Query("SELECT COUNT(*) FROM SubscriptionStateHistory WHERE subscriptionId = :subscriptionId")
+    suspend fun getTransitionCount(subscriptionId: Int): Int
+
     @Query("""
-        SELECT * FROM SubscriptionStateHistory
-        WHERE fromState != toState
-          AND fromState NOT IN (-1, 4)
-          AND toState   NOT IN (0, 4)
-        ORDER BY timestamp DESC
+        SELECT fromState, toState, COUNT(*) as count 
+        FROM SubscriptionStateHistory 
+        GROUP BY fromState, toState 
+        ORDER BY count DESC
     """)
-    fun observeHistoryPaged(): PagingSource<Int, SubscriptionStateHistory>
+    suspend fun getTransitionStatistics(): List<TransitionStatistic>
 
-
-    /** Total count of meaningful (non-noise) history entries shown to the user. */
-    @Query("""
-        SELECT COUNT(*) FROM SubscriptionStateHistory
-        WHERE fromState != toState
-          AND fromState NOT IN (-1, 4)
-          AND toState   NOT IN (0, 4)
-    """)
-    suspend fun getMeaningfulCount(): Int
-
+    @Query("DELETE FROM SubscriptionStateHistory")
+    suspend fun clearHistory(): Int
 }

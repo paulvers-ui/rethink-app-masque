@@ -15,11 +15,14 @@
  */
 package com.celzero.bravedns.database
 
+import android.database.Cursor
 import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
+import androidx.sqlite.db.SimpleSQLiteQuery
 
 @Dao
 interface ConsoleLogDAO {
@@ -27,15 +30,13 @@ interface ConsoleLogDAO {
     suspend fun insert(log: ConsoleLog)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertBatch(log: List<ConsoleLog>)
+    fun insertBatch(log: List<ConsoleLog>)
 
-    @Query("SELECT * FROM ConsoleLog where id > :lastId LIMIT :limit OFFSET :offset")
-    suspend fun getLogsChunked(lastId: Int, limit: Int, offset: Int): List<ConsoleLog>
+    @RawQuery
+    fun getLogsCursor(query: SimpleSQLiteQuery): Cursor
 
-    // Paged query filtered by search text AND log level (level <= :maxLevel means show
-    // that severity and above, e.g. maxLevel=2 shows only WARN+ERROR).
-    @Query("SELECT * FROM ConsoleLog WHERE message LIKE :input AND level >= :minLevel ORDER BY id DESC")
-    fun getLogs(input: String, minLevel: Int): PagingSource<Int, ConsoleLog>
+    @Query("select * from ConsoleLog where message like :input order by id desc")
+    fun getLogs(input: String): PagingSource<Int, ConsoleLog>
 
     @Query("DELETE FROM ConsoleLog WHERE timestamp < :to")
     suspend fun deleteOldLogs(to: Long)

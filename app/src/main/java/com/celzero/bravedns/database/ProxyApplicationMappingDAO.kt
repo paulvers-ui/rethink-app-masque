@@ -22,7 +22,6 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Transaction
 import androidx.room.Update
 
 @Dao
@@ -49,15 +48,27 @@ interface ProxyApplicationMappingDAO {
     @Query("select * from ProxyApplicationMapping")
     fun getWgAppMapping(): List<ProxyApplicationMapping>
 
-    // query to get apps for pager adapter: distinct apps ordered by name
-    @Query("SELECT * FROM ProxyApplicationMapping WHERE rowid IN ( SELECT MIN(rowid) FROM ProxyApplicationMapping WHERE appName LIKE :appName AND (proxyId = :proxyId or proxyId = '') GROUP BY uid, packageName) ORDER BY lower(appName)")
-    fun getAllAppsMapping(appName: String, proxyId: String): PagingSource<Int, ProxyApplicationMapping>
+    // query to get apps for pager adapter
+    @Query(
+        "select * from ProxyApplicationMapping where appName like :appName order by lower(appName)"
+    )
+    fun getAllAppsMapping(appName: String): PagingSource<Int, ProxyApplicationMapping>
 
-    @Query("SELECT * FROM ProxyApplicationMapping WHERE rowid IN (SELECT MIN(rowid) FROM ProxyApplicationMapping WHERE appName LIKE :appName AND proxyId = :proxyId GROUP BY uid, packageName) ORDER BY lower(appName)")
-    fun getSelectedAppsMapping(appName: String, proxyId: String): PagingSource<Int, ProxyApplicationMapping>
+    @Query(
+        "select * from ProxyApplicationMapping where appName like :appName and proxyId = :proxyId order by lower(appName)"
+    )
+    fun getSelectedAppsMapping(
+        appName: String,
+        proxyId: String
+    ): PagingSource<Int, ProxyApplicationMapping>
 
-    @Query("SELECT * FROM ProxyApplicationMapping WHERE rowid IN ( SELECT MIN(rowid) FROM ProxyApplicationMapping WHERE appName LIKE :appName AND uid NOT IN (SELECT uid FROM ProxyApplicationMapping WHERE proxyId = :proxyId) GROUP BY uid, packageName) ORDER BY lower(appName)")
-    fun getUnSelectedAppsMapping(appName: String, proxyId: String): PagingSource<Int, ProxyApplicationMapping>
+    @Query(
+        "select * from ProxyApplicationMapping where appName like :appName and proxyId != :proxyId order by lower(appName)"
+    )
+    fun getUnSelectedAppsMapping(
+        appName: String,
+        proxyId: String
+    ): PagingSource<Int, ProxyApplicationMapping>
 
     @Query("select count(packageName) from ProxyApplicationMapping where proxyId = :id")
     fun getAppCountById(id: String): Int
@@ -65,49 +76,31 @@ interface ProxyApplicationMappingDAO {
     @Query("select count(packageName) from ProxyApplicationMapping where proxyId = :id")
     fun getAppCountByIdLiveData(id: String): LiveData<Int>
 
-    @Query("select count(packageName) from ProxyApplicationMapping where proxyId = :id")
-    fun getSelectedAppsCountLiveData(id: String): LiveData<Int>
+    @Query(
+        "update ProxyApplicationMapping set proxyId = :cfgId, proxyName = :cfgName where uid = :uid"
+    )
+    fun updateProxyIdForApp(uid: Int, cfgId: String, cfgName: String)
 
-    // unselected: apps in mapping table that are not using this proxyId
-    @Query("select count(packageName) from ProxyApplicationMapping where proxyId != :id")
-    fun getUnselectedAppsCountLiveData(id: String): LiveData<Int>
+    @Query("update ProxyApplicationMapping set proxyId = '', proxyName = '' where proxyId = :cfgId")
+    fun removeAllAppsForProxy(cfgId: String)
+
+    @Query("update ProxyApplicationMapping set proxyId = '', proxyName = '' where proxyId = 'wg%'")
+    fun removeAllWgProxies()
+
+    @Query("update ProxyApplicationMapping set proxyId = :cfgId, proxyName = :cfgName")
+    fun updateProxyForAllApps(cfgId: String, cfgName: String = "")
 
     @Query("update ProxyApplicationMapping set proxyName = :proxyName where proxyId = :proxyId")
     fun updateProxyNameForProxyId(proxyId: String, proxyName: String)
 
-    @Transaction
-    fun updateUidForApp(oldUid: Int, newUid: Int, packageName: String) {
-        deleteConflictingMappingsForUidUpdate(newUid, packageName, oldUid)
-        updateUidForAppInternal(oldUid, newUid, packageName)
-    }
+    @Query(
+        "update ProxyApplicationMapping set proxyId = :cfgId, proxyName = :cfgName where proxyId = ''"
+    )
+    fun updateProxyForUnselectedApps(cfgId: String, cfgName: String = "")
 
-    @Query("delete from ProxyApplicationMapping where uid = :newUid and packageName = :packageName and proxyId in (select proxyId from ProxyApplicationMapping where uid = :oldUid and packageName = :packageName)")
-    fun deleteConflictingMappingsForUidUpdate(newUid: Int, packageName: String, oldUid: Int)
-
-    @Query("update ProxyApplicationMapping set uid = :newUid where packageName = :packageName and uid = :oldUid")
-    fun updateUidForAppInternal(oldUid: Int, newUid: Int, packageName: String)
-
-    @Transaction
-    fun tombstoneApp(oldUid: Int, newUid: Int) {
-        deleteConflictingMappingsForTombstone(newUid, oldUid)
-        tombstoneAppInternal(oldUid, newUid)
-    }
-
-    @Query("delete from ProxyApplicationMapping where uid = :newUid and exists (select 1 from ProxyApplicationMapping as pam2 where pam2.uid = :oldUid and pam2.packageName = ProxyApplicationMapping.packageName and pam2.proxyId = ProxyApplicationMapping.proxyId)")
-    fun deleteConflictingMappingsForTombstone(newUid: Int, oldUid: Int)
+    @Query("update ProxyApplicationMapping set uid = :uid where packageName = :packageName")
+    fun updateUidForApp(uid: Int, packageName: String)
 
     @Query("update ProxyApplicationMapping set uid = :newUid where uid = :oldUid")
-    fun tombstoneAppInternal(oldUid: Int, newUid: Int)
-
-    @Query("select * from ProxyApplicationMapping where uid = :uid and packageName = :packageName")
-    fun getProxiesForApp(uid: Int, packageName: String): List<ProxyApplicationMapping>
-
-    @Query("select proxyId from ProxyApplicationMapping where uid = :uid and packageName = :packageName")
-    fun getProxyIdsForApp(uid: Int, packageName: String): List<String>
-
-    @Query("select * from ProxyApplicationMapping where proxyId = :proxyId")
-    fun getAppsForProxy(proxyId: String): List<ProxyApplicationMapping>
-
-    @Query("delete from ProxyApplicationMapping where uid = :uid and packageName = :packageName and proxyId = :proxyId")
-    fun deleteMapping(uid: Int, packageName: String, proxyId: String)
+    fun tombstoneApp(oldUid: Int, newUid: Int)
 }

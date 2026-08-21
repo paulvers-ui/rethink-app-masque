@@ -5,17 +5,17 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M4,4h16c1.1,0 2,0.9 2,2v12c0,1.1 -0.9,2 -2,2H4c-1.1,0 -2,-0.9 -2,-2V6c0,-1.1 0.9,-2 2,-2z"
         android:strokeWidth="2"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:fillColor="?attr/svgFillColor"
+        android:fillColor="#FFFFFF"
         android:pathData="M22,6l-10,7l-10,-7"
         android:strokeWidth="2"
-        android:strokeColor="?attr/svgStrokeColor"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 </vector>

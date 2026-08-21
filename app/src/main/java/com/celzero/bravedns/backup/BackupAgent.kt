@@ -15,17 +15,17 @@
  */
 package com.celzero.bravedns.backup
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_BACKUP_RESTORE
+import Logger
+import Logger.LOG_TAG_BACKUP_RESTORE
 import android.content.Context
 import android.content.SharedPreferences
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.SystemClock
 import androidx.core.net.toUri
 import androidx.preference.PreferenceManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
-import com.celzero.bravedns.backup.BackupHelper.Companion.BACKUP_WG_DIR
 import com.celzero.bravedns.backup.BackupHelper.Companion.CREATED_TIME
 import com.celzero.bravedns.backup.BackupHelper.Companion.DATA_BUILDER_BACKUP_URI
 import com.celzero.bravedns.backup.BackupHelper.Companion.METADATA_FILENAME
@@ -39,9 +39,7 @@ import com.celzero.bravedns.backup.BackupHelper.Companion.getRethinkDatabase
 import com.celzero.bravedns.backup.BackupHelper.Companion.getTempDir
 import com.celzero.bravedns.backup.BackupHelper.Companion.startVpn
 import com.celzero.bravedns.database.AppDatabase
-import com.celzero.bravedns.database.LogDatabase
 import com.celzero.bravedns.service.PersistentState
-import com.celzero.bravedns.service.WireguardManager
 import com.celzero.bravedns.util.Utilities
 import com.celzero.bravedns.util.Utilities.copyWithStream
 import org.koin.core.component.KoinComponent
@@ -53,7 +51,6 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.io.ObjectOutputStream
 import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -65,11 +62,52 @@ class BackupAgent(val context: Context, workerParams: WorkerParameters) :
 
     var filesPathToZip: MutableList<String> = ArrayList()
     private val persistentState by inject<PersistentState>()
-    private val appDatabase by inject<AppDatabase>()
-    private val logDatabase by inject<LogDatabase>()
 
     companion object {
         const val TAG = "BackupExport"
+
+        /**
+         * Exhaustive set of SharedPreferences keys that constitute the firewall configuration.
+         *
+         * Only these keys are included in a firewall-only backup. DNS server settings,
+         * WireGuard credentials, proxy settings, analytics toggles, and UI-only state are
+         * deliberately excluded so that restoring a backup cannot silently reconfigure
+         * the user's DNS or VPN transport.
+         */
+        val FIREWALL_PREF_KEYS: Set<String> = setOf(
+            // Operation mode (DNS-only / DNS+Firewall)
+            "brave_mode",
+            // Universal firewall rules
+            "block_udp_traffic_other_than_dns",
+            "block_unknown_connections",
+            "block_http_connections",
+            "block_metered_connections",
+            "universal_lockdown",
+            "block_new_app",
+            "disallow_dns_bypass",
+            "background_mode",           // block apps in background
+            "screen_state",              // block when device locked
+            "block_non_ip_dns_responses",
+            "block_icmp",
+            // Firewall bypass control
+            "allow_bypass",
+            // Firewall bubble overlay feature
+            "pref_firewall_bubble_enabled",
+            // Local blocklist (used by the firewall for DNS-level blocking)
+            "enable_local_list",
+            "local_block_list_stamp",
+            "local_block_list_downloaded_time",
+            "local_block_list_count",
+            // App version — needed by the restore path to validate compatibility
+            "app_version"
+        )
+
+        /**
+         * WireGuard-owned tables. A backup must not carry WireGuard configuration, so these
+         * are emptied in the temporary database copy before it is zipped.
+         */
+        val WG_TABLES: List<String> =
+            listOf("WgConfigFiles", "WgHopMap", "ProxyApplicationMapping")
     }
 
     override fun doWork(): Result {
@@ -86,8 +124,10 @@ class BackupAgent(val context: Context, workerParams: WorkerParameters) :
             LOG_TAG_BACKUP_RESTORE,
             "completed backup process, is backup successful? $isBackupSucceed"
         )
+        // always restart VPN whether backup succeeded or failed — the tunnel was
+        // stopped before backup started and must come back up regardless of outcome
+        startVpn(context)
         if (isBackupSucceed) {
-            startVpn(context)
             return Result.success()
         }
         return Result.failure()
@@ -116,12 +156,6 @@ class BackupAgent(val context: Context, workerParams: WorkerParameters) :
                 return false
             }
 
-            // checkpoint databases to flush WAL entries into the main database file
-            // so the backup includes all committed data, not just what's in the db file
-            appDatabase.checkPoint()
-            logDatabase.checkPoint()
-            Logger.i(LOG_TAG_BACKUP_RESTORE, "database checkpoint completed before backup")
-
             processCompleted = saveDatabasesToFile(tempDir.path)
 
             if (processCompleted) {
@@ -133,10 +167,6 @@ class BackupAgent(val context: Context, workerParams: WorkerParameters) :
                 )
                 return false
             }
-
-            // no need to check the return value, we can proceed even if the wireguard config backup
-            // fails
-            backupWireGuardConfig(tempDir)
 
             processCompleted = createMetaData(tempDir)
 
@@ -164,46 +194,6 @@ class BackupAgent(val context: Context, workerParams: WorkerParameters) :
         }
     }
 
-    private fun backupWireGuardConfig(tempDir: File): Boolean {
-        // get all the wireguard config from the database,
-        // loop through them and get the path from the database
-        // create a copy of a encrypted file to normal file in the temp dir
-        // add the file to the zip list
-
-        Logger.d(LOG_TAG_BACKUP_RESTORE, "init backup wireguard configs")
-        val dir = File(tempDir, BACKUP_WG_DIR)
-        if (!dir.exists()) {
-            Logger.d(LOG_TAG_BACKUP_RESTORE, "creating wireguard backup dir, ${dir.path}")
-            dir.mkdirs()
-        }
-
-        try {
-            val mappings = WireguardManager.getAllMappings()
-            mappings.forEach { m ->
-                val file = File(m.configPath)
-                if (!file.exists()) {
-                    Logger.w(LOG_TAG_BACKUP_RESTORE, "wg config file missing for ${m.id}, ${m.configPath}")
-                    return@forEach
-                }
-                val content = file.readText(Charsets.UTF_8)
-                if (content.isNotEmpty()) {
-                    val tmpWgFile = File(dir, "${m.id}.conf")
-                    tmpWgFile.writer().use { writer ->
-                        writer.write(content)
-                        writer.flush()
-                    }
-                    filesPathToZip.add(tmpWgFile.absolutePath)
-                    Logger.v(LOG_TAG_BACKUP_RESTORE, "wg ${m.id}.conf added to backup, path: ${tmpWgFile.path}")
-                } else {
-                    Logger.w(LOG_TAG_BACKUP_RESTORE, "empty config for ${m.id}, ${m.configPath}")
-                }
-            }
-            return true
-        } catch (e: Exception) {
-            Logger.w(LOG_TAG_BACKUP_RESTORE, "err while backing up wg config, ${e.message}", e)
-        }
-        return false
-    }
 
     private fun createMetaData(backupDir: File): Boolean {
         Logger.d(LOG_TAG_BACKUP_RESTORE, "creating meta data file, path: ${backupDir.path}")
@@ -252,10 +242,14 @@ class BackupAgent(val context: Context, workerParams: WorkerParameters) :
             val inputStream: InputStream =
                 context.contentResolver.openInputStream(zipFileUri) ?: return false
             val outputStream: OutputStream =
-                context.contentResolver.openOutputStream(destUri) ?: return false
+                context.contentResolver.openOutputStream(destUri) ?: run {
+                    inputStream.close()
+                    return false
+                }
 
             // we are passing the streams instead of actual files because we do not have
             // write access to the destination dir.
+            // copyWithStream closes both streams via use{} internally.
             val copySucceeded: Boolean = copyWithStream(inputStream, outputStream)
             return if (copySucceeded) {
                 Logger.i(
@@ -277,56 +271,189 @@ class BackupAgent(val context: Context, workerParams: WorkerParameters) :
         }
     }
 
+    /**
+     * Firewall-config backup: only include [AppDatabase.DATABASE_NAME] (and its WAL/SHM
+     * siblings). That database holds AppInfo (per-app firewall rules), CustomIp, and
+     * CustomDomain — the tables that represent the user's firewall state.
+     *
+     * The log database is intentionally excluded: it contains ephemeral connection-tracking
+     * data that is not part of the firewall configuration.
+     *
+     * WireGuard tables are wiped from the copied database (see [stripWireguardFromDbCopy]),
+     * so a backup never contains WireGuard configuration.
+     */
     private fun saveDatabasesToFile(path: String): Boolean {
+        // Checkpoint the live database before copying so that any WAL frames that are
+        // only in memory (committed but not yet flushed to the .db file) are written to
+        // disk and folded into the main database file. Without this, recently-changed
+        // firewall rules may be absent from the backup copy.
+        val livePath = context.getDatabasePath(AppDatabase.DATABASE_NAME).absolutePath
+        try {
+            val liveDb = SQLiteDatabase.openDatabase(
+                livePath, null, SQLiteDatabase.OPEN_READWRITE
+            )
+            liveDb.use { it.execSQL("PRAGMA wal_checkpoint(FULL)") }
+            Logger.i(LOG_TAG_BACKUP_RESTORE, "wal checkpoint on live db succeeded")
+        } catch (e: Exception) {
+            // Non-fatal: the WAL/SHM siblings are still included in the copy, so a
+            // consistent restore remains possible. Log and continue.
+            Logger.w(
+                LOG_TAG_BACKUP_RESTORE,
+                "wal checkpoint on live db failed (non-fatal), reason? ${e.message}"
+            )
+        }
+
         val files = getRethinkDatabase(context)?.listFiles() ?: return false
 
         for (f in files) {
             Logger.d(
+                LOG_TAG_BACKUP_RESTORE,
+                "file ${f.name} found in database dir (${f.absolutePath})"
+            )
+
+            // Firewall-only policy: skip every file that does not belong to the main
+            // app database (bravedns.db). WAL and SHM siblings of bravedns.db are kept
+            // because they are required for a consistent Room restore.
+            if (!f.name.startsWith(AppDatabase.DATABASE_NAME)) {
+                Logger.d(
                     LOG_TAG_BACKUP_RESTORE,
-                    "file ${f.name} found in database dir (${f.absolutePath})"
+                    "firewall-only backup: skipping non-firewall db file: ${f.name}"
                 )
-            // looks like the journal, shm and wal files are needed for proper restore, so
-            // commenting out the below code. still testing it out.
-            // TODO: check if the journal files are needed for restore
-            // skip journal files, they are not needed for restore
-            /*if (f.path.endsWith("-journal") || f.path.endsWith("-shm") || f.path.endsWith("-wal")) {
                 continue
-            }*/
+            }
+
             val databaseFile =
                 backUpFile(f.absolutePath, constructDbFileName(path, f.name)) ?: return false
             Logger.i(LOG_TAG_BACKUP_RESTORE, "file ${databaseFile.name} added to backup dir")
             filesPathToZip.add(databaseFile.absolutePath)
         }
 
-        return true
+        // the copied db still carries the WireGuard tables; a backup must never contain
+        // wireguard configs (names, file paths, hops, per-app proxy mappings), so wipe
+        // them from the copy before it is zipped.
+        return stripWireguardFromDbCopy(constructDbFileName(path, AppDatabase.DATABASE_NAME))
+    }
+
+    /**
+     * Removes every WireGuard-related row from the temporary database copy that is about to
+     * be zipped into the .rbk file. Only the copy is touched — the live database is never
+     * modified. If the copy cannot be sanitised, the backup fails rather than shipping
+     * WireGuard configuration.
+     */
+    private fun stripWireguardFromDbCopy(dbCopyPath: String): Boolean {
+        val dbCopy = File(dbCopyPath)
+        if (!dbCopy.exists()) {
+            Logger.w(LOG_TAG_BACKUP_RESTORE, "db copy missing at $dbCopyPath, cannot strip wg")
+            return false
+        }
+        var db: SQLiteDatabase? = null
+        try {
+            db = SQLiteDatabase.openDatabase(dbCopyPath, null, SQLiteDatabase.OPEN_READWRITE)
+            for (table in WG_TABLES) {
+                try {
+                    db.execSQL("DELETE FROM $table")
+                    Logger.i(LOG_TAG_BACKUP_RESTORE, "wg-free backup: cleared table $table")
+                } catch (e: Exception) {
+                    // table may not exist on older schemas; that is fine
+                    Logger.d(
+                        LOG_TAG_BACKUP_RESTORE,
+                        "wg-free backup: skip table $table, reason? ${e.message}"
+                    )
+                }
+            }
+            // fold the deletes into the main db file so the zipped wal/shm cannot resurrect them
+            try {
+                db.execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
+            } catch (e: Exception) {
+                Logger.d(LOG_TAG_BACKUP_RESTORE, "wal checkpoint failed, reason? ${e.message}")
+            }
+            return true
+        } catch (e: Exception) {
+            Logger.crash(
+                LOG_TAG_BACKUP_RESTORE,
+                "failed to strip wireguard data from backup db, reason? ${e.message}",
+                e
+            )
+            return false
+        } finally {
+            try {
+                db?.close()
+            } catch (ignored: Exception) {
+                // no-op
+            }
+        }
     }
 
     private fun constructDbFileName(path: String, fileName: String): String {
         return path + File.separator + fileName
     }
 
+    // SECURITY (VULN, Insecure Deserialization / CWE-502): The previous implementation
+    // serialized SharedPreferences via java.io.ObjectOutputStream and the matching
+    // restore path used java.io.ObjectInputStream on a user-supplied .rbk file. That is
+    // a classic ACE primitive: a crafted backup whose embedded class graph triggers any
+    // gadget chain available on the classpath (Android framework, Glide, Gson, OkHttp,
+    // Koin, etc.) executes attacker-controlled code in the Rethink process — which
+    // holds VPN, accessibility-style network visibility, and EncryptedFile master keys.
+    //
+    // Fix: write a strict JSON envelope with a magic header. Only primitive scalar prefs
+    // (Boolean/Int/Long/Float/String/Set<String>) are exported, matching what
+    // SharedPreferences supports. The restore side parses with org.json (no class
+    // instantiation), validates types per key, and rejects any old-format binary blob.
+    //
+    // Firewall-only policy: only the pref keys listed in FIREWALL_PREF_KEYS are exported.
+    // DNS settings, WireGuard configs, proxy settings, and app-update state are excluded
+    // so that restoring a backup cannot silently override the user's DNS/VPN configuration.
     private fun saveSharedPreferencesToFile(context: Context, prefFile: File): Boolean {
-        var output: ObjectOutputStream? = null
-
         Logger.i(LOG_TAG_BACKUP_RESTORE, "begin shared pref copy, file path:${prefFile.path}")
         val sharedPrefs: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
 
         try {
-            output = ObjectOutputStream(FileOutputStream(prefFile))
-            val allPrefs = sharedPrefs.all
-            output.writeObject(allPrefs)
+            val entries = org.json.JSONArray()
+            for ((k, v) in sharedPrefs.all) {
+                if (k == null) continue
+                // Firewall-only filter: skip any pref that is not part of the firewall config.
+                if (k !in FIREWALL_PREF_KEYS) {
+                    Logger.d(LOG_TAG_BACKUP_RESTORE, "firewall-only backup: skipping pref '$k'")
+                    continue
+                }
+                val item = org.json.JSONObject()
+                item.put("k", k)
+                when (v) {
+                    is Boolean -> { item.put("t", "bool"); item.put("v", v) }
+                    is Int -> { item.put("t", "int"); item.put("v", v) }
+                    is Long -> { item.put("t", "long"); item.put("v", v) }
+                    is Float -> { item.put("t", "float"); item.put("v", v.toDouble()) }
+                    is String -> { item.put("t", "string"); item.put("v", v) }
+                    is Set<*> -> {
+                        val arr = org.json.JSONArray()
+                        for (s in v) {
+                            if (s is String) arr.put(s) else continue
+                        }
+                        item.put("t", "stringset")
+                        item.put("v", arr)
+                    }
+                    null -> continue
+                    else -> {
+                        Logger.w(LOG_TAG_BACKUP_RESTORE, "AUDIT: skipping non-scalar pref '$k' of type ${v.javaClass.name}")
+                        continue
+                    }
+                }
+                entries.put(item)
+            }
+            val envelope = org.json.JSONObject()
+            envelope.put("format", "RTHK_PREFS_JSON")
+            envelope.put("version", 2)
+            envelope.put("entries", entries)
+
+            FileOutputStream(prefFile).use { fos ->
+                fos.write("RTHK_PREFS_V2_JSON\n".toByteArray(Charsets.UTF_8))
+                fos.write(envelope.toString().toByteArray(Charsets.UTF_8))
+                fos.flush()
+            }
         } catch (e: Exception) {
             Logger.crash(LOG_TAG_BACKUP_RESTORE, "exception during shared pref backup, ${e.message}", e)
             return false
-        } finally {
-            try {
-                if (output != null) {
-                    output.flush()
-                    output.close()
-                }
-            } catch (_: IOException) {
-                // no-op
-            }
         }
         filesPathToZip.add(prefFile.absolutePath)
         return true
@@ -350,25 +477,26 @@ class BackupAgent(val context: Context, workerParams: WorkerParameters) :
         val outputFileName = zipDirectory + File.separator + TEMP_ZIP_FILE_NAME
         Logger.d(LOG_TAG_BACKUP_RESTORE, "files: $files, output: $outputFileName")
         return try {
-            val dest = FileOutputStream(outputFileName)
-            val out = ZipOutputStream(BufferedOutputStream(dest))
             val bufferSize = 80000
-            var origin: BufferedInputStream
             val data = ByteArray(bufferSize)
-            for (file in files) {
-                val fi = FileInputStream(file)
-                origin = BufferedInputStream(fi, bufferSize)
-                val entry = ZipEntry(getFileNameFromPath(file))
-                out.putNextEntry(entry)
-                var count: Int
-                while (origin.read(data, 0, bufferSize).also { count = it } != -1) {
-                    out.write(data, 0, count)
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(outputFileName))).use { out ->
+                for (file in files) {
+                    // SQLite may checkpoint and remove WAL/SHM files after stripWireguardFromDbCopy
+                    // opens the DB copy; these files are optional for a valid restore
+                    if (!java.io.File(file).exists()) {
+                        Logger.w(LOG_TAG_BACKUP_RESTORE, "skipping missing optional db file during zip: $file")
+                        continue
+                    }
+                    BufferedInputStream(FileInputStream(file), bufferSize).use { origin ->
+                        out.putNextEntry(ZipEntry(getFileNameFromPath(file)))
+                        var count: Int
+                        while (origin.read(data, 0, bufferSize).also { count = it } != -1) {
+                            out.write(data, 0, count)
+                        }
+                    }
+                    Logger.d(LOG_TAG_BACKUP_RESTORE, "$file added to zip, path: $file")
                 }
-                origin.close()
-                Logger.d(LOG_TAG_BACKUP_RESTORE, "$file added to zip, path: $file")
             }
-            out.close()
-            out.close()
             Logger.i(LOG_TAG_BACKUP_RESTORE, "$files added to zip")
             true
         } catch (e: Exception) {

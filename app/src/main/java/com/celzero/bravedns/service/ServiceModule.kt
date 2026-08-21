@@ -16,7 +16,6 @@
 package com.celzero.bravedns.service
 
 import com.celzero.bravedns.database.RefreshDatabase
-import com.celzero.bravedns.iab.SecureIdentityStore
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
@@ -26,10 +25,6 @@ object ServiceModule {
         single { EventLogger(get()) }
         single { NetLogTracker(androidContext(), get(), get(), get(), get(), get()) }
         single { RefreshDatabase(androidContext(), get(), get(), get(), get(), get()) }
-        // SecureIdentityStore: encrypted file-backed store for accountId + deviceId.
-        // Registered here (main) so both PipKeyManager (main) and BillingServerRepository
-        // (play/website) share the same singleton and never diverge on stored values.
-        single { SecureIdentityStore(androidContext()) }
     }
 
     val modules = listOf(serviceModules)

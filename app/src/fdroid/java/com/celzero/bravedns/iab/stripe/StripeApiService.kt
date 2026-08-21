@@ -1,7 +1,6 @@
 package com.celzero.bravedns.iab.stripe
 
 import com.google.gson.annotations.SerializedName
-import okhttp3.FormBody
 import okhttp3.RequestBody
 import retrofit2.Call
 import retrofit2.http.Body
@@ -12,7 +11,7 @@ import retrofit2.http.Query
 
 data class Price(
     val id: String,
-    val unit_amount: Long,
+    @SerializedName("unit_amount") val unitAmount: Long,
     val currency: String,
     val product: String
 )
@@ -29,7 +28,6 @@ interface StripeApiService {
     ): Call<PricesResponse>
 }
 
-
 data class PaymentIntentRequest(
     val amount: Long,
     val currency: String
@@ -37,7 +35,7 @@ data class PaymentIntentRequest(
 
 data class PaymentIntentResponse(
     val id: String,
-    val client_secret: String,
+    @SerializedName("client_secret") val clientSecret: String,
     val amount: Long,
     val currency: String
 )
@@ -49,7 +47,6 @@ data class CustomerCreateParams(
     @SerializedName("address[city]") val city: String? = null,
     @SerializedName("address[country]") val country: String? = null
 )
-
 
 interface StripePaymentService {
     @POST("v1/payment_intents")
@@ -66,5 +63,3 @@ interface StripeCustomerService {
         @Body params: CustomerCreateParams
     ): Call<RetrofitInstance.CustomerResponse>
 }
-
-

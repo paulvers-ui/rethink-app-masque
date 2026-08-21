@@ -1,7 +1,7 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    ext.kotlin_version = '2.3.21'
+    ext.kotlin_version = '2.2.0'
     repositories {
         google()
         // https://jfrog.com/blog/into-the-sunset-bintray-jcenter-gocenter-and-chartcenter/
@@ -9,13 +9,8 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:9.2.1'
+        classpath 'com.android.tools.build:gradle:8.13.1'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        // rethink-tv: Compose Compiler plugin (bundled with Kotlin since 2.0).
-        // Required by the `tv` flavor for Compose-for-TV UI; only applied in
-        // app/build.gradle, so phone variants pay no runtime cost (they
-        // simply contain no @Composable declarations to process).
-        classpath "org.jetbrains.kotlin:compose-compiler-gradle-plugin:$kotlin_version"
         // add firebase plugins - will be conditionally applied in app/build.gradle
         def taskNames = gradle.startParameter.taskNames.join(',').toLowerCase()
         def apkBuild = taskNames.contains("full")
@@ -30,18 +25,23 @@ buildscript {
         println("app; deGoogled? $deGoogled (fdroidBuild: $fdroidBuild, fdroidBuildServer: $isFdroidBuildServer, apkBuild: $apkBuild)")
 
         if (!deGoogled) {
-            classpath 'com.google.gms:google-services:4.4.4'
-            classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.7'
+            classpath 'com.google.gms:google-services:4.4.3'
+            classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.6'
         }
     }
 }
 
 plugins {
-    id 'com.google.devtools.ksp' version '2.3.9' apply false
+    id 'com.google.devtools.ksp' version '2.2.0-2.0.2' apply false
+    id "com.android.application" version "8.13.1" apply false
+    id "com.google.gms.google-services" version "4.4.1" apply false
+    id "com.google.firebase.crashlytics" version "2.9.9" apply false
 }
 
 allprojects {
     repositories {
+        google()
+        mavenCentral()
 
         def firestackRepo = project.findProperty("firestackRepo") ?: "github"
 
@@ -66,5 +66,6 @@ allprojects {
 }
 
 tasks.register('clean', Delete) {
-    delete layout.buildDirectory
+    delete rootProject.buildDir
 }
+

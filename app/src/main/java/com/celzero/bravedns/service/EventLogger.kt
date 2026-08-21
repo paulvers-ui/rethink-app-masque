@@ -15,7 +15,7 @@
  */
 package com.celzero.bravedns.service
 
-import com.celzero.bravedns.util.Logger
+import Logger
 import com.celzero.bravedns.database.Event
 import com.celzero.bravedns.database.EventDao
 import com.celzero.bravedns.database.EventSource
@@ -54,8 +54,8 @@ class EventLogger(private val eventDao: EventDao) {
 
     companion object {
         private const val LOG_TAG = "EventLogger"
-        private const val DEFAULT_PURGE_HOURS = 168
-        private const val MILLIS_PER_HOUR = 60L * 60L * 1000L
+        private const val DEFAULT_PURGE_DAYS = 4
+        private const val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L
     }
 
     // Single-threaded dispatcher ensures log ordering is preserved
@@ -158,17 +158,17 @@ class EventLogger(private val eventDao: EventDao) {
     }
 
     /**
-     * Deletes all events older than the specified number of hours.
+     * Deletes all events older than the specified number of days.
      * This operation is asynchronous and non-blocking.
      *
-     * @param hours Number of hours to keep logs (default: 168 / 7 days)
+     * @param days Number of days to keep logs (default: 4)
      */
-    fun purgeOld(hours: Int = DEFAULT_PURGE_HOURS) {
+    fun purgeOld(days: Int = DEFAULT_PURGE_DAYS) {
         scope.launch {
             try {
-                val cutoffTime = System.currentTimeMillis() - (hours.toLong() * MILLIS_PER_HOUR)
+                val cutoffTime = System.currentTimeMillis() - (days * MILLIS_PER_DAY)
                 val deletedCount = eventDao.deleteOlderThan(cutoffTime)
-                Logger.i(LOG_TAG, "Purged $deletedCount events older than $hours hours")
+                Logger.i(LOG_TAG, "Purged $deletedCount events older than $days days")
             } catch (e: Exception) {
                 Logger.e(LOG_TAG, "Failed to purge old events: ${e.message}", e)
             }
@@ -179,11 +179,11 @@ class EventLogger(private val eventDao: EventDao) {
      * Schedules automatic purging of old logs.
      * This is typically called when the app starts or when VPN starts.
      *
-     * @param hours Number of hours to keep logs (default: 168 / 7 days)
+     * @param days Number of days to keep logs (default: 4)
      */
-    fun scheduleAutoPurge(hours: Int = DEFAULT_PURGE_HOURS) {
+    fun scheduleAutoPurge(days: Int = DEFAULT_PURGE_DAYS) {
         // Purge immediately on schedule
-        purgeOld(hours)
+        purgeOld(days)
     }
 
     /**
@@ -291,5 +291,27 @@ class EventLogger(private val eventDao: EventDao) {
         }
     }
 
+    /**
+     * Shuts down the event logger.
+     * This should be called when the app is closing to ensure all pending log operations complete.
+     * After calling this, the EventLogger should not be used anymore.
+     */
+    fun shutdown() {
+        try {
+            // Cancel all pending operations
+            scope.launch {
+                Logger.i(LOG_TAG, "EventLogger shutting down")
+            }
+
+            // Give pending operations a moment to complete
+            Thread.sleep(100)
+
+            // Close the dispatcher
+            dispatcher.close()
+            Logger.i(LOG_TAG, "EventLogger shutdown complete")
+        } catch (e: Exception) {
+            Logger.e(LOG_TAG, "Error during shutdown: ${e.message}", e)
+        }
+    }
 }
 

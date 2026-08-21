@@ -19,19 +19,20 @@
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/interface_title"
-                    android:layout_margin="16dp"
-                    android:paddingBottom="5dp"
-                    android:text="@string/lbl_configure"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    style="@style/TextAppearance.Material3.LabelLarge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="?attr/colorPrimary" />
+                    android:layout_margin="16dp"
+                    android:fontFamily="sans-serif-smallcaps"
+                    android:paddingBottom="5dp"
+                    android:text="@string/lbl_configure"
+                    android:textColor="?attr/secondaryTextColor"
+                    android:textSize="@dimen/extra_large_font_text_view"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/interface_name_layout"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_margin="4dp"
@@ -55,7 +56,7 @@
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/private_key_text_layout"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_margin="4dp"
@@ -82,7 +83,7 @@
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/public_key_label_layout"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_margin="4dp"
@@ -111,7 +112,7 @@
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/addresses_label_layout"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_margin="4dp"
@@ -137,7 +138,7 @@
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/listen_port_label_layout"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_margin="4dp"
@@ -165,7 +166,7 @@
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/dns_servers_label_layout"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_margin="4dp"
@@ -199,7 +200,7 @@
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/mtu_label_layout"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_margin="4dp"
@@ -233,7 +234,7 @@
                 android:layout_height="wrap_content"
                 android:layout_margin="16dp"
                 android:layout_below="@id/wg_config_layout"
-                android:textColor="?attr/primaryTextColor"/>
+                android:textColor="?attr/primaryLightColorText"/>
 
             <androidx.appcompat.widget.LinearLayoutCompat
                 android:id="@+id/lb_action_container"
@@ -244,17 +245,13 @@
 
                 <androidx.appcompat.widget.AppCompatTextView
                     android:id="@+id/dismiss_btn"
-                    style="@style/TextAppearance.Material3.BodyLarge"
+                    style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="0.5"
                     android:text="@string/lbl_dismiss"
-                    android:padding="10dp"
-                    android:gravity="center"
-                    android:foregroundGravity="center"
-                    android:layout_gravity="center"
-                    android:textColor="?attr/primaryTextColor"
-                    android:alpha="0.7"
+                    android:textColor="?attr/accentGood"
+                    android:textSize="@dimen/large_font_text_view"
                     android:layout_marginEnd="5dp"
                     android:background="@drawable/rectangle_border_background"
                     android:foreground="?android:attr/selectableItemBackground"
@@ -264,18 +261,14 @@
 
                 <androidx.appcompat.widget.AppCompatTextView
                     android:id="@+id/save_tunnel"
-                    style="@style/TextAppearance.Material3.BodyLarge"
+                    style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="0.5"
                     android:layout_marginStart="5dp"
                     android:text="@string/lbl_save"
-                    android:padding="10dp"
-                    android:gravity="center"
-                    android:foregroundGravity="center"
-                    android:layout_gravity="center"
-                    android:textColor="?attr/colorPrimary"
-                    android:layout_marginEnd="5dp"
+                    android:textColor="?attr/accentGood"
+                    android:textSize="@dimen/large_font_text_view"
                     android:background="@drawable/rectangle_border_background"
                     android:foreground="?android:attr/selectableItemBackground"
                     app:layout_constraintLeft_toRightOf="@+id/guideline"

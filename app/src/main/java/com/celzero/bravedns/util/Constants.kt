@@ -1,18 +1,18 @@
 /*
- * Copyright 2020 RethinkDNS and its authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+Copyright 2020 RethinkDNS and its authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 package com.celzero.bravedns.util
 
 import java.io.File
@@ -27,19 +27,13 @@ class Constants {
         // rethink base url (modified from download to dl on v053l)
         const val DOWNLOAD_BASE_URL = "https://dl.rethinkdns.com"
 
-        // rethink base & fallback url for rpn (prod & test)
-        const val RPN_BASE_URL = "https://svc.rethinkdns.com"
-        const val RPN_FALLBACK_URL = "https://svc.nile.workers.dev"
-
-        const val RPN_TEST_BASE_URL = "https://redir.nile.workers.dev"
-        const val RPN_TEST_FALLBACK_URL = "https://redir.rethinkdns.com"
+        // rethink base url for tcp proxy
+        const val TCP_PROXY_BASE_URL = "https://redir.nile.workers.dev"
 
         // base url for ipinfo download
         const val IP_INFO_BASE_URL = "https://dl.rethinkdns.com/ip/"
 
         const val FILE_TAG = "filetag.json"
-
-        const val ALPHA_UPDATE_CHECK_URL = "https://github.com/celzero/rethink-app/actions/workflows/nightly.yml"
 
         // file names which are downloaded as part of on-device blocklists
         val ONDEVICE_BLOCKLIST_FILE_TAG = File.separator + FILE_TAG
@@ -50,7 +44,7 @@ class Constants {
         val ONDEVICE_GEOIP_IPV4 = File.separator + "dbip.v4"
         val ONDEVICE_GEOIP_IPV6 = File.separator + "dbip.v6"
 
-        // url to check if there is update available for on-device blocklist
+        // url to check to check the if there is update available for on-device blocklist
         // url parameter used in configure blocklist webview
         private const val RETHINK_BLOCKLIST_CONFIGURE_URL_PARAMETER = "tstamp="
 
@@ -60,12 +54,9 @@ class Constants {
 
         const val RETHINK_PACKAGE = "com.celzero.bravedns"
 
-        // url to check if there is update available for on-device blocklist
+        // url to check to check the if there is update available for on-device blocklist
         const val ONDEVICE_IPDB_UPDATE_CHECK_URL =
             "$DOWNLOAD_BASE_URL/update/geoip?$RETHINK_BLOCKLIST_CONFIGURE_URL_PARAMETER"
-
-        // const val ONDEVICE_IPDB_DOWNLOAD_URL4 = "$DOWNLOAD_BASE_URL/geoip?v4"
-        // const val ONDEVICE_IPDB_DOWNLOAD_URL6 = "$DOWNLOAD_BASE_URL/geoip?v6"
 
         // url parameter, part of update check for on-device blocklist
         const val ONDEVICE_BLOCKLIST_UPDATE_CHECK_PARAMETER_VCODE = "vcode="
@@ -141,11 +132,11 @@ class Constants {
 
         const val RETHINK_SEARCH_URL = "https://rethinkdns.com/search?s="
 
-        // default filetag.json for remote blocklist (stored in assets folder) (v055z)
-        const val PACKAGED_REMOTE_FILETAG_TIMESTAMP: Long = 1782341672020
+        // default filetag.json for remote blocklist (stored in assets folder) (v055o)
+        const val PACKAGED_REMOTE_FILETAG_TIMESTAMP: Long = 1753394162186
 
-        // rethinkdns sponsor link
-        const val RETHINKDNS_SPONSOR_LINK = "https://svc.rethinkdns.com/r/sponsor"
+        // sponsor link for this fork (upstream's was https://svc.rethinkdns.com/r/sponsor)
+        const val RETHINKDNS_SPONSOR_LINK = "https://ko-fi.com/creatoreprints"
 
         // base-url for bravedns
         const val BRAVEDNS_DOMAIN = "bravedns.com"
@@ -204,8 +195,7 @@ class Constants {
         const val FLAVOR_PLAY = "play"
         const val FLAVOR_FDROID = "fdroid"
         const val FLAVOR_WEBSITE = "website"
-
-        const val BUILD_TYPE_ALPHA = "alpha"
+        const val FLAVOR_HEADLESS = "headless"
 
         // Various notification action constants used part of NotificationCompat.Action
         const val NOTIFICATION_ACTION = "NOTIFICATION_VALUE"
@@ -217,9 +207,7 @@ class Constants {
         const val NOTIF_ACTION_RULES_FAILURE = "RETHINK_RULES_RELOAD" // load rules failure
         const val NOTIF_ACTION_NEW_APP_ALLOW = "NEW_APP_ALLOW" // allow network access for new apps
         const val NOTIF_ACTION_NEW_APP_DENY = "NEW_APP_DENY" // deny network access for new apps
-        const val NOTIF_ACTION_DB_CORRUPTED_CLEAR = "DB_CORRUPTED_CLEAR" // clear core tables and rebuild
-        const val NOTIF_ACTION_DB_CORRUPTED_DISMISS = "DB_CORRUPTED_DISMISS" // dismiss db corruption notification
-        const val NOTIF_ACTION_RETHINK_BLOCK_DISMISS = "RETHINK_BLOCK_DISMISS" // dismiss rethink block notification
+        const val NOTIF_ACTION_REPOST_VPN = "RETHINK_REPOST" // repost persistent notification after user dismissal
 
         // various notification intent extra name/values used part of notification's pending-intent
         const val NOTIF_INTENT_EXTRA_ACCESSIBILITY_NAME =
@@ -231,26 +219,6 @@ class Constants {
             "NEW_APP_INSTALL_NOTIFY" // new app install value
         const val NOTIF_WG_PERMISSION_NAME = "WG_PERMISSION" // wireguard permission name
         const val NOTIF_WG_PERMISSION_VALUE = "WG_PERMISSION_NOTIFY" // wireguard permission
-
-        // IAB purchase conflict (HTTP 409) notification tapping opens PurchaseConflictBottomSheet
-        const val NOTIF_INTENT_EXTRA_IAB_CONFLICT_NAME  = "IAB_CONFLICT"
-        const val NOTIF_INTENT_EXTRA_IAB_CONFLICT_VALUE = "IAB_CONFLICT_409"
-        // Stable notification ID for the 409 conflict alert (only one at a time)
-        const val NOTIF_ID_IAB_CONFLICT = 0x409
-
-        // IAB device-not-registered notification tapping opens DeviceNotRegisteredBottomSheet
-        const val NOTIF_INTENT_EXTRA_IAB_DEVICE_NOT_REGISTERED_NAME  = "IAB_DEVICE_NOT_REGISTERED"
-        const val NOTIF_INTENT_EXTRA_IAB_DEVICE_NOT_REGISTERED_VALUE = "IAB_DEVICE_NOT_REGISTERED_NOTIFY"
-        // Stable notification ID for the device-not-registered alert (only one at a time)
-        const val NOTIF_ID_IAB_DEVICE_NOT_REGISTERED = 0x410
-
-        // IAB device auth error (HTTP 401) notification tapping opens DeviceAuthErrorBottomSheet
-        const val NOTIF_INTENT_EXTRA_IAB_DEVICE_AUTH_ERROR_NAME  = "IAB_DEVICE_AUTH_ERROR"
-        const val NOTIF_INTENT_EXTRA_IAB_DEVICE_AUTH_ERROR_VALUE = "IAB_DEVICE_AUTH_ERROR_401"
-        // Stable notification ID for the 401 auth-error alert (only one at a time)
-        const val NOTIF_ID_IAB_DEVICE_AUTH_ERROR = 0x401
-
-        const val NOTIF_ID_RETHINK_BLOCK = 0x411
 
         // new app install intent extra name for uid. see RefreshDatabase#makeNewAppVpnIntent()
         const val NOTIF_INTENT_EXTRA_APP_UID = "NEW_APP_UID"
@@ -298,7 +266,6 @@ class Constants {
         const val TIME_FORMAT_2 = "yy.MM (dd)"
         const val TIME_FORMAT_3 = "dd MMMM yyyy, HH:mm:ss"
         const val TIME_FORMAT_4 = "dd/MM/yy, HH:mm:ss"
-        const val TIME_FORMAT_5 = "HH:mm:ss.SSS"
 
         // play services package name
         const val PKG_NAME_PLAY_STORE = "com.android.vending"
@@ -325,8 +292,6 @@ class Constants {
 
         const val BLOCK_FREE_DNS_MAX = "https://max.rethinkdns.com/dns-query"
         const val BLOCK_FREE_DNS_SKY = "https://sky.rethinkdns.com/dns-query"
-
-        const val BLOCK_FREE_DNS_ZERO = "https://zero.rethinkdns.com/dns-query"
 
         // all fallback dns servers should have the corresponding ip address in servers.xml
         val DEFAULT_DNS_LIST =
