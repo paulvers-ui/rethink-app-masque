@@ -30,4 +30,20 @@ data class SubscriptionStateHistory(
     val toState: Int,
     val timestamp: Long = System.currentTimeMillis(),
     val reason: String? = null
-)
+) {
+    val fromStateName: String get() = SubscriptionStatus.SubscriptionState.fromId(fromState).name
+    val toStateName: String get() = SubscriptionStatus.SubscriptionState.fromId(toState).name
+}
+
+
+/**
+ * Data class for transition statistics
+ */
+data class TransitionStatistic(
+    val fromState: Int,
+    val toState: Int,
+    val count: Int
+) {
+    val fromStateName: String get() = SubscriptionStatus.SubscriptionState.fromId(fromState).name
+    val toStateName: String get() = SubscriptionStatus.SubscriptionState.fromId(toState).name
+}

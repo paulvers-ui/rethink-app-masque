@@ -3,9 +3,14 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--<uses-permission android:name="com.android.vending.BILLING" />-->
+    <!-- allowBackup/dataExtractionRules/fullBackupContent explicit for SAST coverage. -->
     <application
-        tools:replace="android:name"
-        android:name=".RethinkDnsApplicationPlay">
+        tools:replace="android:name,android:networkSecurityConfig,android:allowBackup,android:fullBackupContent,android:dataExtractionRules"
+        android:name=".RethinkDnsApplicationPlay"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config">
         <!-- Enable Firebase Crashlytics collection for play build -->
         <meta-data
             android:name="firebase_crashlytics_collection_enabled"

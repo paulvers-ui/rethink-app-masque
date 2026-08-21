@@ -21,8 +21,8 @@
         android:layout_centerHorizontal="true"
         android:layout_marginTop="50dp"
         android:text="@string/slide_2_title"
-        android:textAppearance="?attr/textAppearanceHeadlineMedium"
-        android:textColor="?attr/colorOnSurface"
+        android:textColor="?attr/primaryTextColor"
+        android:textSize="28sp"
         android:textStyle="bold" />
 
     <androidx.appcompat.widget.AppCompatTextView
@@ -35,8 +35,7 @@
         android:layout_marginEnd="32dp"
         android:gravity="center"
         android:text="@string/slide_2_desc"
-        android:textAppearance="?attr/textAppearanceBodyLarge"
-        android:textColor="?attr/primaryTextColor" />
+        android:textColor="?attr/primaryTextColor"
+        android:textSize="16sp" />
 
 </RelativeLayout>
-

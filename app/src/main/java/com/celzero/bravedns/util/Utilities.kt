@@ -15,11 +15,12 @@
  */
 package com.celzero.bravedns.util
 
-import com.celzero.bravedns.util.Logger.LOG_TAG_APP_DB
-import com.celzero.bravedns.util.Logger.LOG_TAG_DOWNLOAD
-import com.celzero.bravedns.util.Logger.LOG_TAG_FIREWALL
-import com.celzero.bravedns.util.Logger.LOG_TAG_UI
-import com.celzero.bravedns.util.Logger.LOG_TAG_VPN
+import Logger
+import Logger.LOG_TAG_APP_DB
+import Logger.LOG_TAG_DOWNLOAD
+import Logger.LOG_TAG_FIREWALL
+import Logger.LOG_TAG_UI
+import Logger.LOG_TAG_VPN
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.PendingIntent
@@ -39,7 +40,6 @@ import android.os.Looper
 import android.provider.Settings
 import android.text.TextUtils
 import android.text.TextUtils.SimpleStringSplitter
-import android.util.LruCache
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.appcompat.content.res.AppCompatResources
@@ -52,17 +52,19 @@ import com.celzero.bravedns.database.AppInfoRepository.Companion.NO_PACKAGE_PREF
 import com.celzero.bravedns.net.doh.CountryMap
 import com.celzero.bravedns.service.BraveVPNService
 import com.celzero.bravedns.service.DnsLogTracker
-import com.celzero.bravedns.util.Constants.Companion.BUILD_TYPE_ALPHA
 import com.celzero.bravedns.util.Constants.Companion.FLAVOR_FDROID
+import com.celzero.bravedns.util.Constants.Companion.FLAVOR_HEADLESS
 import com.celzero.bravedns.util.Constants.Companion.FLAVOR_PLAY
 import com.celzero.bravedns.util.Constants.Companion.FLAVOR_WEBSITE
 import com.celzero.bravedns.util.Constants.Companion.INVALID_UID
 import com.celzero.bravedns.util.Constants.Companion.LOCAL_BLOCKLIST_DOWNLOAD_FOLDER_NAME
 import com.celzero.bravedns.util.Constants.Companion.MISSING_UID
-import com.celzero.bravedns.util.Constants.Companion.PKG_NAME_PLAY_STORE
 import com.celzero.bravedns.util.Constants.Companion.REMOTE_BLOCKLIST_DOWNLOAD_FOLDER_NAME
 import com.celzero.bravedns.util.Constants.Companion.UNSPECIFIED_IP_IPV4
 import com.celzero.bravedns.util.Constants.Companion.UNSPECIFIED_IP_IPV6
+import com.celzero.firestack.backend.Backend
+import com.celzero.firestack.backend.Gobyte
+import com.celzero.firestack.backend.Gostr
 import com.google.common.net.InternetDomainName
 import com.google.gson.JsonParser
 import inet.ipaddr.HostName
@@ -86,7 +88,6 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.ln
 import kotlin.math.pow
-import kotlin.time.Duration.Companion.milliseconds
 
 @Suppress("TooManyFunctions", "LargeClass")
 object Utilities {
@@ -108,7 +109,7 @@ object Utilities {
             val name: InternetDomainName = InternetDomainName.from(fqdn)
             try {
                 name.topPrivateDomain().toString()
-            } catch (_: IllegalStateException) {
+            } catch (e: IllegalStateException) {
                 // The name doesn't end in a recognized TLD.  This can happen for randomly
                 // generated
                 // names, or when new TLDs are introduced.
@@ -123,7 +124,7 @@ object Utilities {
                     fqdn
                 }
             }
-        } catch (_: IllegalArgumentException) {
+        } catch (e: IllegalArgumentException) {
             // If fqdn is not a valid domain name, InternetDomainName.from() will throw an
             // exception.  Since this function is only for aesthetic purposes, we can
             // return the input unmodified in this case.
@@ -457,20 +458,16 @@ object Utilities {
         // For versions prior to 29 the check is made with Settings.Secure.
         // In our case, the always-on check is for all the vpn profiles. So using
         // vpnService?.isAlwaysOn will not be much helpful
+        if (isAtleastQ()) {
+            return vpnService?.isAlwaysOn == true
+        }
 
-        // Try Settings.Secure first so the check works even when the VPN service is not
-        // bound (e.g. immediately after reboot). On some Android versions this key is
-        // hidden/restricted, so fall back to the service property when available.
         return try {
             val alwaysOn = Settings.Secure.getString(context.contentResolver, "always_on_vpn_app")
             context.packageName == alwaysOn
         } catch (e: Exception) { // Catches SecurityException and other Settings-related exceptions
-            Logger.w(LOG_TAG_VPN, "err while retrieving Settings.Secure value ${e.message}")
-            if (isAtleastQ()) {
-                vpnService?.isAlwaysOn == true
-            } else {
-                false
-            }
+            Logger.w(LOG_TAG_VPN, "err while retrieving Settings.Secure value ${e.message}", e)
+            false
         }
     }
 
@@ -481,79 +478,37 @@ object Utilities {
             val alwaysOn = Settings.Secure.getString(context.contentResolver, "always_on_vpn_app")
             !TextUtils.isEmpty(alwaysOn) && context.packageName != alwaysOn
         } catch (e: Exception) { // Catches SecurityException and other Settings-related exceptions
-            Logger.w(LOG_TAG_VPN, "err while retrieving Settings.Secure value ${e.message}")
+            Logger.w(LOG_TAG_VPN, "err while retrieving Settings.Secure value ${e.message}", e)
             false
         }
     }
 
-    object AppIconCache {
-        private const val CACHE_SIZE = 500
-
-        private val cache =
-            LruCache<String, Drawable.ConstantState>(CACHE_SIZE)
-
-        fun get(
-            context: Context,
-            packageName: String,
-            appName: String? = null
-        ): Drawable? {
-            cache.get(packageName)?.let {
-                return it.newDrawable(context.resources)
-            }
-
-            if (!isValidAppName(appName, packageName)) {
-                return getDefaultIcon(context)
-            }
-
-            val drawable = try {
-                context.applicationContext.packageManager
-                    .getApplicationIcon(packageName)
-            } catch (_: PackageManager.NameNotFoundException) {
-                return getDefaultIcon(context)
-            }
-
-            drawable.constantState?.let {
-                cache.put(packageName, it)
-            }
-
-            return drawable
+    fun getIcon(ctx: Context, packageName: String, appName: String? = null): Drawable? {
+        if (!isValidAppName(appName, packageName)) {
+            return getDefaultIcon(ctx)
         }
-    }
 
-    // Backward-compatible wrapper that delegates to AppIconCache.
-    fun getIcon(
-        ctx: Context,
-        packageName: String,
-        appName: String? = null
-    ): Drawable? {
-        return AppIconCache.get(ctx, packageName, appName)
+        return try {
+            ctx.packageManager.getApplicationIcon(packageName)
+        } catch (e: PackageManager.NameNotFoundException) {
+            // Not adding exception details in logs.
+            Logger.e(LOG_TAG_FIREWALL, "no app icon for $packageName" + e.message)
+            getDefaultIcon(ctx)
+        }
     }
 
     private fun isValidAppName(appName: String?, packageName: String): Boolean {
         return !isNonApp(packageName) && Constants.UNKNOWN_APP != appName
     }
 
-    private var defaultIconState: Drawable.ConstantState? = null
-
     fun getDefaultIcon(context: Context): Drawable? {
-        defaultIconState?.let {
-            return it.newDrawable(context.resources)
-        }
-
-        val drawable = AppCompatResources.getDrawable(
-            context,
-            R.drawable.default_app_icon
-        )
-
-        defaultIconState = drawable?.constantState
-
-        return drawable
+        return AppCompatResources.getDrawable(context, R.drawable.default_app_icon)
     }
 
     @Suppress("TooGenericExceptionCaught")
     fun delay(ms: Long, scope: LifecycleCoroutineScope, updateUi: () -> Unit) {
         scope.launch {
-            kotlinx.coroutines.delay(ms.milliseconds)
+            kotlinx.coroutines.delay(ms)
             try {
                 updateUi()
             } catch (e: Exception) { // Catches any exception from user-provided updateUi lambda
@@ -613,14 +568,6 @@ object Utilities {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
     }
 
-    fun isAtleast36(): Boolean {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA
-    }
-
-    fun isAtleast37(): Boolean {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN
-    }
-
     fun isFdroidFlavour(): Boolean {
         return BuildConfig.FLAVOR_releaseChannel == FLAVOR_FDROID
     }
@@ -633,30 +580,8 @@ object Utilities {
         return BuildConfig.FLAVOR_releaseChannel == FLAVOR_PLAY
     }
 
-    fun isWebsiteDegoogledFlavour(): Boolean {
-        return isFdroidFlavour() && BuildConfig.IS_WEBSITE_DEGOOGLD_BUILD
-    }
-
-    /**
-     * Whether Google Play billing can be used on this device for this build.
-     *
-     * Returns `true` only when:
-     *  - the running flavor ships the Play Billing implementation (play or website), and
-     *  - the Play Store (Google Play Services) package is installed and enabled.
-     *
-     * The fdroid flavor has no billing client and always returns `false`. On devices without
-     * Google Play Services (e.g. degoogled phones running the play/website build), the sponsor
-     * UI uses this to fall back to the Stripe web option only.
-     */
-    fun isGooglePlayServicesAvailable(context: Context): Boolean {
-        if (!isPlayStoreFlavour() && !isWebsiteFlavour()) return false
-        return getApplicationInfo(context, PKG_NAME_PLAY_STORE)?.enabled == true
-    }
-
-
-    /** Returns true when the app is built with the "alpha" build type. */
-    fun isAlphaBuild(): Boolean {
-        return BuildConfig.BUILD_TYPE == BUILD_TYPE_ALPHA
+    fun isHeadlessFlavour(): Boolean {
+        return BuildConfig.FLAVOR_releaseType == FLAVOR_HEADLESS
     }
 
     fun getApplicationInfo(ctx: Context, packageName: String): ApplicationInfo? {
@@ -837,18 +762,13 @@ object Utilities {
 
     fun getRemoteBlocklistStamp(url: String): String {
         return try {
-            if (url.isBlank()) return ""
             // extract the path from the url string
             // eg., https://dns.google/dns-query will result in /dns-query
-            val path = URI(url).path ?: return ""
+            val path = URI(url).path
             // remove the trailing and leading slashes from the path
             // eg., /dns-query will result in dns-query
             // earlier check of : will not work as now remote stamp can contain sec/rec
-            val stamp = path.trim('/').trim()
-            // don't conflate a non-blocklist DoH path (e.g. /dns-query) with an
-            // empty stamp; only base rethinkdns endpoints carry the stamp as path
-            Logger.d(Logger.LOG_TAG_DNS, "getRemoteBlocklistStamp: url=$url, stamp=$stamp")
-            stamp
+            return path.trimStart { it == '/' }.trimEnd { it == '/' }
         } catch (e: Exception) {
             Logger.w(Logger.LOG_TAG_DNS, "failure fetching stamp from Go ${e.message}", e)
             ""
@@ -975,7 +895,6 @@ object Utilities {
         // get the os version from system properties
         val osVersion = System.getProperty("os.version") ?: return false
 
-        val f: java.nio.file.Files? = null
         // extract the version part without any additional details after a '-'
         val currentVersion =
             osVersion.split("-").firstOrNull() ?: return false // use only the part before '-' if present
@@ -1018,14 +937,63 @@ object Utilities {
         }
     }
 
-    fun getIpForUrl(context: Context, url: String): String? {
-        val urls = context.resources.getStringArray(R.array.urls)
-        val ips = context.resources.getStringArray(R.array.ips)
-        val index = urls.indexOf(url)
-        if (index != -1 && index < ips.size) {
-            return ips[index].split(",").firstOrNull()?.trim()
+
+    /**
+     * Converts a nullable [String] to a [Gostr] object for use with the Backend engine.
+     *
+     * If the input is `null` or empty, logs a warning and returns an empty [Gostr].
+     * This ensures the Backend always receives a valid (non-null) object.
+     *
+     * @return a [Gostr] containing the string value, or an empty [Gostr] if the input is `null` or empty.
+     */
+    fun String?.togs(): Gostr? {
+        if (this.isNullOrEmpty()) {
+            return Backend.strOf("")
         }
-        return null
+        return Backend.strOf(this)
+    }
+
+    /**
+     * Converts a nullable [Gostr] to a [String].
+     *
+     * If the [Gostr] is `null`, logs a warning and returns an empty string.
+     *
+     * @return the string content of the [Gostr], or an empty string if `null`.
+     */
+    fun Gostr?.tos(): String? {
+        if (this == null) {
+            return null
+        }
+        return this.s
+    }
+
+    /**
+     * Converts a nullable [ByteArray] to a [Gobyte] object for the Backend engine.
+     *
+     * If the input is `null`, logs a warning and returns an empty [Gobyte].
+     *
+     * @return a [Gobyte] containing the bytes, or an empty [Gobyte] if the input is `null`.
+     */
+    fun ByteArray?.togb(): Gobyte? {
+        if (this == null) {
+            return Backend.bytesOf(byteArrayOf())
+        }
+        return Backend.bytesOf(this)
+    }
+
+    /**
+     * Converts a nullable [Gobyte] to a [ByteArray].
+     *
+     * If the [Gobyte] is `null`, logs a warning and returns an empty [ByteArray].
+     *
+     * @return the byte content of the [Gobyte], or an empty [ByteArray] if `null`.
+     */
+    fun Gobyte?.tob(): ByteArray? {
+        if (this == null) {
+            return null
+        }
+
+        return this.v()
     }
 
 }

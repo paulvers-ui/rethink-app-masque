@@ -17,13 +17,12 @@
 package com.celzero.bravedns.receiver
 
 import android.content.Intent
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
+import org.junit.After
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.koin.core.context.stopKoin
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -32,14 +31,24 @@ import org.robolectric.annotation.Config
  * Tests the screen unlock event handling
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+// Use the plain Android Application so no app-level startKoin() is called during
+// Robolectric's Application.onCreate(); otherwise a Koin leak from a prior class
+// causes KoinApplicationAlreadyStartedException here.
+@Config(sdk = [28], application = android.app.Application::class)
 class UserPresentReceiverTest {
 
     private lateinit var receiver: UserPresentReceiver
     
     @Before
     fun setUp() {
+        // Defensively stop any Koin that may have leaked from a prior test class.
+        try { stopKoin() } catch (_: Exception) {}
         receiver = UserPresentReceiver()
+    }
+
+    @After
+    fun tearDown() {
+        try { stopKoin() } catch (_: Exception) {}
     }
 
     @Test

@@ -16,8 +16,8 @@
 
 package com.celzero.bravedns.service
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_BATCH_LOGGER
+import Logger
+import Logger.LOG_BATCH_LOGGER
 import android.content.Context
 import android.util.Log
 import com.celzero.bravedns.data.ConnTrackerMetaData
@@ -56,10 +56,10 @@ internal constructor(
 
     @Volatile private var scope: CoroutineScope? = null
 
-    private val dnsdb: DnsLogTracker = DnsLogTracker(dnsLogRepository, persistentState, context)
-    private val ipdb: IPTracker =
+    private var dnsdb: DnsLogTracker = DnsLogTracker(dnsLogRepository, persistentState, context)
+    private var ipdb: IPTracker =
         IPTracker(connectionTrackerRepository, rethinkLogRepository, context)
-    private val consoleLogDb: ConsoleLogManager = ConsoleLogManager(consoleLogRepository)
+    private var consoleLogDb: ConsoleLogManager = ConsoleLogManager(consoleLogRepository)
 
     private var dnsBatcher: NetLogBatcher<DnsLog, Nothing>? = null
     private var ipBatcher: NetLogBatcher<ConnectionTracker, ConnectionSummary>? = null
@@ -70,11 +70,11 @@ internal constructor(
     // expected per row size is 100 bytes to 500 bytes, so a batch of 40 rows is around 4KB to 20KB
     private val logBatchSize = 40
     // dispatch buffer to consumer if greater than batch size, for console logs
-    private val consoleLogBatchSize = 4096
+    private val consoleLogBatchSize = 1024
 
     // a single thread to run sig and batch co-routines in;
     // to avoid use of mutex/semaphores over shared-state
-    // looper is never closed / canceled and is always active
+    // looper is never closed / cancelled and is always active
     private val looper = Daemons.make("netl")
 
     private val consoleLogLooper = Daemons.make("consl")
@@ -191,10 +191,13 @@ internal constructor(
 
     // now, this method is doing multiple things which should be removed.
     // fixme: should intend to only write the logs to database.
-    fun processDnsLog(summary: DNSSummary) {
-        val transaction = dnsdb.processOnResponse(summary)
+    fun processDnsLog(summary: DNSSummary, rethinkUid: Int) {
+        val transaction = dnsdb.processOnResponse(summary, rethinkUid)
 
         transaction.responseCalendar = Calendar.getInstance()
+
+        // TODO: This method should be part of BraveVPNService
+        dnsdb.updateVpnConnectionState(transaction)
 
         if (!persistentState.logsEnabled) return
 

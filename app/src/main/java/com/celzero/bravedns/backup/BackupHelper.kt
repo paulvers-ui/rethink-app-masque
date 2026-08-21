@@ -15,7 +15,7 @@
  */
 package com.celzero.bravedns.backup
 
-import com.celzero.bravedns.util.Logger
+import Logger
 import android.content.Context
 import com.celzero.bravedns.R
 import com.celzero.bravedns.database.AppDatabase
@@ -45,7 +45,6 @@ class BackupHelper {
 
         // backup file extension
         const val BACKUP_FILE_EXTN = ".rbk"
-        const val BACKUP_FILE_EXTN_ALPHA = ".rbka"
 
         // backup shared pref file name
         const val SHARED_PREFS_BACKUP_FILE_NAME = "shared_prefs_backup.txt"
@@ -119,33 +118,111 @@ class BackupHelper {
             }
         }
 
+        // SECURITY (VULN, Zip Slip / CWE-22): A malicious .rbk archive can contain
+        // entries whose names include path-traversal segments (e.g. "../../foo") or
+        // absolute paths. Concatenating ZipEntry.name onto the destination directory
+        // without validating the resolved path lets the archive overwrite arbitrary
+        // files inside the app's private storage (databases, encrypted WireGuard
+        // configs, shared prefs, native libs cache). The fix below:
+        //   1. Rejects entries that are directories, absolute paths, or contain ".."
+        //      / null bytes.
+        //   2. Resolves the would-be destination via File.canonicalPath and rejects
+        //      it if the resolved path does not start with the canonical target
+        //      directory.
+        //   3. Caps total uncompressed size and per-entry size to mitigate zip-bomb
+        //      style DoS during the restore worker.
         fun unzip(inputStream: InputStream?, path: String): Boolean {
+            val targetDir = File(path)
+            if (!targetDir.exists()) targetDir.mkdirs()
+            val canonicalTarget: String
+            try {
+                canonicalTarget = targetDir.canonicalPath + File.separator
+            } catch (e: Exception) {
+                Logger.e(Logger.LOG_TAG_BACKUP_RESTORE, "AUDIT: cannot canonicalize unzip target: ${e.message}", e)
+                return false
+            }
+
+            // Hard limits to bound work done by the restore worker on a hostile zip.
+            val maxEntrySize = 256L * 1024L * 1024L // 256 MiB per entry
+            val maxTotalSize = 1024L * 1024L * 1024L // 1 GiB total
+
             var zis: ZipInputStream? = null
             try {
                 zis = ZipInputStream(BufferedInputStream(inputStream))
                 var ze: ZipEntry? = zis.nextEntry
+                var totalRead = 0L
+                val buffer = ByteArray(8192)
                 while (ze != null) {
-                    val baos = ByteArrayOutputStream()
-                    val buffer = ByteArray(1024)
-                    var count: Int
-                    val filename: String = ze.name
-                    val fout = FileOutputStream(path + File.separator + filename)
-
-                    // reading and writing
-                    while (zis.read(buffer).also { r -> count = r } != -1) {
-                        baos.write(buffer, 0, count)
-                        val bytes = baos.toByteArray()
-                        fout.write(bytes)
-                        baos.reset()
+                    val name = ze.name
+                    if (ze.isDirectory) {
+                        zis.closeEntry()
+                        ze = zis.nextEntry
+                        continue
                     }
-                    fout.close()
+                    if (name.isEmpty() ||
+                        name.contains("..") ||
+                        name.contains('\u0000') ||
+                        name.startsWith("/") ||
+                        name.startsWith("\\") ||
+                        File(name).isAbsolute
+                    ) {
+                        Logger.w(
+                            Logger.LOG_TAG_BACKUP_RESTORE,
+                            "AUDIT (Zip Slip): refusing zip entry with unsafe name: '$name'"
+                        )
+                        return false
+                    }
+
+                    val outFile = File(targetDir, name)
+                    val canonicalOut: String = try {
+                        outFile.canonicalPath
+                    } catch (e: Exception) {
+                        Logger.e(Logger.LOG_TAG_BACKUP_RESTORE, "AUDIT (Zip Slip): canonicalize failed for '$name'", e)
+                        return false
+                    }
+                    if (!canonicalOut.startsWith(canonicalTarget)) {
+                        Logger.w(
+                            Logger.LOG_TAG_BACKUP_RESTORE,
+                            "AUDIT (Zip Slip): refusing entry escaping target dir; entry='$name' resolved='$canonicalOut'"
+                        )
+                        return false
+                    }
+
+                    // Ensure parent dirs (still inside target) exist.
+                    outFile.parentFile?.let { p ->
+                        val cp = try { p.canonicalPath } catch (_: Exception) { return false }
+                        if (!cp.startsWith(canonicalTarget) && cp + File.separator != canonicalTarget) {
+                            Logger.w(Logger.LOG_TAG_BACKUP_RESTORE, "AUDIT (Zip Slip): parent escapes target: $cp")
+                            return false
+                        }
+                        if (!p.exists()) p.mkdirs()
+                    }
+
+                    var entryWritten = 0L
+                    FileOutputStream(outFile).use { fout ->
+                        var count = zis.read(buffer)
+                        while (count != -1) {
+                            entryWritten += count
+                            totalRead += count
+                            if (entryWritten > maxEntrySize || totalRead > maxTotalSize) {
+                                Logger.w(
+                                    Logger.LOG_TAG_BACKUP_RESTORE,
+                                    "AUDIT (Zip Bomb): size cap exceeded; entry='$name' entryBytes=$entryWritten totalBytes=$totalRead"
+                                )
+                                return false
+                            }
+                            fout.write(buffer, 0, count)
+                            count = zis.read(buffer)
+                        }
+                    }
                     zis.closeEntry()
                     ze = zis.nextEntry
                 }
             } catch (e: Exception) {
+                Logger.e(Logger.LOG_TAG_BACKUP_RESTORE, "AUDIT: unzip error: ${e.message}", e)
                 return false
             } finally {
-                zis?.close()
+                try { zis?.close() } catch (_: Exception) { /* no-op */ }
             }
             return true
         }

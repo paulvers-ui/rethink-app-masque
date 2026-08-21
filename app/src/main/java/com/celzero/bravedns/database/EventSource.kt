@@ -27,7 +27,6 @@ enum class EventSource {
     SYSTEM,    // System-level events
     SERVICE,   // Background services
     WORKER,    // Background workers
-    MANAGER,    // Manager classes (FirewallManager, DomainRulesManager, etc.)
-    PROXY
+    MANAGER    // Manager classes (FirewallManager, DomainRulesManager, etc.)
 }
 

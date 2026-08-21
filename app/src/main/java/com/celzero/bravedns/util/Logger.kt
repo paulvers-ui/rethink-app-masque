@@ -13,20 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.celzero.bravedns.util
-
-import android.app.Application
 import android.util.Log
 import com.celzero.bravedns.database.ConsoleLog
 import com.celzero.bravedns.service.PersistentState
 import com.celzero.bravedns.service.VpnController
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
-import java.io.File
 
 object Logger : KoinComponent {
     private val persistentState by inject<PersistentState>()
-    private val application by inject<Application>()
 
     private var _logLevel: Long? = null
     private var logLevel: Long
@@ -34,7 +29,7 @@ object Logger : KoinComponent {
             if (_logLevel == null) {
                 _logLevel = try {
                     persistentState.goLoggerLevel
-                } catch (_: Exception) {
+                } catch (e: Exception) {
                     // Fallback for tests or when Koin is not initialized
                     LoggerLevel.ERROR.id
                 }
@@ -63,17 +58,10 @@ object Logger : KoinComponent {
     const val LOG_TAG_PROXY = "ProxyLogs"
     const val LOG_QR_CODE = "QrCodeFromFileScanner"
     const val LOG_GO_LOGGER = "GoLog"
-    const val LOG_GO_LOGGER_V2 = "GoLogV2"
-    const val LOG_GO_LOGGER_V1 = "GoLogV1"
     const val LOG_TAG_APP_OPS = "AppOpsService"
     const val LOG_IAB = "InAppBilling"
     const val LOG_FIREBASE = "FirebaseErrorReporting"
     const val LOG_TAG_APP = "ExceptionHandler"
-    const val LOG_OKHTTP = "OkHttp"
-
-    const val WIRELOG_FILE_NAME = "wirelogs.txt"
-    const val WIRELOG_MAX_SIZE_BYTES = 3 * 1024 * 1024L // 3 MB
-    const val WIRELOG_FOLDER_NAME = "logs"
 
     // github.com/celzero/firestack/blob/bce8de917f/intra/log/logger.go#L76
     enum class LoggerLevel(val id: Long) {
@@ -89,7 +77,7 @@ object Logger : KoinComponent {
         NONE(8);
 
         companion object {
-            fun fromId(id: Int): LoggerLevel? {
+            fun fromId(id: Int): LoggerLevel {
                 return when (id.toLong()) {
                     VERY_VERBOSE.id -> VERY_VERBOSE
                     VERBOSE.id -> VERBOSE
@@ -100,63 +88,8 @@ object Logger : KoinComponent {
                     STACKTRACE.id -> STACKTRACE
                     USR.id -> USR
                     NONE.id -> NONE
-                    else -> null
+                    else -> NONE
                 }
-            }
-
-            /**
-             * Maps the single-character log-level prefix written by the Go runtime
-             * to a [LoggerLevel].  The Go side encodes the level as a single ASCII
-             * character rather than a numeric id:
-             *
-             *   'Y' → VERY_VERBOSE
-             *   'V' → VERBOSE
-             *   'D' → DEBUG
-             *   'I' → INFO
-             *   'W' → WARN
-             *   'E' → ERROR
-             *   'F' → STACKTRACE  (Fatal/stacktrace)
-             *   'U' → USR
-             *   ' ' → NONE
-             *
-             * Returns `null` for any unrecognised character so callers can fall back
-             * to the previous known level.
-             */
-            fun fromChar(c: Char): LoggerLevel? {
-                return when (c) {
-                    'Y' -> VERY_VERBOSE
-                    'V' -> VERBOSE
-                    'D' -> DEBUG
-                    'I' -> INFO
-                    'W' -> WARN
-                    'E' -> ERROR
-                    'F' -> STACKTRACE
-                    'U' -> USR
-                    // NONE won't be sent from Go, commenting it from usage
-                    // using NONE will result in switching the log levels as it has ' ' as the char
-                    // below is the e.g., from stacktrace logs
-                    /*  ns.forwarder.deliverPackets [11] ns: tun: forwarder: deliverPackets rand10pc [gobind@v20260304225152-87c7a25]
-                        go log: unknown level char 'n' using ERROR
-                         (#0) -- ideally the space here switching levels to NONE but its actually STACKTRACE
-                        <===>
-                        go log: unknown level char '<' using NONE*/
-                    // ' ' -> NONE
-                    else -> null
-                }
-            }
-        }
-
-        fun toLoggerLevel(): LoggerLevel {
-            return when (this) {
-                VERY_VERBOSE -> VERY_VERBOSE
-                VERBOSE -> VERBOSE
-                DEBUG -> DEBUG
-                INFO -> INFO
-                WARN -> WARN
-                ERROR -> ERROR
-                STACKTRACE -> STACKTRACE
-                USR -> USR
-                NONE -> NONE
             }
         }
 
@@ -164,8 +97,8 @@ object Logger : KoinComponent {
             return this == STACKTRACE
         }
 
-        fun isLessThanOrEqualTo(level: LoggerLevel): Boolean {
-            return this.id <= level.id
+        fun isLessThan(level: LoggerLevel): Boolean {
+            return this.id < level.id
         }
 
         fun user(): Boolean {
@@ -215,54 +148,7 @@ object Logger : KoinComponent {
 
     fun goLog(message: String, type: LoggerLevel) {
         // no need to log the go logs, add it to the database
-        dbWrite(LOG_GO_LOGGER_V1, message, type)
-    }
-
-    fun goLog2(message: String, type: LoggerLevel) {
-        // no need to log the go logs, add it to the database
-        dbWrite(LOG_GO_LOGGER_V2, message, type)
-    }
-
-    fun goLog3(message: String, type: LoggerLevel): ConsoleLog? {
-        // uiLogLevel is user selected log level to display in the UI, so if the log
-        // level is less than the user selected log level, do not write to the database.
-        if (uiLogLevel > type.id) return null
-
-        val now = System.currentTimeMillis()
-        val formattedMsg = "${levelChar(type)} $LOG_GO_LOGGER: $message"
-        return ConsoleLog(0, formattedMsg, type.id, now)
-    }
-
-    /**
-     * Single-character prefix for a log line, matching the level chars written by the
-     * Go runtime (see [LoggerLevel.fromChar]). Centralised so [dbWrite] and the
-     * batch-oriented [makeGoLog] never drift apart.
-     */
-    private fun levelChar(level: LoggerLevel): String = when (level) {
-        LoggerLevel.VERY_VERBOSE -> "Y"
-        LoggerLevel.VERBOSE -> "V"
-        LoggerLevel.DEBUG -> "D"
-        LoggerLevel.INFO -> "I"
-        LoggerLevel.WARN -> "W"
-        LoggerLevel.ERROR -> "E"
-        LoggerLevel.STACKTRACE -> "F"
-        else -> "V"
-    }
-
-    suspend fun wireLog(message: String) {
-        try {
-            val logsDir = File(application.filesDir, WIRELOG_FOLDER_NAME).apply {
-                if (!exists()) mkdirs()
-            }
-
-            val logFile = File(logsDir, WIRELOG_FILE_NAME)
-
-            if (logFile.exists() && logFile.length() > WIRELOG_MAX_SIZE_BYTES) {
-                logFile.delete()
-            }
-
-            logFile.appendText("$message\n")
-        } catch (_: Exception) { }
+        dbWrite(LOG_GO_LOGGER, message, type)
     }
 
     fun log(tag: String, msg: String, type: LoggerLevel, e: Exception? = null) {
@@ -287,7 +173,16 @@ object Logger : KoinComponent {
         if (uiLogLevel > level.id) return
 
         val now = System.currentTimeMillis()
-        val l = levelChar(level)
+        val l = when (level) {
+            LoggerLevel.VERY_VERBOSE -> "Y"
+            LoggerLevel.VERBOSE -> "V"
+            LoggerLevel.DEBUG -> "D"
+            LoggerLevel.INFO -> "I"
+            LoggerLevel.WARN -> "W"
+            LoggerLevel.ERROR -> "E"
+            LoggerLevel.STACKTRACE -> "E"
+            else -> "V"
+        }
 
         val formattedMsg = if (tag == LOG_GO_LOGGER) {
             "$l $tag: $msg"
@@ -306,4 +201,3 @@ object Logger : KoinComponent {
         } catch (_: Exception) { }
     }
 }
-

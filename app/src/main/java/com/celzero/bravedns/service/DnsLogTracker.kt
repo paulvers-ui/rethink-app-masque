@@ -16,13 +16,15 @@
 
 package com.celzero.bravedns.service
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_VPN
+import Logger
+import Logger.LOG_TAG_VPN
 import android.content.Context
+import android.os.SystemClock
 import com.celzero.bravedns.R
 import com.celzero.bravedns.database.DnsLog
 import com.celzero.bravedns.database.DnsLogRepository
 import com.celzero.bravedns.net.doh.Transaction
+import com.celzero.bravedns.util.AndroidUidConfig
 import com.celzero.bravedns.util.Constants.Companion.EMPTY_PACKAGE_NAME
 import com.celzero.bravedns.util.Constants.Companion.INVALID_UID
 import com.celzero.bravedns.util.Constants.Companion.UNSPECIFIED_IP_IPV4
@@ -32,9 +34,14 @@ import com.celzero.bravedns.util.UIUtils.fetchFavIcon
 import com.celzero.bravedns.util.Utilities.getCountryCode
 import com.celzero.bravedns.util.Utilities.getFlag
 import com.celzero.bravedns.util.Utilities.makeAddressPair
+import com.celzero.bravedns.util.Constants.Companion.UID_EVERYBODY
+import com.celzero.bravedns.util.DnsSecGuard
+import com.celzero.bravedns.util.DnsSecGuard.isSuspect
+import com.celzero.bravedns.util.DnsSecGuard.isPoisonSuspect
 import com.celzero.bravedns.util.Utilities.normalizeIp
 import com.celzero.firestack.backend.Backend
 import com.celzero.firestack.backend.DNSSummary
+import inet.ipaddr.IPAddressString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,6 +57,7 @@ internal constructor(
 
     companion object {
         const val DNS_LEAK_TEST = "dnsleaktest"
+        const val ECH = "ech."
 
         // Some apps like firefox, instagram do not respect ttls
         // add a reasonable grace period to account for that
@@ -57,14 +65,36 @@ internal constructor(
         val DNS_TTL_GRACE_SEC = TimeUnit.MINUTES.toSeconds(5L)
         private const val RDATA_MAX_LENGTH = 100
         private const val EMPTY_RESPONSE = "--"
+        private const val START_RESPONSE = "START"
     }
 
-    fun processOnResponse(summary: DNSSummary): Transaction {
+    private val vpnStateMap = HashMap<Transaction.Status, BraveVPNService.State>()
+
+    init {
+        vpnStateMap[Transaction.Status.COMPLETE] = BraveVPNService.State.WORKING
+        vpnStateMap[Transaction.Status.SEND_FAIL] = BraveVPNService.State.NO_INTERNET
+        vpnStateMap[Transaction.Status.NO_RESPONSE] = BraveVPNService.State.DNS_SERVER_DOWN
+        vpnStateMap[Transaction.Status.TRANSPORT_ERROR] = BraveVPNService.State.DNS_SERVER_DOWN
+        vpnStateMap[Transaction.Status.BAD_QUERY] = BraveVPNService.State.DNS_ERROR
+        vpnStateMap[Transaction.Status.CLIENT_ERROR] = BraveVPNService.State.DNS_ERROR
+        vpnStateMap[Transaction.Status.BAD_RESPONSE] = BraveVPNService.State.DNS_ERROR
+        vpnStateMap[Transaction.Status.INTERNAL_ERROR] = BraveVPNService.State.APP_ERROR
+    }
+
+    fun processOnResponse(summary: DNSSummary, rethinkUid: Int): Transaction {
         val latencyMs = (TimeUnit.SECONDS.toMillis(1L) * summary.latency).toLong()
+        val nowMs = SystemClock.elapsedRealtime()
+        val queryTimeMs = nowMs - latencyMs
         var uid = INVALID_UID
 
         try {
-            uid = summary.uid.toInt()
+            uid = if (summary.uid == Backend.UidSelf) {
+                rethinkUid
+            } else if (summary.uid == Backend.UidSystem) {
+                AndroidUidConfig.SYSTEM.uid // 1000
+            } else {
+                summary.uid.toInt()
+            }
         } catch (_: NumberFormatException) {
             Logger.w(LOG_TAG_VPN, "onQuery: invalid uid: ${summary.uid}, using default uid: $uid")
         }
@@ -76,7 +106,7 @@ internal constructor(
         transaction.type = summary.qType
         transaction.uid = uid
         transaction.id = summary.id
-        transaction.queryTime = summary.start
+        transaction.queryTime = queryTimeMs
         transaction.transportType = Transaction.TransportType.getType(summary.type)
         transaction.response = summary.rData ?: ""
         transaction.responseCode = summary.rCode
@@ -88,14 +118,13 @@ internal constructor(
         transaction.blocklist = summary.blocklists ?: ""
         transaction.relayName = summary.rpid ?: ""
         transaction.proxyId = summary.pid ?: ""
-        transaction.msg = summary.fid + "; " +summary.origin + "; " + summary.msg + "; " + summary.extra
+        transaction.msg = summary.msg ?: ""
         transaction.upstreamBlock = summary.upstreamBlocks
         transaction.region = summary.region
         transaction.isCached = summary.cached
         transaction.dnssecOk = summary.`do`
         transaction.dnssecValid = summary.ad
         transaction.blockedTarget = summary.blockedTarget
-        transaction.isEch = summary.ech
         return transaction
     }
 
@@ -113,7 +142,7 @@ internal constructor(
         dnsLog.responseTime = transaction.latency
         dnsLog.serverIP = transaction.serverName
         dnsLog.status = transaction.status.name
-        dnsLog.time = transaction.queryTime
+        dnsLog.time = transaction.responseCalendar.timeInMillis
         dnsLog.ttl = transaction.ttl
         dnsLog.msg = transaction.msg
         dnsLog.upstreamBlock = transaction.upstreamBlock
@@ -122,7 +151,6 @@ internal constructor(
         dnsLog.dnssecOk = transaction.dnssecOk
         dnsLog.dnssecValid = transaction.dnssecValid
         dnsLog.blockedTarget = transaction.blockedTarget
-        dnsLog.isEch = transaction.isEch
         val typeName = ResourceRecordTypes.getTypeName(transaction.type.toInt())
         if (typeName == ResourceRecordTypes.UNKNOWN) {
             dnsLog.typeName = transaction.type.toString()
@@ -134,7 +162,7 @@ internal constructor(
 
         // mark the query as blocked if the transaction id is Dnsx.BlockAll, no need to check
         // for blocklist as it is already marked as blocked
-        if (transaction.id == Backend.BlockAll || transaction.id == Backend.Block) {
+        if (transaction.id == Backend.BlockAll) {
             // TODO: rdata should be either empty / 0.0.0.0 / ::0 / -- for block all
             if (transaction.response.isNotEmpty() && transaction.response != UNSPECIFIED_IP_IPV4 && transaction.response != UNSPECIFIED_IP_IPV6 && transaction.response != EMPTY_RESPONSE) {
                 Logger.w(
@@ -227,6 +255,83 @@ internal constructor(
             dnsLog.appName = context.getString(R.string.network_log_app_name_unknown)
             dnsLog.packageName = EMPTY_PACKAGE_NAME
         }
+        // ── DNSSEC enforcement & DNS-poison heuristics ────────────────────────────
+        // Runs after isBlocked is resolved so already-blocked queries are not re-examined.
+        if (transaction.status == Transaction.Status.COMPLETE && !dnsLog.isBlocked) {
+            val guard = DnsSecGuard.validate(
+                qName       = dnsLog.queryStr,
+                dnssecOk    = dnsLog.dnssecOk,
+                dnssecValid = dnsLog.dnssecValid,
+                responseIps = transaction.response
+            )
+            if (guard.isSuspect()) {
+                val guardTag = when (guard) {
+                    is DnsSecGuard.CheckResult.PoisonSuspect -> "WARN:poison-suspect"
+                    is DnsSecGuard.CheckResult.BogonIp       -> "WARN:bogon-ip"
+                    is DnsSecGuard.CheckResult.DnssecMissing -> "WARN:dnssec-unvalidated"
+                    else -> ""
+                }
+                dnsLog.msg = if (dnsLog.msg.isNotEmpty()) "${dnsLog.msg} | $guardTag" else guardTag
+
+                // Enforcement: only fires when "Enable DNSSEC" is on in Home > Configure > DNS.
+                // We deliberately only block BogonIp / PoisonSuspect, never DnssecMissing on its
+                // own — dnssecValid (the AD bit) is false for the huge majority of domains simply
+                // because most zones aren't DNSSEC-signed, so treating "missing" as blockable
+                // would break normal browsing. A resolved bogon address, on the other hand, is
+                // never a legitimate public answer.
+                val shouldEnforce = persistentState.enableDnssecValidation &&
+                    (guard is DnsSecGuard.CheckResult.BogonIp || guard.isPoisonSuspect())
+                if (shouldEnforce) {
+                    dnsLog.isBlocked = true
+                    if (dnsLog.blockedTarget.isEmpty()) {
+                        dnsLog.blockedTarget = "DNSSEC enforcement"
+                    }
+                    dnsLog.msg = if (dnsLog.msg.isNotEmpty()) {
+                        "${dnsLog.msg} | BLOCKED:dnssec-enforcement"
+                    } else {
+                        "BLOCKED:dnssec-enforcement"
+                    }
+
+                    // Marking the DnsLog row as blocked only affects the log/UI — by the time
+                    // this callback runs, the answer has already gone back to the querying app
+                    // (see onQuery/onResponse in the DNS path). Real enforcement therefore means
+                    // adding a universal (UID_EVERYBODY) IP-block rule for the offending
+                    // address(es) so any subsequent connection attempt to them is stopped at
+                    // flow() — the same mechanism RULE2D (block-universal-ip) already relies on.
+                    val bogonAddrs = when (guard) {
+                        is DnsSecGuard.CheckResult.BogonIp -> guard.bogonAddresses
+                        is DnsSecGuard.CheckResult.PoisonSuspect -> guard.bogonAddresses
+                        else -> emptyList()
+                    }
+                    bogonAddrs.forEach { addr ->
+                        try {
+                            val ipAddress = IPAddressString(addr).address
+                            if (ipAddress != null) {
+                                IpRulesManager.addIpRule(
+                                    UID_EVERYBODY,
+                                    ipAddress,
+                                    null,
+                                    IpRulesManager.IpRuleStatus.BLOCK,
+                                    proxyId = "",
+                                    proxyCC = ""
+                                )
+                            }
+                        } catch (e: Exception) {
+                            Logger.w(LOG_TAG_VPN, "dnssec enforcement: failed to add ip rule for $addr: ${e.message}")
+                        }
+                    }
+                }
+
+                if (guard.isPoisonSuspect()) {
+                    Logger.crash(
+                        LOG_TAG_VPN,
+                        "dns-poison suspect: ${dnsLog.queryStr} -> ${transaction.response} (enforced=$shouldEnforce)",
+                        null
+                    )
+                }
+            }
+        }
+
         return dnsLog
     }
 
@@ -241,6 +346,38 @@ internal constructor(
         @Suppress("UNCHECKED_CAST")
         val dnsLogs = (logs as? List<DnsLog>) ?: return
         dnsLogRepository.insertBatch(dnsLogs)
+    }
+
+    fun updateVpnConnectionState(transaction: Transaction?) {
+        if (transaction == null) return
+
+        // Update the connection state.  If the transaction succeeded, then the connection is
+        // working.
+        // If the transaction failed, then the connection is not working.
+        // commented the code for reporting good or bad network.
+        // Connection state will be unknown if the transaction is blocked locally in that case,
+        // transaction status will be set as complete. So introduced check while
+        // setting the connection state.
+        if (transaction.status === Transaction.Status.COMPLETE) {
+            // skip updating the connection state if the transaction was resolved locally.
+            // locally resolved transaction has no server name, indicating it was blocked
+            // by a local rule—either a firewall rule or the local DNS blocklist.
+
+            if (isLocallyResolved(transaction)) return
+
+            VpnController.onConnectionStateChanged(BraveVPNService.State.WORKING)
+            // only update the server name if it is not empty as its only used to show ech
+            VpnController.onServerNameUpdated(transaction.serverName)
+        } else {
+            val vpnState = vpnStateMap[transaction.status] ?: BraveVPNService.State.FAILING
+            VpnController.onConnectionStateChanged(vpnState)
+        }
+    }
+
+    private fun isLocallyResolved(transaction: Transaction?): Boolean {
+        if (transaction == null) return false
+
+        return transaction.serverName.isEmpty()
     }
 
     private fun io(f: suspend () -> Unit) {

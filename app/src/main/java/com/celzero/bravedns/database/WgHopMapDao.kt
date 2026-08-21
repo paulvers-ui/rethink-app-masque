@@ -21,8 +21,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
-import com.celzero.bravedns.rpnproxy.RpnHopManager.ID_RPN
-import com.celzero.bravedns.service.ProxyManager.ID_WG_BASE
 
 @Dao
 interface WgHopMapDao {
@@ -43,9 +41,7 @@ interface WgHopMapDao {
 
     @Query("select * from WgHopMap where src = :src") fun getBySrc(src: String): WgHopMap?
 
-    @Query("select * from WgHopMap where src like '$ID_RPN%'") fun getAllWgs(): List<WgHopMap>
-
-    @Query("select * from WgHopMap where src like '$ID_WG_BASE%'") fun getAllRpn(): List<WgHopMap>
+    @Query("select * from WgHopMap") fun getAll(): List<WgHopMap>
 
     @Query("delete from WgHopMap") fun deleteAll()
 }

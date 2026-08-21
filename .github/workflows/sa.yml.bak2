@@ -1,0 +1,55 @@
+name: Static Analyser
+on:
+  push:
+    branches: [ "main", "tests" ]
+  pull_request:
+    branches: [ "main", "tests" ]
+  schedule:
+    - cron: '17 23 * * 2'
+
+jobs:
+  detekt:
+    name: detekt
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    steps:
+      - name: 🥏 Checkout
+        uses: actions/checkout@v4
+
+      - name: ☕️ JREv17
+        uses: actions/setup-java@v4
+        with:
+          java-package: 'jre'
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 🤺 Detekt
+        shell: bash
+        env:
+          RUNID: ${{ github.run_id }}
+          DETEKT_VER: "2.0.0-alpha.1"
+          JVM_TARGET: "17"
+          SEV: "Warning"
+          KOTLIN_VER: "2.1"
+        run: |
+          set -euo pipefail
+          wget -q https://github.com/detekt/detekt/releases/download/v${DETEKT_VER}/detekt-cli-${DETEKT_VER}-all.jar -O detekt-cli-all.jar
+          java -jar detekt-cli-all.jar \
+              --build-upon-default-config \
+              --config .github/detekt-config.yml \
+              --excludes '**/src/test/**,**/src/androidTest/**,**/src/testDebug/**,**/src/testRelease/**,**/src/androidTestDebug/**,**/src/androidTestRelease/**,**/*Test.kt,**/*Tests.kt,**/*Spec.kt' \
+              --fail-on-severity ${SEV} \
+              --analysis-mode full \
+              --api-version ${KOTLIN_VER} \
+              --jvm-target ${JVM_TARGET} \
+              --language-version ${KOTLIN_VER} \
+              --parallel \
+              --report sarif:rethink-app-detekt-${RUNID}.sarif || true
+
+      - name: 📡 Upload to code-scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "rethink-app-detekt-${{ github.run_id }}.sarif"

@@ -2,10 +2,10 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@android:color/transparent"
+    android:layout_gravity="center"
     android:foregroundGravity="center"
-    android:layout_gravity="center">
+    android:background="?attr/background"
+    android:layout_height="wrap_content">
 
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
@@ -38,23 +38,10 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/ssidRecyclerView"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="0dp"
                 android:layout_marginBottom="16dp"
-                android:maxHeight="200dp"
-                android:visibility="gone" />
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/emptyStateView"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:alpha="0.6"
-                android:gravity="center"
-                android:padding="24dp"
-                android:text="@string/country_ssid_empty_state"
-                android:textColor="?attr/primaryLightColorText"
-                android:textSize="14sp"
-                android:visibility="visible" />
+                android:layout_weight="1"
+                android:maxHeight="200dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -136,7 +123,7 @@
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/ssidTextInputLayout"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1">
@@ -152,7 +139,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/addSsidBtn"
-                    style="@style/Widget.Material3.Button.TextButton.Dialog"
+                    style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
@@ -170,7 +157,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/cancelBtn"
-                    style="@style/Widget.Material3.Button.TextButton.Dialog"
+                    style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/lbl_cancel"
@@ -179,7 +166,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/saveBtn"
-                    style="@style/Widget.Material3.Button.TextButton.Dialog"
+                    style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"

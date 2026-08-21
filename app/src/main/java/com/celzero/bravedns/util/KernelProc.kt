@@ -21,132 +21,35 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * Reads /proc/self/auxv once and returns a human-readable breakdown of the aux vector entries.
+ * Reads /proc/self/auxv once and returns a human readable breakdown of the aux vector entries.
  * Result is cached so subsequent callers do not hit the filesystem again.
  */
 object KernelProc {
     private const val AUXV_PATH = "/proc/self/auxv"
     private const val STATUS_PATH = "/proc/self/status"
     private const val SCHED_PATH = "/proc/self/sched"
-    private const val SCHEDSTAT_PATH = "/proc/self/schedstat"
+    private const val NS_DIR = "/proc/self/ns"
+    private const val NET_DIR = "/proc/self/net"
     private const val TASK_DIR = "/proc/self/task"
-    private const val SMAPS_ROLLUP_PATH = "/proc/self/smaps_rollup"
+    private const val MEM_PATH = "/proc/self/mem" // usually unreadable; handled gracefully
+    private const val SMAPS_PATH = "/proc/self/smaps"
+    private const val MAPS_PATH = "/proc/self/maps"
     private const val MAX_READ_BYTES = 512 * 1024 // prevent OOM on large proc files
 
     // Lazy so we only read and parse once per process lifetime.
-    private val cachedStats: String by lazy { readAuxvHumanReadable(title = "AUXV") }
+    private val cachedStats: String by lazy { readAuxvHumanReadable() }
     private val cachedText: MutableMap<String, String> = mutableMapOf()
 
-    fun getStats(forceRefresh: Boolean = false): String = if (forceRefresh) readAuxvHumanReadable(title = "AUXV") else cachedStats
+    fun getStats(forceRefresh: Boolean = false): String = if (forceRefresh) readAuxvHumanReadable() else cachedStats
 
-    fun getStatus(forceRefresh: Boolean = false): String = readProcText(STATUS_PATH, title = "Status", forceRefresh = forceRefresh)
-
-    fun getSmaps(forceRefresh: Boolean = false): String = readProcText(SMAPS_ROLLUP_PATH, title = "SMAPS ROLLUP", forceRefresh = forceRefresh)
-
-    /**
-     * Compact per-thread scheduler data for every thread in /proc/self/task.
-     *
-     * For each thread we read:
-     *  - /proc/self/task/<tid>/status   → Name + State
-     *  - /proc/self/task/<tid>/schedstat → <running_ns> <waiting_ns> <timeslices>
-     *  - /proc/self/task/<tid>/sched    → key numeric fields (best-effort; may be empty)
-     *
-     * Returns a list sorted by tid.
-     */
-    data class ThreadSchedInfo(
-        val tid: String,
-        val name: String,
-        val state: String,
-        /** schedstat raw line, e.g. "123456 78901 42" */
-        val schedstatRaw: String,
-        /** Parsed schedstat fields (0 if unavailable). */
-        val runningNs: Long,
-        val waitingNs: Long,
-        val timeslices: Long,
-        /** Key fields from /proc/self/task/<tid>/sched (0 if unavailable). */
-        val waitMax: Long,
-        val nrWakeups: Long,
-        val nrMigrations: Long,
-        val nrInvoluntarySwitches: Long,
-        val nrVoluntarySwitches: Long,
-        /** Raw /proc/self/task/<tid>/sched text (may be blank). */
-        val schedRaw: String
-    )
-
-    fun parseSchedAllThreads(): List<ThreadSchedInfo> {
-        return runCatching {
-            val dir = File(TASK_DIR)
-            if (!dir.exists()) return@runCatching emptyList()
-            val tidDirs = dir.listFiles()
-                ?.filter { it.isDirectory }
-                ?.sortedBy { it.name.toIntOrNull() ?: Int.MAX_VALUE }
-                ?: return@runCatching emptyList()
-
-            tidDirs.map { tidDir ->
-                val tid = tidDir.name
-                var name = "?"
-                var state = "?"
-
-                // Read status for name + state
-                runCatching {
-                    File(tidDir, "status").useLines { seq ->
-                        for (line in seq) {
-                            when {
-                                name == "?" && line.startsWith("Name:") ->
-                                    name = line.removePrefix("Name:").trim()
-                                state == "?" && line.startsWith("State:") ->
-                                    state = line.removePrefix("State:").trim()
-                            }
-                            if (name != "?" && state != "?") break
-                        }
-                    }
-                }
-
-                // Read schedstat
-                val schedstatRaw = runCatching {
-                    File(tidDir, "schedstat").takeIf { it.exists() }
-                        ?.readText(Charsets.UTF_8)?.trim() ?: ""
-                }.getOrDefault("")
-                val ssParts = schedstatRaw.split(Regex("\\s+"))
-                val runningNs  = ssParts.getOrNull(0)?.toLongOrNull() ?: 0L
-                val waitingNs  = ssParts.getOrNull(1)?.toLongOrNull() ?: 0L
-                val timeslices = ssParts.getOrNull(2)?.toLongOrNull() ?: 0L
-
-                // Read sched (best-effort; may not be accessible on all kernels)
-                val schedRaw = runCatching {
-                    File(tidDir, "sched").takeIf { it.exists() }
-                        ?.readText(Charsets.UTF_8)?.trim() ?: ""
-                }.getOrDefault("")
-
-                val schedFields = mutableMapOf<String, Long>()
-                schedRaw.lines().forEach { line ->
-                    val colon = line.indexOf(':')
-                    if (colon <= 0) return@forEach
-                    val key = line.substring(0, colon).trim()
-                    val valStr = line.substring(colon + 1).trim()
-                    schedFields[key] = valStr.toLongOrNull()
-                        ?: valStr.toDoubleOrNull()?.toLong()
-                        ?: return@forEach
-                }
-
-                ThreadSchedInfo(
-                    tid = tid,
-                    name = name,
-                    state = state,
-                    schedstatRaw = schedstatRaw,
-                    runningNs = runningNs,
-                    waitingNs = waitingNs,
-                    timeslices = timeslices,
-                    waitMax = schedFields["se.statistics.wait_max"] ?: 0L,
-                    nrWakeups = schedFields["se.statistics.nr_wakeups"] ?: 0L,
-                    nrMigrations = schedFields["se.statistics.nr_migrations"] ?: 0L,
-                    nrInvoluntarySwitches = schedFields["nr_involuntary_switches"] ?: 0L,
-                    nrVoluntarySwitches = schedFields["nr_voluntary_switches"] ?: 0L,
-                    schedRaw = schedRaw
-                )
-            }.sortedByDescending { it.runningNs }
-        }.getOrElse { emptyList() }
-    }
+    fun getStatus(forceRefresh: Boolean = false): String = readProcText(STATUS_PATH, title = "status", forceRefresh = forceRefresh)
+    fun getSched(forceRefresh: Boolean = false): String = readProcText(SCHED_PATH, title = "sched", forceRefresh = forceRefresh)
+    fun getNs(forceRefresh: Boolean = false): String = readDirAsLines(NS_DIR, title = "ns", forceRefresh = forceRefresh)
+    fun getNet(forceRefresh: Boolean = false): String = readDirAsLines(NET_DIR, title = "net", forceRefresh = forceRefresh)
+    fun getTask(forceRefresh: Boolean = false): String = readDirAsLines(TASK_DIR, title = "task", forceRefresh = forceRefresh)
+    fun getMem(forceRefresh: Boolean = false): String = readProcText(MEM_PATH, title = "mem", forceRefresh = forceRefresh)
+    fun getSmaps(forceRefresh: Boolean = false): String = readProcText(SMAPS_PATH, title = "smaps", forceRefresh = forceRefresh)
+    fun getMaps(forceRefresh: Boolean = false): String = readProcText(MAPS_PATH, title = "maps", forceRefresh = forceRefresh)
 
     private fun readProcText(path: String, title: String, forceRefresh: Boolean = false): String {
         if (forceRefresh) cachedText.remove(path)
@@ -166,7 +69,8 @@ object KernelProc {
         }
     }
 
-    private fun readDirAsLines(dirPath: String, title: String): String {
+    private fun readDirAsLines(dirPath: String, title: String, forceRefresh: Boolean = false): String {
+        // Directory contents (like /proc/self/task) change often; read live instead of caching.
         return runCatching {
             val dir = File(dirPath)
             if (!dir.exists()) return@runCatching "$title: missing"
@@ -180,18 +84,11 @@ object KernelProc {
         }.getOrElse { err -> "$title: error: ${err.message ?: err::class.java.simpleName}" }
     }
 
-    private fun readAuxvHumanReadable(title: String): String {
+    private fun readAuxvHumanReadable(): String {
         return runCatching {
             val file = File(AUXV_PATH)
             if (!file.exists()) return@runCatching "auxv: missing ($AUXV_PATH)"
 
-            // some of the values in AUXV are pointers (e.g. AT_PLATFORM) which are not directly
-            // human-readable, but we can at least show the raw hex value and decimal value for
-            // reference.
-            // 51L to "UNKNOWN(51)" // seen on some devices as a pointer to a string like
-            // "com.google.android.runtime"
-            // TODO: for known pointer types (e.g. AT_PLATFORM, AT_RANDOM) we could
-            // attempt to read the pointed-to string from memory
             val bytes = file.readBytes()
             val wordSize = if (Process.is64Bit()) 8 else 4
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder())
@@ -222,11 +119,10 @@ object KernelProc {
             fun readWord(): Long = if (wordSize == 8) buffer.long else buffer.int.toLong() and 0xffffffffL
 
             val entries = mutableListOf<String>()
-            entries.add(title + "\n")
             while (buffer.remaining() >= wordSize * 2) {
                 val type = readWord()
                 val value = readWord()
-                if (type == 0L) break
+                if (type == 0L) break // AT_NULL terminator
                 val name = typeNames[type] ?: "UNKNOWN"
                 val annotated = "$name($type)=0x${value.toString(16)} ($value)"
                 entries.add(annotated)

@@ -1,6 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Full Backup Content Rules (Android 6–11 / API 23–30)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Controls Auto Backup to Google Drive on Android versions prior to 12.
+    On Android 12+ the data_extraction_rules.xml file takes precedence.
+
+    RethinkDNS stores VPN keys, WireGuard private keys, DNS credentials,
+    and blocklist configuration in SharedPreferences and internal storage.
+    Backing this data up to Google Drive would expose cryptographic material
+    to the cloud and to any device the user later restores onto.
+
+    Strategy: exclude everything.  Fine-grained include rules for
+    non-sensitive preferences can be added here in future if needed.
+
+    See: https://developer.android.com/guide/topics/data/autobackup#IncludingFiles
+-->
 <full-backup-content>
-    <exclude domain="database" path="rethink_logs.db" />
-    <exclude domain="database" path="rethink_logs.db-wal" />
-    <exclude domain="database" path="rethink_logs.db-shm" />
+    <!-- Exclude all SharedPreferences — may contain keys, tokens, and configs. -->
+    <exclude domain="sharedpref" path="." />
+    <!-- Exclude all internal files — databases, blocklists, WireGuard keys. -->
+    <exclude domain="file" path="." />
+    <!-- Exclude all databases — DNS logs, app firewall rules, blocklist data. -->
+    <exclude domain="database" path="." />
+    <!-- Exclude external storage directory used for user exports. -->
+    <exclude domain="external" path="." />
 </full-backup-content>

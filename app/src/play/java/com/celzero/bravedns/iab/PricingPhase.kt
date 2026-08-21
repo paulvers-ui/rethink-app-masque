@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 package com.celzero.bravedns.iab
-
+/*
 
 import com.celzero.bravedns.iab.InAppBillingHandler.RecurringMode
 
@@ -39,3 +39,4 @@ data class PricingPhase(
         freeTrialPeriod = 0,
     )
 }
+*/

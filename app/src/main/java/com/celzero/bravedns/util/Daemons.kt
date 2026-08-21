@@ -15,6 +15,7 @@
  */
 package com.celzero.bravedns.util
 
+import Logger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +29,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
@@ -36,7 +36,6 @@ import java.util.concurrent.atomic.AtomicInteger
 object Daemons {
 
     fun make(tag: String) = Executors.newSingleThreadExecutor(Factory(tag)).asCoroutineDispatcher()
-    fun makeThread(tag: String): ExecutorService = Executors.newSingleThreadExecutor(Factory(tag))
     fun <T> ioDispatcher(tag: String, default: T, s: CoroutineScope) = CoFactory(tag, default, s, make(tag))
 }
 
@@ -116,7 +115,7 @@ class CoFactory<T>(
     // always recycle the exhausted channel, ie., the channel that is completed all the receives
     private suspend fun recycleChannel(c: Channel<Deferred<T>>) {
         channelsMutex.lock()
-        if (channels.size < 40) {
+        if (channels.size < 20) {
             channels.add(c)
         }
         channelsMutex.unlock()
@@ -142,9 +141,7 @@ class Factory(tag: String = "d"): ThreadFactory {
             namePrefix + threadNumber.getAndIncrement(),
             0
         )
-        // this was false before, now setting it to true as we are creating only Daemon threads
-        // through this call
-        t.isDaemon = true
+        if (t.isDaemon) t.isDaemon = false
         if (t.priority != Thread.NORM_PRIORITY) t.priority = Thread.NORM_PRIORITY
         return t
     }

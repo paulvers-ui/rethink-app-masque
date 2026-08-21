@@ -15,11 +15,10 @@
  */
 package com.celzero.bravedns.service
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_DNS
-import com.celzero.bravedns.util.Logger.LOG_TAG_FIREWALL
+import Logger
+import Logger.LOG_TAG_DNS
+import Logger.LOG_TAG_FIREWALL
 import android.content.Context
-import android.os.SystemClock.elapsedRealtime
 import android.util.Patterns
 import androidx.lifecycle.LiveData
 import com.celzero.bravedns.R
@@ -27,8 +26,10 @@ import com.celzero.bravedns.RethinkDnsApplication.Companion.DEBUG
 import com.celzero.bravedns.database.CustomDomain
 import com.celzero.bravedns.database.CustomDomainRepository
 import com.celzero.bravedns.util.Constants
-import com.celzero.bravedns.util.Utilities.isAtleastR
+import com.celzero.bravedns.util.Utilities.togs
+import com.celzero.bravedns.util.Utilities.tos
 import com.celzero.firestack.backend.Backend
+import com.celzero.firestack.backend.Gostr
 import com.celzero.firestack.backend.RadixTree
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -42,12 +43,12 @@ object DomainRulesManager : KoinComponent {
 
     private val db by inject<CustomDomainRepository>()
 
-    private val trie: RadixTree = Backend.newRadixTree()
+    private var trie: RadixTree = Backend.newRadixTree()
     // fixme: find a better way to handle trusted domains without using two data structures
     // map to store the trusted domains with set of uids
     private val trustedMap = ConcurrentHashMap<String, Set<Int>>()
     // even though we have trustedMap, we need to keep the trie for wildcard matching
-    private val trustedTrie: RadixTree = Backend.newRadixTree()
+    private var trustedTrie: RadixTree = Backend.newRadixTree()
 
     // regex to check if url is valid wildcard domain
     // valid wildcard domain: *.eu, *.com, *.example.com, *.example.co.in, *.do-main.com
@@ -115,21 +116,21 @@ object DomainRulesManager : KoinComponent {
         trie.set(key, value)
     }
 
-    private fun mkTrieKey(d: String, uid: Int): String? {
+    private fun mkTrieKey(d: String, uid: Int): Gostr? {
         // *.google.co.uk -> .google.co.uk,<uid>
         // not supported by IpTrie: google.* -> google.,<uid>
         val domain = d.removePrefix("*")
-        return (domain.lowercase(Locale.ROOT) + Backend.Ksep + uid)
+        return (domain.lowercase(Locale.ROOT) + Backend.Ksep + uid).togs()
     }
 
-    private fun mkTrieKeyForTrustedMap(d: String): String? {
+    private fun mkTrieKeyForTrustedMap(d: String): Gostr? {
         // *.google.co.uk -> .google.co.uk
         val domain = d.removePrefix("*")
-        return domain.lowercase(Locale.ROOT)
+        return domain.lowercase(Locale.ROOT).togs()
     }
 
-    private fun mkTrieValue(status: String, proxyId: String, proxyCC: String): String? {
-        return ("${status}$KV_SEP${proxyId}$KV_SEP${proxyCC}")
+    private fun mkTrieValue(status: String, proxyId: String, proxyCC: String): Gostr? {
+        return ("${status}$KV_SEP${proxyId}$KV_SEP${proxyCC}").togs()
     }
 
     suspend fun load(): Long {
@@ -141,7 +142,7 @@ object DomainRulesManager : KoinComponent {
             // not cause any issues, but to avoid unnecessary entries in the trie, skipping these
             // entries
             if (cd.uid < 0 && cd.uid != Constants.UID_EVERYBODY) {
-                Logger.i(LOG_TAG_DNS, "skipping domain rule for uid: ${cd.uid}")
+                Logger.w(LOG_TAG_DNS, "skipping domain rule for uid: ${cd.uid}")
                 return@forEach
             }
             val key = mkTrieKey(cd.domain, cd.uid)
@@ -166,7 +167,7 @@ object DomainRulesManager : KoinComponent {
         val domain = cd.domain.lowercase(Locale.ROOT)
         val key = mkTrieKeyForTrustedMap(domain)
 
-        trustedTrie.set(key, cd.status.toString())
+        trustedTrie.set(key, cd.status.toString().togs())
 
         trustedMap.compute(domain) { _, old ->
             (old ?: emptySet()) + cd.uid
@@ -174,32 +175,27 @@ object DomainRulesManager : KoinComponent {
     }
 
     fun status(d: String, uid: Int): Status {
-        val st = elapsedRealtime()
         val domain = d.lowercase(Locale.ROOT)
         // check if the domain is added in custom domain list
-        when (val rule = getDomainRule(domain, uid)) {
+        when (getDomainRule(domain, uid)) {
             Status.TRUST -> {
-                Logger.d(LOG_TAG_DNS, "DomainRulesManager.getDomainRule($domain, uid=$uid) exact-trusted, time: ${elapsedRealtime() - st} ms")
                 return Status.TRUST
             }
             Status.BLOCK -> {
-                Logger.d(LOG_TAG_DNS, "DomainRulesManager.getDomainRule($domain, uid=$uid) exact-blocked, time: ${elapsedRealtime() - st} ms")
                 return Status.BLOCK
             }
             Status.NONE -> {
-                Logger.d(LOG_TAG_DNS, "DomainRulesManager.getDomainRule($domain, uid=$uid) exact-none, time: ${elapsedRealtime() - st} ms")
+                // fall-through
             }
         }
 
         // check if the received domain is matching with the custom wildcard
-        val wc = matchesWildcard(domain, uid)
-        Logger.d(LOG_TAG_DNS, "DomainRulesManager.matchesWildcard($domain, uid=$uid) status=$wc, time: ${elapsedRealtime() - st} ms")
-        return wc
+        return matchesWildcard(domain, uid)
     }
 
     private fun matchesWildcard(domain: String, uid: Int): Status {
         val key = mkTrieKey(domain, uid)
-        val match = trie.getAny(key) // matches the longest prefix
+        val match = trie.getAny(key).tos() // matches the longest prefix
         if (match.isNullOrEmpty()) {
             // no match found, return NONE
             if (DEBUG) Logger.vv(LOG_TAG_DNS, "matchesWildcard: $domain($uid), no match found")
@@ -213,7 +209,7 @@ object DomainRulesManager : KoinComponent {
 
     fun getDomainRule(domain: String, uid: Int): Status {
         val key = mkTrieKey(domain, uid)
-        val match = trie.get(key)
+        val match = trie.get(key).tos()
         if (match.isNullOrEmpty()) {
             // no match found, return NONE
             if (DEBUG) Logger.vv(LOG_TAG_DNS, "domain rule for $key, no match found")
@@ -225,64 +221,12 @@ object DomainRulesManager : KoinComponent {
         return res
     }
 
-    // evaluates domain rules for the given domain(s) and uid.
-    // on Android R and above, only the first domain is considered, as the Go backend supplies it
-    // as the accurate domain. Returns the resolved Status along with the matched domain (trust
-    // takes precedence over block); NONE otherwise. Used by the tunnel managers.
-    fun getAggregatedDomainRule(domain: String?, uid: Int): Pair<Status, String?> {
-        if (domain.isNullOrEmpty()) {
-            return Pair(Status.NONE, "")
-        }
-
-        val domains = if (isAtleastR()) {
-            // on Android R and above, go will give the first domain as the accurate domain so
-            // no need to check further domains
-            val d = domain.lowercase(Locale.ROOT).split(",").firstOrNull()
-            if (d.isNullOrEmpty()) return Pair(Status.NONE, "")
-            listOf(d)
-        } else {
-            domain.lowercase(Locale.ROOT).split(",")
-        }
-
-        if (domains.isEmpty()) {
-            return Pair(Status.NONE, "")
-        }
-
-        var hasTrustedDomain = false
-        var trustedDomain = ""
-        var hasBlockedDomain = false
-        var blockedDomain = ""
-        for (d in domains) {
-            when (status(d, uid)) {
-                Status.TRUST -> {
-                    hasTrustedDomain = true
-                    trustedDomain = d
-                }
-
-                Status.BLOCK -> {
-                    hasBlockedDomain = true
-                    blockedDomain = d
-                }
-
-                else -> {
-                    // no-op
-                }
-            }
-        }
-
-        return when {
-            hasTrustedDomain -> Pair(Status.TRUST, trustedDomain)
-            hasBlockedDomain -> Pair(Status.BLOCK, blockedDomain)
-            else -> Pair(Status.NONE, "")
-        }
-    }
-
     fun getProxyForDomain(uid: Int, domain: String): Pair<String, String> {
         try {
             val key = mkTrieKey(domain, uid)
             var proxyId = ""
             var proxyCC = ""
-            val match = trie.get(key)
+            val match = trie.get(key).tos()
             if (match.isNullOrEmpty()) {
                 return Pair("", "")
             }
@@ -300,7 +244,7 @@ object DomainRulesManager : KoinComponent {
             if (proxyId.isNotEmpty() || proxyCC.isNotEmpty()) {
                 return Pair(proxyId, proxyCC)
             } else {
-                val wild = trie.getAny(key)
+                val wild = trie.getAny(key).tos()
                 if (wild.isNullOrEmpty()) return Pair("", "")
 
                 val wildParts = wild.split(KV_SEP)
@@ -316,15 +260,11 @@ object DomainRulesManager : KoinComponent {
     }
 
     fun isDomainTrusted(d: String?): Boolean {
-        val st = elapsedRealtime()
         if (d.isNullOrEmpty()) {
-            Logger.d(LOG_TAG_DNS, "DomainRulesManager.isDomainTrusted(empty) for $d, time: ${elapsedRealtime() - st} ms")
             return false
         }
-        val domain = d.lowercase(Locale.ROOT)
-        val res = trustedTrie.hasAny(domain)
-        Logger.d(LOG_TAG_DNS, "DomainRulesManager.isDomainTrusted($domain) result=$res, time: ${elapsedRealtime() - st} ms")
-        return res
+        val domain = d.lowercase(Locale.ROOT).togs()
+        return trustedTrie.hasAny(domain)
     }
 
     suspend fun trust(cd: CustomDomain) {
@@ -396,7 +336,7 @@ object DomainRulesManager : KoinComponent {
         if (result == null) {
             trustedTrie.del(key)
         } else {
-            trustedTrie.set(key, status.id.toString())
+            trustedTrie.set(key, status.id.toString().togs())
         }
     }
 
@@ -462,7 +402,7 @@ object DomainRulesManager : KoinComponent {
 
     suspend fun deleteRulesByUid(uid: Int) {
         db.deleteRulesByUid(uid)
-        val rulesDeleted = trie.delAll(uid.toString())
+        val rulesDeleted = trie.delAll(uid.toString().togs())
         Logger.i(LOG_TAG_DNS, "rules deleted from trie for $uid: $rulesDeleted")
         clearTrustedMap(uid)
     }
@@ -512,7 +452,6 @@ object DomainRulesManager : KoinComponent {
                 updateUid(uid, newUid)
             }
         }
-        Logger.i(LOG_TAG_FIREWALL, "domain rules updated")
     }
 
     suspend fun updateUid(uid: Int, newUid: Int) {
@@ -542,7 +481,7 @@ object DomainRulesManager : KoinComponent {
     }
 
     private fun clearTrie(uid: Int) {
-        trie.delAll(uid.toString())
+        trie.delAll(uid.toString().togs())
     }
 
     suspend fun setCC(cd: CustomDomain, cc: String) {

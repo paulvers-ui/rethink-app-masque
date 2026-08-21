@@ -59,14 +59,4 @@ interface ProxyEndpointDAO {
 
     @Query("select * from ProxyEndpoint where proxyMode = 1 and isSelected = 1")
     suspend fun getConnectedHttpProxy(): ProxyEndpoint?
-
-
-    @Query("select * from ProxyEndpoint where isSelected = 1 and (proxyMode = 2 or proxyMode = 3)")
-    suspend fun getConnectedOrbotProxy(): ProxyEndpoint?
-
-    @Query("select * from ProxyEndpoint where proxyMode = 2") // 2 for Orbot SOCKS5
-    suspend fun getOrbotSocks5Endpoint(): ProxyEndpoint?
-
-    @Query("select * from ProxyEndpoint where proxyMode = 3") // 3 for Orbot HTTP
-    suspend fun getOrbotHttpEndpoint(): ProxyEndpoint?
 }

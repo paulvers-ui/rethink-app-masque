@@ -15,8 +15,8 @@
  */
 package com.celzero.bravedns.backup
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_BACKUP_RESTORE
+import Logger
+import Logger.LOG_TAG_BACKUP_RESTORE
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageInfo
@@ -25,19 +25,19 @@ import androidx.core.net.toUri
 import androidx.preference.PreferenceManager
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.celzero.bravedns.backup.BackupHelper.Companion.BACKUP_WG_DIR
 import com.celzero.bravedns.backup.BackupHelper.Companion.DATA_BUILDER_RESTORE_URI
 import com.celzero.bravedns.backup.BackupHelper.Companion.METADATA_FILENAME
 import com.celzero.bravedns.backup.BackupHelper.Companion.SHARED_PREFS_BACKUP_FILE_NAME
-import com.celzero.bravedns.backup.BackupHelper.Companion.TEMP_WG_DIR
 import com.celzero.bravedns.backup.BackupHelper.Companion.VERSION
 import com.celzero.bravedns.backup.BackupHelper.Companion.deleteResidue
 import com.celzero.bravedns.backup.BackupHelper.Companion.getTempDir
+import com.celzero.bravedns.backup.BackupHelper.Companion.startVpn
 import com.celzero.bravedns.backup.BackupHelper.Companion.stopVpn
 import com.celzero.bravedns.backup.BackupHelper.Companion.unzip
-import com.celzero.bravedns.data.AppConfig
 import com.celzero.bravedns.database.AppDatabase
 import com.celzero.bravedns.database.LogDatabase
+import com.celzero.bravedns.database.WgConfigFilesRepository
+import com.celzero.bravedns.service.EncryptedFileManager
 import com.celzero.bravedns.service.PersistentState
 import com.celzero.bravedns.service.RethinkBlocklistManager
 import com.celzero.bravedns.util.Constants
@@ -50,15 +50,44 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
 import java.io.InputStream
-import java.io.ObjectInputStream
+
+// SECURITY (VULN, Insecure Deserialization / CWE-502): see notes in BackupAgent.
+// The .rbk shared-pref blob is now a strict JSON envelope prefixed with the magic
+// "RTHK_PREFS_V2_JSON\n". Any other content (including the legacy ObjectStream
+// magic 0xACED) is refused without ever instantiating arbitrary classes.
+private const val RTHK_PREFS_MAGIC = "RTHK_PREFS_V2_JSON\n"
+private const val RTHK_PREFS_MAX_BYTES = 8 * 1024 * 1024 // 8 MiB hard cap
+
+private fun isLegacyObjectStream(bytes: ByteArray): Boolean {
+    // java ObjectStream STREAM_MAGIC is 0xACED followed by version 0x0005.
+    return bytes.size >= 2 && (bytes[0].toInt() and 0xff) == 0xac && (bytes[1].toInt() and 0xff) == 0xed
+}
+
+private fun readPrefsBackupBytes(prefsBackupFile: java.io.File): ByteArray? {
+    if (!prefsBackupFile.exists()) return null
+    val len = prefsBackupFile.length()
+    if (len <= 0L || len > RTHK_PREFS_MAX_BYTES) return null
+    return FileInputStream(prefsBackupFile).use { it.readBytes() }
+}
+
+private fun parsePrefsJsonEnvelope(bytes: ByteArray): org.json.JSONObject? {
+    val magic = RTHK_PREFS_MAGIC.toByteArray(Charsets.UTF_8)
+    if (bytes.size < magic.size) return null
+    for (i in magic.indices) if (bytes[i] != magic[i]) return null
+    val jsonText = String(bytes, magic.size, bytes.size - magic.size, Charsets.UTF_8)
+    return try {
+        val obj = org.json.JSONObject(jsonText)
+        if (obj.optString("format") != "RTHK_PREFS_JSON") null else obj
+    } catch (_: Exception) { null }
+}
 
 class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams), KoinComponent {
 
     private val logDatabase by inject<LogDatabase>()
     private val appDatabase by inject<AppDatabase>()
-    private val appConfig by inject<AppConfig>()
     private val persistentState by inject<PersistentState>()
+    private val wgConfigFilesRepository by inject<WgConfigFilesRepository>()
 
     companion object {
         const val TAG = "RestoreAgent"
@@ -76,6 +105,14 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
 
         Logger.i(LOG_TAG_BACKUP_RESTORE, "completed restore process, is successful? $result")
         return if (result) {
+            // Bug fix: restart VPN after a successful restore so DNS resolves immediately;
+            // previously stopVpn() was called at the start of restore but startVpn() was
+            // never called on the success path, leaving the tunnel permanently down.
+            // Drop WireGuard rows whose encrypted config file is missing on disk.
+            // Restore does not carry over the wireguard/ directory, so any pre-existing
+            // rows without a matching file would surface as "invalid config" in the UI.
+            pruneOrphanWireguardConfigs()
+            startVpn(context)
             Result.success()
         } else {
             Result.failure()
@@ -133,16 +170,6 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
                 // proceed
             }
 
-            // copy wireguard contents into temp_wg folder
-            // if wireguard copy failed, the proceed with cleanup
-            if (!restoreWireGuardFiles(tempDir)) {
-                Logger.w(LOG_TAG_BACKUP_RESTORE, "failed to restore wireguard files, return failure")
-                // clear WireGuard related entries from database
-                wireGuardCleanup()
-            } else {
-                Logger.i(LOG_TAG_BACKUP_RESTORE, "wireguard files restored to the temp dir")
-            }
-
             // open log database if its not open
             handleDatabaseInit()
 
@@ -154,11 +181,6 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
 
             // clean up the temp directory
             deleteRecursive(tempDir)
-
-            // WG configs are restored during RefreshDatabase.ACTION_REFRESH_RESTORE
-            // which runs after app restart with fresh Room connections.
-            // The caller (HomeScreenActivity.observeRestoreWorker) triggers the
-            // restart after this worker returns success.
 
             return true
         } catch (e: Exception) {
@@ -179,20 +201,12 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
             persistentState.remoteBlocklistTimestamp >
             Constants.PACKAGED_REMOTE_FILETAG_TIMESTAMP
         ) {
-            try {
-                RethinkBlocklistManager.readJson(
-                    context,
-                    RethinkBlocklistManager.DownloadType.REMOTE,
-                    persistentState.remoteBlocklistTimestamp
-                )
-                return
-            } catch (_: Exception) {
-                Logger.w(
-                    LOG_TAG_BACKUP_RESTORE,
-                    "remote blocklist file not found locally (timestamp: ${persistentState.remoteBlocklistTimestamp}), falling back to packaged asset"
-                )
-                // fall through to use the packaged asset version
-            }
+            RethinkBlocklistManager.readJson(
+                context,
+                RethinkBlocklistManager.DownloadType.REMOTE,
+                persistentState.remoteBlocklistTimestamp
+            )
+            return
         }
 
         RemoteFileTagUtil.moveFileToLocalDir(context.applicationContext, persistentState)
@@ -240,13 +254,14 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
         )
         for (file in files) {
             val currentDbFile = File(context.getDatabasePath(file.name).path)
-            if (
-                !file.name.contains(AppDatabase.DATABASE_NAME) &&
-                    !file.name.contains(LogDatabase.LOGS_DATABASE_NAME)
-            ) {
-                Logger.w(
+            // Firewall-only restore: only restore files that belong to the main app database.
+            // LogDatabase is excluded because (a) it was not backed up in a firewall-only
+            // backup and (b) restoring connection logs from an older backup would produce
+            // confusing stale entries that are not representative of the current state.
+            if (!file.name.startsWith(AppDatabase.DATABASE_NAME)) {
+                Logger.d(
                     LOG_TAG_BACKUP_RESTORE,
-                    "restore process, file name is not db, file name: ${file.name}"
+                    "firewall-only restore: skipping non-firewall db file: ${file.name}"
                 )
                 continue
             }
@@ -263,82 +278,10 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
             )
         }
 
+        deleteResidue(tempDir)
         return true
     }
 
-    private fun checkPoint() {
-        Logger.i(LOG_TAG_BACKUP_RESTORE, "database checkpoint() during restore process")
-        appDatabase.checkPoint()
-        logDatabase.checkPoint()
-        return
-    }
-
-    private fun restoreWireGuardFiles(dir: File): Boolean {
-        if (!dir.exists()) {
-            // no files to restore
-            Logger.i(LOG_TAG_BACKUP_RESTORE, "no wireguard files to restore")
-            return true
-        }
-
-        // store the wireguard files in the temp_wireguard folder and then copy it to the wireguard
-        // folder during db updates, database update is handled in RefreshDatabase
-        // clear if temp_wireguard folder is already there if not, create the folder
-        val tempWgDir = File(context.filesDir, TEMP_WG_DIR)
-        if (tempWgDir.exists()) {
-            Logger.d(LOG_TAG_BACKUP_RESTORE, "$TEMP_WG_DIR folder exists, delete")
-            tempWgDir.deleteRecursively()
-        }
-
-        if (!tempWgDir.mkdirs()) {
-            Logger.w(LOG_TAG_BACKUP_RESTORE, "failed to create $TEMP_WG_DIR folder")
-            return false
-        }
-
-        var totalCopied = 0
-
-        // collect .conf files from the root of the temp dir
-        val confFiles = mutableListOf<File>()
-        dir.listFiles()?.forEach { file ->
-            if (file.name.endsWith(".conf")) {
-                confFiles.add(file)
-            } else {
-                Logger.d(LOG_TAG_BACKUP_RESTORE, "not wg file, file name: ${file.name}")
-            }
-        }
-
-        // also scan the wireguard/ subdirectory (where backup saves wg files)
-        val backupWgSubDir = File(dir, BACKUP_WG_DIR)
-        if (backupWgSubDir.exists() && backupWgSubDir.isDirectory) {
-            Logger.i(LOG_TAG_BACKUP_RESTORE, "scanning wireguard/ subdirectory for .conf files")
-            backupWgSubDir.listFiles()?.forEach { file ->
-                if (file.name.endsWith(".conf") && !confFiles.any { it.name == file.name }) {
-                    confFiles.add(file)
-                }
-            }
-        }
-
-        Logger.i(LOG_TAG_BACKUP_RESTORE, "found ${confFiles.size} .conf files to restore")
-
-        confFiles.forEach { file ->
-            val currentWgFile = File(tempWgDir, file.name)
-            if (!Utilities.copy(file.path, currentWgFile.path)) {
-                Logger.w(
-                    LOG_TAG_BACKUP_RESTORE,
-                    "restore process, failure copying wireguard file: ${file.path} to ${currentWgFile.path}"
-                )
-                // no need to return false, proceed with the next file
-                // missing files database entry will be handled (deleted) in RefreshDatabase
-            } else {
-                Logger.i(
-                    LOG_TAG_BACKUP_RESTORE,
-                    "wireguard file: ${file.name} backed up from ${file.path} to ${currentWgFile.path}"
-                )
-                totalCopied++
-            }
-        }
-        Logger.i(LOG_TAG_BACKUP_RESTORE, "copied $totalCopied wireguard files to temp_wireguard")
-        return true
-    }
 
     private fun updateLatestVersion() {
         if (isNewVersion()) {
@@ -360,6 +303,13 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
         val pInfo: PackageInfo? =
             Utilities.getPackageMetadata(context.packageManager, context.packageName)
         return pInfo?.versionCode ?: 0
+    }
+
+    private fun checkPoint() {
+        Logger.i(LOG_TAG_BACKUP_RESTORE, "database checkpoint() during restore process")
+        appDatabase.checkPoint()
+        logDatabase.checkPoint()
+        return
     }
 
     private fun validateMetadata(tempDirectory: String?): Boolean {
@@ -396,53 +346,48 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
         }
     }
 
-    private fun wireGuardCleanup() {
-        if (appConfig.isWireGuardEnabled()) {
-            Logger.i(LOG_TAG_BACKUP_RESTORE, "wireGuard is enabled, reset the wireguard entries")
-            appConfig.removeAllProxies()
-        }
-        // cleaning up the wireguard entries are handled in RefreshDatabase
-    }
 
     private fun isMetadataCompatible(tempDirectory: String?): Boolean {
 
         val minVersionSupported = 24
 
-        val input: ObjectInputStream?
         val prefsBackupFile = File(tempDirectory, SHARED_PREFS_BACKUP_FILE_NAME)
-        try {
-            input = ObjectInputStream(FileInputStream(prefsBackupFile))
-
-            @Suppress("UNCHECKED_CAST")
-            val pref: Map<String, *> = input.readObject() as Map<String, *>
-
-            for (e in pref.entries) {
-                val v: Any? = e.value
-                val key: String = e.key
-
-                if (key == PersistentState.APP_VERSION) {
-                    val appVersion = v as Int
-                if (appVersion >= minVersionSupported) {
-                    Logger.d(
-                        LOG_TAG_BACKUP_RESTORE,
-                        "app version satisfies minAppVersion ($minVersionSupported), proceed with restore"
-                    )
-                    return true
-                    } else {
-                        // no-op
-                    }
-                } else {
-                    // no-op
-                }
-            }
+        val bytes = readPrefsBackupBytes(prefsBackupFile) ?: run {
+            Logger.w(LOG_TAG_BACKUP_RESTORE, "AUDIT: prefs backup missing or too large")
             return false
-        } catch (e: Exception) {
-            Logger.crash(
+        }
+        if (isLegacyObjectStream(bytes)) {
+            Logger.w(
                 LOG_TAG_BACKUP_RESTORE,
-                "exception while restoring shared pref, reason? ${e.message}",
-                e
+                "AUDIT (CWE-502): refusing legacy ObjectStream prefs backup; export a new backup with this build."
             )
             return false
+        }
+        val envelope = parsePrefsJsonEnvelope(bytes) ?: run {
+            Logger.w(LOG_TAG_BACKUP_RESTORE, "AUDIT (CWE-502): prefs backup has unexpected format; refusing.")
+            return false
+        }
+        return try {
+            val entries = envelope.optJSONArray("entries") ?: return false
+            for (i in 0 until entries.length()) {
+                val item = entries.optJSONObject(i) ?: continue
+                val key = item.optString("k", "")
+                val type = item.optString("t", "")
+                if (key == PersistentState.APP_VERSION && type == "int") {
+                    val appVersion = item.optInt("v", 0)
+                    if (appVersion >= minVersionSupported) {
+                        Logger.w(
+                            LOG_TAG_BACKUP_RESTORE,
+                            "app version $appVersion >= min $minVersionSupported, proceed with restore"
+                        )
+                        return true
+                    }
+                }
+            }
+            false
+        } catch (e: Exception) {
+            Logger.crash(LOG_TAG_BACKUP_RESTORE, "AUDIT: error parsing prefs envelope, ${e.message}", e)
+            false
         }
     }
 
@@ -471,41 +416,57 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
     }
 
     private fun restoreSharedPreferencesFromFile(tempDirectory: String?): Boolean {
-        var input: ObjectInputStream? = null
         val prefsBackupFile = File(tempDirectory, SHARED_PREFS_BACKUP_FILE_NAME)
         val currentSharedPreferences: SharedPreferences =
             PreferenceManager.getDefaultSharedPreferences(context)
 
         Logger.d(LOG_TAG_BACKUP_RESTORE, "shared pref file path: ${prefsBackupFile.path}")
         try {
-            input = ObjectInputStream(FileInputStream(prefsBackupFile))
+            val bytes = readPrefsBackupBytes(prefsBackupFile) ?: run {
+                Logger.w(LOG_TAG_BACKUP_RESTORE, "AUDIT: prefs backup missing or too large")
+                return false
+            }
+            if (isLegacyObjectStream(bytes)) {
+                Logger.w(
+                    LOG_TAG_BACKUP_RESTORE,
+                    "AUDIT (CWE-502): refusing legacy ObjectStream prefs backup; export a new backup with this build."
+                )
+                return false
+            }
+            val envelope = parsePrefsJsonEnvelope(bytes) ?: run {
+                Logger.w(LOG_TAG_BACKUP_RESTORE, "AUDIT (CWE-502): prefs backup has unexpected format; refusing.")
+                return false
+            }
+
+            val entries = envelope.optJSONArray("entries") ?: return false
             val prefsEditor = currentSharedPreferences.edit()
             prefsEditor.clear()
-            @Suppress("UNCHECKED_CAST")
-            val pref: Map<String, *> = input.readObject() as Map<String, *>
-
-            for (e in pref.entries) {
-                if (!shouldRestorePref(e.key)) {
-                    Logger.i(LOG_TAG_BACKUP_RESTORE, "Skipping security pref: ${e.key}")
-                    continue
-                }
-                Logger.i(LOG_TAG_BACKUP_RESTORE, "Restoring shared pref: ${e.key}")
-                val v: Any? = e.value
-                val key: String = e.key
-
-                when (v) {
-                    is Boolean -> prefsEditor.putBoolean(key, (v as Boolean?)!!)
-                    is Float -> prefsEditor.putFloat(key, (v as Float?)!!)
-                    is Int -> prefsEditor.putInt(key, (v as Int?)!!)
-                    is Long -> prefsEditor.putLong(key, (v as Long?)!!)
-                    is String -> prefsEditor.putString(key, v as String?)
+            for (i in 0 until entries.length()) {
+                val item = entries.optJSONObject(i) ?: continue
+                val key = item.optString("k", "")
+                if (key.isEmpty()) continue
+                when (item.optString("t", "")) {
+                    "bool" -> prefsEditor.putBoolean(key, item.optBoolean("v", false))
+                    "int" -> prefsEditor.putInt(key, item.optInt("v", 0))
+                    "long" -> prefsEditor.putLong(key, item.optLong("v", 0L))
+                    "float" -> prefsEditor.putFloat(key, item.optDouble("v", 0.0).toFloat())
+                    "string" -> prefsEditor.putString(key, item.optString("v", ""))
+                    "stringset" -> {
+                        val arr = item.optJSONArray("v") ?: continue
+                        val set = LinkedHashSet<String>(arr.length())
+                        for (j in 0 until arr.length()) {
+                            val s = arr.optString(j, null) ?: continue
+                            set.add(s)
+                        }
+                        prefsEditor.putStringSet(key, set)
+                    }
+                    else -> {
+                        Logger.w(LOG_TAG_BACKUP_RESTORE, "AUDIT: unknown pref type for key='$key', skipping")
+                    }
                 }
             }
             prefsEditor.apply()
-            Logger.i(
-                LOG_TAG_BACKUP_RESTORE,
-                "completed restore of shared pref values, ${pref.entries}"
-            )
+            Logger.i(LOG_TAG_BACKUP_RESTORE, "completed restore of ${entries.length()} shared pref entries")
             return true
         } catch (e: Exception) {
             Logger.crash(
@@ -516,17 +477,29 @@ class RestoreAgent(val context: Context, workerParams: WorkerParameters) :
             return false
         } finally {
             deleteResidue(prefsBackupFile)
-            try {
-                input?.close()
-            } catch (e: IOException) {
-                // no-op
-            }
         }
     }
 
-    private fun shouldRestorePref(key: String): Boolean {
-        return !key.contains("androidx.security", ignoreCase = true) &&
-                !key.contains("keyset", ignoreCase = true) &&
-                !key.contains("master_key", ignoreCase = true)
+    private suspend fun pruneOrphanWireguardConfigs() {
+        try {
+            val rows = wgConfigFilesRepository.getWgConfigs()
+            var pruned = 0
+            rows.forEach { row ->
+                val readable = try {
+                    EncryptedFileManager.readWireguardConfig(context, row.configPath) != null
+                } catch (e: Exception) {
+                    Logger.w(LOG_TAG_BACKUP_RESTORE, "prune: read failed id=${row.id} name=${row.name}: ${e.message}")
+                    false
+                }
+                if (!readable) {
+                    Logger.i(LOG_TAG_BACKUP_RESTORE, "prune: dropping orphan wg id=${row.id} name=${row.name}")
+                    wgConfigFilesRepository.deleteConfig(row.id)
+                    pruned++
+                }
+            }
+            Logger.i(LOG_TAG_BACKUP_RESTORE, "prune: removed $pruned orphan wg configs")
+        } catch (e: Exception) {
+            Logger.w(LOG_TAG_BACKUP_RESTORE, "prune: failed: ${e.message}")
+        }
     }
 }

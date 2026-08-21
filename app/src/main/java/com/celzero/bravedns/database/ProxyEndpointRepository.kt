@@ -48,23 +48,11 @@ class ProxyEndpointRepository(private val proxyEndpointDAO: ProxyEndpointDAO) {
         return proxyEndpointDAO.getHttpProxyDetails()
     }
 
-    suspend fun getOrbotSocks5Endpoint(): ProxyEndpoint? {
-        return proxyEndpointDAO.getOrbotSocks5Endpoint()
-    }
-
-    suspend fun getOrbotHttpEndpoint(): ProxyEndpoint? {
-        return proxyEndpointDAO.getOrbotHttpEndpoint()
-    }
-
     suspend fun getConnectedHttpProxy(): ProxyEndpoint? {
         return proxyEndpointDAO.getConnectedHttpProxy()
     }
 
     fun getConnectedProxyLiveData(): LiveData<ProxyEndpoint?> {
         return proxyEndpointDAO.getConnectedProxyLiveData()
-    }
-
-    suspend fun getConnectedOrbotProxy(): ProxyEndpoint? {
-        return proxyEndpointDAO.getConnectedOrbotProxy()
     }
 }

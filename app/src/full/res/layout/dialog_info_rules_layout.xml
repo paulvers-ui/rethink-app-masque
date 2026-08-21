@@ -27,9 +27,9 @@
                 android:layout_alignParentEnd="true"
                 android:src="@android:drawable/ic_menu_close_clear_cancel" />
 
-            <com.google.android.material.button.MaterialButton
+            <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/info_rules_dialog_ok_btn"
-                style="@style/Widget.Material3.Button.TextButton.Dialog"
+                style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_toStartOf="@id/info_rules_dialog_cancel_img"

@@ -1,7 +1,7 @@
 package com.celzero.bravedns.service
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_FIREWALL
+import Logger
+import Logger.LOG_TAG_FIREWALL
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -12,6 +12,7 @@ import com.celzero.bravedns.database.AppInfoRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.util.concurrent.TimeUnit
 
@@ -47,7 +48,7 @@ class TempAllowExpiryWorker(
     companion object : KoinComponent {
         private const val UNIQUE_WORK_NAME = "fw_temp_allow_expiry"
 
-        private val db by inject<AppInfoRepository>()
+        private val db get() = get<AppInfoRepository>()
 
         fun scheduleNext(context: Context) {
             val now = System.currentTimeMillis()
@@ -85,3 +86,4 @@ class TempAllowExpiryWorker(
         }
     }
 }
+

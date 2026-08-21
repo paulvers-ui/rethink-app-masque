@@ -25,7 +25,7 @@ class RemoteBlocklistPacksMap {
     var group: String
 
     override fun equals(other: Any?): Boolean {
-        if (other !is LocalBlocklistPacksMap) return false
+        if (other !is RemoteBlocklistPacksMap) return false
         if (pack != other.pack) return false
         if (level != other.level) return false
         return true

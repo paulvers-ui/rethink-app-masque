@@ -15,8 +15,8 @@
  */
 package com.celzero.bravedns.service
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_CONNECTION
+import Logger
+import Logger.LOG_TAG_CONNECTION
 import android.content.Context
 import android.net.ConnectivityDiagnosticsManager
 import android.net.Network
@@ -136,7 +136,7 @@ class DiagnosticsManager(
 
         try {
             cdm = context.getSystemService("connectivity_diagnostics") as ConnectivityDiagnosticsManager
-            val executor = Daemons.make("conndiag").executor
+            val executor = Daemons.make("diagExecutor").executor
             cdm?.registerConnectivityDiagnosticsCallback(diagRequest, executor, this)
             logd("$TAG; nw diags mgr registered")
         } catch (e: Exception) {

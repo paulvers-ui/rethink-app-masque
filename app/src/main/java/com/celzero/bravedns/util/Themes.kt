@@ -15,10 +15,8 @@
  */
 package com.celzero.bravedns.util
 
-import android.view.Window
-import androidx.core.view.WindowInsetsControllerCompat
 import com.celzero.bravedns.R
-import com.celzero.bravedns.util.Utilities.isAtleastQ
+import com.celzero.bravedns.util.Utilities.isAtleastS
 
 // Application themes enum
 enum class Themes(val id: Int) {
@@ -36,14 +34,22 @@ enum class Themes(val id: Int) {
         }
 
         fun getAvailableThemeCount(): Int {
-            return entries.count()
+            return if (isAtleastS()) {
+                entries.count()
+            } else {
+                // Exclude LIGHT_FROST and DARK_FROST for pre-Android S devices
+                entries.count() - 2
+            }
         }
 
         fun isFrostTheme(id: Int): Boolean {
             return id == DARK_FROST.id
         }
 
-        fun isThemeAvailable(_id: Int): Boolean {
+        fun isThemeAvailable(id: Int): Boolean {
+            if (isFrostTheme(id)) {
+                return isAtleastS()
+            }
             return true
         }
 
@@ -68,79 +74,26 @@ enum class Themes(val id: Int) {
                 TRUE_BLACK.id -> R.style.BottomSheetDialogThemeTrueBlack
                 LIGHT_PLUS.id -> R.style.BottomSheetDialogThemeWhitePlus
                 DARK_PLUS.id -> R.style.BottomSheetDialogThemeTrueBlackPlus
-                DARK_FROST.id -> R.style.BottomSheetDialogThemeTrueBlackFrost
+                // for now use same as dark, can be changed later
+                DARK_FROST.id -> R.style.BottomSheetDialogThemeTrueBlack
                 else -> 0
             }
         }
 
+        // This fork ships a single theme: DARK_PLUS. Every other option was removed
+        // from the picker, and these resolvers ignore both the system setting and any
+        // theme id previously persisted by an older build, so upgrading installs land
+        // on Dark Plus too instead of being stuck on a theme they can no longer pick.
+        // The enum itself is intentionally left intact -- it is referenced from ~40
+        // files, and deleting entries would break them for no user-visible gain.
+        @Suppress("UNUSED_PARAMETER")
         fun getCurrentTheme(isDarkThemeOn: Boolean, theme: Int): Int {
-            return if (theme == SYSTEM_DEFAULT.id) {
-                if (isDarkThemeOn) {
-                    getTheme(TRUE_BLACK.id)
-                } else {
-                    getTheme(LIGHT.id)
-                }
-            } else if (theme == LIGHT.id) {
-                getTheme(theme)
-            } else if (theme == DARK.id) {
-                getTheme(theme)
-            } else if (theme == LIGHT_PLUS.id) {
-                getTheme(theme)
-            } else if (theme == DARK_PLUS.id) {
-                getTheme(theme)
-            } else if (theme == DARK_FROST.id) {
-                getTheme(theme)
-            } else {
-                getTheme(TRUE_BLACK.id)
-            }
+            return getTheme(DARK_PLUS.id)
         }
 
-        fun getBottomSheetCurrentTheme(isDarkThemeOn: Boolean, theme: Int): Int {
-            return if (theme == SYSTEM_DEFAULT.id) {
-                if (isDarkThemeOn) {
-                    getBottomSheetTheme(TRUE_BLACK.id)
-                } else {
-                    getBottomSheetTheme(LIGHT.id)
-                }
-            } else if (theme == LIGHT.id) {
-                getBottomSheetTheme(theme)
-            } else if (theme == DARK.id) {
-                getBottomSheetTheme(theme)
-            } else if (theme == LIGHT_PLUS.id) {
-                getBottomSheetTheme(theme)
-            } else if (theme == DARK_PLUS.id) {
-                getBottomSheetTheme(theme)
-            } else if (theme == DARK_FROST.id) {
-                getBottomSheetTheme(theme)
-            } else {
-                getBottomSheetTheme(TRUE_BLACK.id)
-            }
-        }
-
-        fun isBottomSheetLightTheme(isDarkThemeOn: Boolean, theme: Int): Boolean {
-            val resolved = getBottomSheetCurrentTheme(isDarkThemeOn, theme)
-            return resolved == R.style.BottomSheetDialogThemeWhite ||
-                resolved == R.style.BottomSheetDialogThemeWhitePlus
-        }
-
-        fun isActivityLightTheme(isDarkThemeOn: Boolean, theme: Int): Boolean {
-            val resolved = getCurrentTheme(isDarkThemeOn, theme)
-            return resolved == R.style.AppThemeWhite ||
-                resolved == R.style.AppThemeWhitePlus
-        }
-
-        fun applyBottomSheetSystemBarAppearance(
-            window: Window,
-            isDarkThemeOn: Boolean,
-            theme: Int
-        ) {
-            if (!isAtleastQ()) return
-            val isLight = isBottomSheetLightTheme(isDarkThemeOn, theme)
-            WindowInsetsControllerCompat(window, window.decorView).apply {
-                isAppearanceLightStatusBars = isLight
-                isAppearanceLightNavigationBars = isLight
-            }
-            window.isNavigationBarContrastEnforced = false
+        @Suppress("UNUSED_PARAMETER")
+        fun getBottomsheetCurrentTheme(isDarkThemeOn: Boolean, theme: Int): Int {
+            return getBottomSheetTheme(DARK_PLUS.id)
         }
     }
 }

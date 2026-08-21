@@ -176,7 +176,7 @@ class Peer private constructor(builder: Builder) {
      *
      * @return the `Peer` represented as a series of "key=value" lines
      */
-    suspend fun toWgUserspaceString(isAmz: Boolean): String {
+    fun toWgUserspaceString(isAmz: Boolean): String {
         val sb = StringBuilder()
         // The order here is important: public_key signifies the beginning of a new peer.
         sb.append("public_key=").append(publicKey.hex()).append('\n')
@@ -187,10 +187,8 @@ class Peer private constructor(builder: Builder) {
         } else {
             for (allowedIp in allowedIps) sb.append("allowed_ip=").append(allowedIp).append('\n')
         }
-        if (endpoint.isPresent) {
-            endpoint.get().getResolved().ifPresent { ep ->
-                sb.append("endpoint=").append(ep).append('\n')
-            }
+        endpoint.flatMap<Any>(InetEndpoint::getResolved).ifPresent { ep: Any? ->
+            sb.append("endpoint=").append(ep).append('\n')
         }
         unresolvedEndpoint.ifPresent { sb.append("endpoint=").append(it).append('\n') }
         persistentKeepalive.ifPresent { pk: Int? ->

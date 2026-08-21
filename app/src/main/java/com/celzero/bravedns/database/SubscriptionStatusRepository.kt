@@ -15,8 +15,8 @@
  */
 package com.celzero.bravedns.database
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_IAB
+import Logger
+import Logger.LOG_IAB
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -65,6 +65,20 @@ class SubscriptionStatusRepository(private val subscriptionStatusDAO: Subscripti
         }
     }
 
+    suspend fun update(subscriptionStatus: SubscriptionStatus): Int {
+        return mutex.withLock {
+            try {
+                Logger.d(LOG_IAB, "$TAG Updating subscription: ${subscriptionStatus.productId}")
+                val result = subscriptionStatusDAO.update(subscriptionStatus)
+                Logger.d(LOG_IAB, "$TAG Update result: $result")
+                result
+            } catch (e: Exception) {
+                Logger.e(LOG_IAB, "$TAG Error updating subscription: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
     suspend fun insert(subscriptionStatus: SubscriptionStatus): Long {
         return mutex.withLock {
             try {
@@ -80,36 +94,16 @@ class SubscriptionStatusRepository(private val subscriptionStatusDAO: Subscripti
     }
 
     /**
-     * Get current active subscription.
-     *
-     * Prefers rows with valid status (Active, Cancelled, Purchased, AckPending, Grace,
-     * OnHold, Paused) to avoid returning a stale Expired row that was recently touched
-     * by an expiry-sweep method. Falls back to the most recently updated row of any
-     * status if no valid row exists.
+     * Get current active subscription
      */
     suspend fun getCurrentSubscription(): SubscriptionStatus? {
         return try {
             Logger.d(LOG_IAB, "$TAG Getting current subscription")
-            val subscription = subscriptionStatusDAO.getCurrentValidSubscription()
-                ?: subscriptionStatusDAO.getCurrentSubscription()
+            val subscription = subscriptionStatusDAO.getCurrentSubscription()
             Logger.d(LOG_IAB, "$TAG Current subscription: ${subscription?.productId}")
             subscription
         } catch (e: Exception) {
-            Logger.e(LOG_IAB, "$TAG err getting current subscription: ${e.message}", e)
-            null
-        }
-    }
-
-    /**
-     * Get a subscription row by its primary key.
-     * Used when the caller already knows the row id (e.g. to read the previous
-     * status before writing a history entry).
-     */
-    suspend fun getById(id: Int): SubscriptionStatus? {
-        return try {
-            subscriptionStatusDAO.getSubscriptionById(id)
-        } catch (e: Exception) {
-            Logger.e(LOG_IAB, "$TAG Error getting subscription by id: ${e.message}", e)
+            Logger.e(LOG_IAB, "$TAG Error getting current subscription: ${e.message}", e)
             null
         }
     }
@@ -196,20 +190,6 @@ class SubscriptionStatusRepository(private val subscriptionStatusDAO: Subscripti
     }
 
     /**
-     * Update developer payload
-     */
-    suspend fun updateDeveloperPayload(id: Int, payload: String, timestamp: Long): Int {
-        return mutex.withLock {
-            try {
-                subscriptionStatusDAO.updateDeveloperPayload(id, payload, timestamp)
-            } catch (e: Exception) {
-                Logger.e(LOG_IAB, "$TAG Error updating developer payload: ${e.message}", e)
-                throw e
-            }
-        }
-    }
-
-    /**
      * Mark expired subscriptions
      */
     suspend fun markExpiredSubscriptions(currentTime: Long): Int {
@@ -227,6 +207,23 @@ class SubscriptionStatusRepository(private val subscriptionStatusDAO: Subscripti
     }
 
     /**
+     * Delete expired subscriptions older than cutoff time
+     */
+    suspend fun deleteExpiredOlderThan(cutoffTime: Long): Int {
+        return mutex.withLock {
+            try {
+                Logger.d(LOG_IAB, "$TAG Deleting expired subscriptions older than: $cutoffTime")
+                val result = subscriptionStatusDAO.deleteExpiredOlderThan(cutoffTime)
+                Logger.d(LOG_IAB, "$TAG Deleted $result expired subscriptions")
+                result
+            } catch (e: Exception) {
+                Logger.e(LOG_IAB, "$TAG Error deleting expired subscriptions: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
+    /**
      * Get all valid subscriptions
      */
     suspend fun getValidSubscriptions(): List<SubscriptionStatus> {
@@ -234,18 +231,6 @@ class SubscriptionStatusRepository(private val subscriptionStatusDAO: Subscripti
             subscriptionStatusDAO.getValidSubscriptions()
         } catch (e: Exception) {
             Logger.e(LOG_IAB, "$TAG Error getting valid subscriptions: ${e.message}", e)
-            emptyList()
-        }
-    }
-
-    /**
-     * Get subscriptions by multiple status values
-     */
-    suspend fun getSubscriptionsByStates(statuses: List<Int>): List<SubscriptionStatus> {
-        return try {
-            subscriptionStatusDAO.getSubscriptionsByStates(statuses)
-        } catch (e: Exception) {
-            Logger.e(LOG_IAB, "$TAG Error getting subscriptions by states: ${e.message}", e)
             emptyList()
         }
     }
@@ -349,6 +334,23 @@ class SubscriptionStatusRepository(private val subscriptionStatusDAO: Subscripti
         }
     }
 
+    /**
+     * Delete all subscriptions
+     */
+    suspend fun deleteAll(): Int {
+        return mutex.withLock {
+            try {
+                Logger.w(LOG_IAB, "$TAG Deleting all subscriptions")
+                val result = subscriptionStatusDAO.deleteAllSubscriptions()
+                Logger.w(LOG_IAB, "$TAG Deleted all subscriptions: $result")
+                result
+            } catch (e: Exception) {
+                Logger.e(LOG_IAB, "$TAG Error deleting all subscriptions: ${e.message}", e)
+                throw e
+            }
+        }
+    }
+
     // Private helper methods
 
     private fun validateSubscriptionStatus(subscriptionStatus: SubscriptionStatus) {
@@ -358,20 +360,23 @@ class SubscriptionStatusRepository(private val subscriptionStatusDAO: Subscripti
         require(subscriptionStatus.productId.isNotEmpty()) {
             "Product ID cannot be empty"
         }
-
-        // accountId can be empty for test purchases; log a warning but do not block the write.
-        if (subscriptionStatus.accountId.isEmpty()) {
-            Logger.w(LOG_IAB, "$TAG Subscription has empty accountId for product: ${subscriptionStatus.productId}")
+        require(subscriptionStatus.accountId.isNotEmpty()) {
+            "Account ID cannot be empty"
         }
 
-        // status == -1 is the unset default (SubscriptionStatus() before status is assigned).
-        // Only validate when a real status value has been written.
-        if (subscriptionStatus.status != -1) {
-            val validStatuses = SubscriptionStatus.SubscriptionState.entries.map { it.id }
-            require(subscriptionStatus.status in validStatuses) {
-                "Invalid subscription status: ${subscriptionStatus.status}"
+        // Validate status is within valid range
+        val validStatuses = SubscriptionStatus.SubscriptionState.entries.map { it.id }
+        require(subscriptionStatus.status in validStatuses) {
+            "Invalid subscription status: ${subscriptionStatus.status}"
+        }
+
+        // Validate expiry times
+        /*if (subscriptionStatus.billingExpiry > 0 && subscriptionStatus.accountExpiry > 0) {
+            require(subscriptionStatus.accountExpiry >= subscriptionStatus.billingExpiry) {
+                "Account expiry must be >= billing expiry, but got " +
+                        "accountExpiry=${subscriptionStatus.accountExpiry}, billingExpiry=${subscriptionStatus.billingExpiry}"
             }
-        }
+        }*/
 
         Logger.d(LOG_IAB, "$TAG Subscription validation passed for: ${subscriptionStatus.productId}")
     }

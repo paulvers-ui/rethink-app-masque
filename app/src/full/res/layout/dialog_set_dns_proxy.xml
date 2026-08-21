@@ -8,13 +8,14 @@
     android:visibility="visible">
 
     <androidx.appcompat.widget.AppCompatTextView
+        style="@style/TextAppearance.AppCompat.Subhead"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:padding="10dp"
         android:text="@string/dns_proxy_dialog_header_dns"
-        android:textAppearance="?attr/textAppearanceTitleMedium"
-        android:textColor="?attr/primaryTextColor" />
+        android:textSize="@dimen/large_font_text_view" />
+
 
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/dialog_dns_proxy_lockdown_desc"
@@ -25,8 +26,7 @@
         android:paddingTop="10dp"
         android:paddingEnd="10dp"
         android:text="@string/settings_lock_down_mode_desc"
-        android:textAppearance="?attr/textAppearanceBodyMedium"
-        android:textColor="?attr/primaryLightColorText" />
+        android:textSize="@dimen/default_font_text_view" />
 
     <LinearLayout
         android:id="@+id/dialog_dns_proxy_spinner_header"
@@ -43,8 +43,7 @@
             android:layout_gravity="center"
             android:layout_weight="0.3"
             android:text="@string/settings_dns_proxy_dialog_app"
-            android:textAppearance="?attr/textAppearanceBodyLarge"
-            android:textColor="?attr/primaryTextColor" />
+            android:textSize="@dimen/large_font_text_view" />
 
         <androidx.appcompat.widget.AppCompatSpinner
             android:id="@+id/dialog_proxy_spinner_appname"
@@ -52,7 +51,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:layout_weight="0.7"
-            android:textAppearance="?attr/textAppearanceBodyLarge" />
+            android:textSize="@dimen/large_font_text_view" />
 
     </LinearLayout>
 
@@ -69,8 +68,7 @@
             android:layout_gravity="center"
             android:layout_weight="0.3"
             android:text="@string/dns_proxy_name"
-            android:textAppearance="?attr/textAppearanceBodyLarge"
-            android:textColor="?attr/primaryTextColor" />
+            android:textSize="@dimen/large_font_text_view" />
 
         <androidx.appcompat.widget.AppCompatEditText
             android:id="@+id/dialog_dns_proxy_edit_name"
@@ -81,7 +79,7 @@
             android:hint="@string/dns_proxy_name"
             android:inputType="textNoSuggestions"
             android:maxLines="1"
-            android:textAppearance="?attr/textAppearanceBodyLarge" />
+            android:textSize="@dimen/large_font_text_view" />
 
     </LinearLayout>
 
@@ -99,8 +97,7 @@
             android:layout_gravity="center"
             android:layout_weight="0.3"
             android:text="@string/dns_proxy_ip_address"
-            android:textAppearance="?attr/textAppearanceBodyLarge"
-            android:textColor="?attr/primaryTextColor" />
+            android:textSize="@dimen/large_font_text_view" />
 
         <androidx.appcompat.widget.AppCompatEditText
             android:id="@+id/dialog_dns_proxy_edit_ip"
@@ -110,7 +107,7 @@
             android:layout_weight="0.7"
             android:hint="@string/dns_proxy_ip_address"
             android:maxLines="1"
-            android:textAppearance="?attr/textAppearanceBodyLarge" />
+            android:textSize="@dimen/large_font_text_view" />
 
     </LinearLayout>
 
@@ -127,8 +124,7 @@
             android:layout_gravity="center"
             android:layout_weight="0.3"
             android:text="@string/dns_proxy_port"
-            android:textAppearance="?attr/textAppearanceBodyLarge"
-            android:textColor="?attr/primaryTextColor" />
+            android:textSize="@dimen/large_font_text_view" />
 
         <androidx.appcompat.widget.AppCompatEditText
             android:id="@+id/dialog_dns_proxy_edit_port"
@@ -140,7 +136,7 @@
             android:hint="@string/dns_proxy_port"
             android:inputType="number"
             android:maxLines="1"
-            android:textAppearance="?attr/textAppearanceBodyLarge" />
+            android:textSize="@dimen/large_font_text_view" />
 
     </LinearLayout>
 
@@ -150,8 +146,8 @@
         android:layout_height="wrap_content"
         android:paddingStart="10dp"
         android:paddingEnd="10dp"
-        android:textAppearance="?attr/textAppearanceBodyMedium"
-        android:textColor="?attr/colorError" />
+        android:textColor="@color/colorRed_A400"
+        android:textSize="@dimen/default_font_text_view" />
 
     <LinearLayout
         android:id="@+id/dialog_dns_proxy_exclude_apps_header"
@@ -167,18 +163,19 @@
             android:layout_gravity="center"
             android:layout_weight="0.9"
             android:text="@string/settings_exclude_proxy_apps_heading"
-            android:textAppearance="?attr/textAppearanceBodyLarge"
-            android:textColor="?attr/primaryTextColor" />
+            android:textSize="@dimen/large_font_text_view" />
 
-        <com.google.android.material.checkbox.MaterialCheckBox
+        <androidx.appcompat.widget.AppCompatCheckBox
             android:id="@+id/dialog_dns_proxy_exclude_apps_check"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:layout_weight="0.1"
-            android:buttonTint="?attr/accentGood" />
+            android:buttonTint="?attr/accentGood"
+            android:foregroundTint="?attr/accentGood" />
 
     </LinearLayout>
+
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -188,22 +185,24 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/dialog_dns_proxy_cancel_btn"
-            style="@style/Widget.Material3.Button.TextButton.Dialog"
+            style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_margin="5dp"
             android:gravity="center"
             android:text="@string/lbl_cancel"
-            android:textColor="?attr/accentGood" />
+            android:textColor="?attr/accentGood"
+            android:textSize="@dimen/large_font_text_view" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/dialog_dns_proxy_apply_btn"
-            style="@style/Widget.Material3.Button.TextButton.Dialog"
+            style="@style/Widget.AppCompat.Button.ButtonBar.AlertDialog"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_margin="5dp"
             android:gravity="center"
             android:text="@string/lbl_add"
-            android:textColor="?attr/accentGood" />
+            android:textColor="?attr/accentGood"
+            android:textSize="@dimen/large_font_text_view" />
     </LinearLayout>
 </LinearLayout>

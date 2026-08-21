@@ -15,16 +15,18 @@
  */
 package com.celzero.bravedns.service
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_UI
-import com.celzero.bravedns.util.Logger.LOG_TAG_VPN
+import Logger
+import Logger.LOG_TAG_UI
+import Logger.LOG_TAG_VPN
 import androidx.lifecycle.MutableLiveData
 import com.celzero.bravedns.util.Constants.Companion.INIT_TIME_MS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 // should this be replaced with developer.android.com/reference/android/os/CountDownTimer?
@@ -33,16 +35,24 @@ object PauseTimer {
     // default duration for pause state: 15mins
     val DEFAULT_PAUSE_TIME_MS = TimeUnit.MINUTES.toMillis(15)
 
-    private val countdownMs: AtomicLong = AtomicLong(DEFAULT_PAUSE_TIME_MS)
-    private val pauseCountDownTimer: MutableLiveData<Long> = MutableLiveData()
+    private var countdownMs: AtomicLong = AtomicLong(DEFAULT_PAUSE_TIME_MS)
+    private var pauseCountDownTimer: MutableLiveData<Long> = MutableLiveData()
     private const val COUNT_DOWN_INTERVAL = 1000L
 
     // increment/decrement value to pause vpn
     val PAUSE_VPN_EXTRA_MILLIS = TimeUnit.MINUTES.toMillis(1)
 
+    // Tracks the active timer job so a second start() cancels the previous loop.
+    private var timerJob: Job? = null
+    // Set to false by stop() so the finally block knows not to call resumeApp().
+    private val naturalExpiry = AtomicBoolean(false)
+
     fun start(durationMs: Long) {
         Logger.d(LOG_TAG_UI, "timer started, duration: $durationMs")
-        io {
+        // Cancel any existing timer loop before starting a new one.
+        timerJob?.cancel()
+        naturalExpiry.set(true)
+        timerJob = CoroutineScope(Dispatchers.IO).launch {
             try {
                 setCountdown(durationMs)
                 while (countdownMs.get() > 0L) {
@@ -51,7 +61,8 @@ object PauseTimer {
                 }
             } finally {
                 Logger.d(LOG_TAG_VPN, "pause timer complete")
-                if (VpnController.isAppPaused()) {
+                // Only resume the app when the timer expired naturally, not when stop() was called.
+                if (naturalExpiry.get() && VpnController.isAppPaused()) {
                     VpnController.resumeApp()
                 }
                 setCountdown(INIT_TIME_MS)
@@ -72,6 +83,9 @@ object PauseTimer {
     }
 
     fun stop() {
+        naturalExpiry.set(false)
+        timerJob?.cancel()
+        timerJob = null
         setCountdown(INIT_TIME_MS)
     }
 
@@ -86,6 +100,4 @@ object PauseTimer {
     fun getPauseCountDownObserver(): MutableLiveData<Long> {
         return pauseCountDownTimer
     }
-
-    private fun io(f: suspend () -> Unit) = CoroutineScope(Dispatchers.IO).launch { f() }
 }

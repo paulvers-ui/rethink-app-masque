@@ -68,22 +68,6 @@ interface SubscriptionStatusDao {
     @Query("SELECT * FROM SubscriptionStatus ORDER BY lastUpdatedTs DESC LIMIT 1")
     suspend fun getCurrentSubscription(): SubscriptionStatus?
 
-    /**
-     * Returns the current *valid* subscription: one whose status is Active (1),
-     * Cancelled (2), Purchased (5), AckPending (6), Grace (9), OnHold (10), or Paused (11).
-     * Prefers active rows; falls back to the most recently updated row of any status.
-     *
-     * This avoids the bug where [getCurrentSubscription] returns a stale Expired row
-     * that was recently touched by expiry-sweep methods.
-     */
-    @Query("""
-        SELECT * FROM SubscriptionStatus
-        WHERE status IN (1, 2, 5, 6, 9, 10, 11)
-        ORDER BY lastUpdatedTs DESC
-        LIMIT 1
-    """)
-    suspend fun getCurrentValidSubscription(): SubscriptionStatus?
-
     @Query("SELECT * FROM SubscriptionStatus ORDER BY lastUpdatedTs DESC")
     suspend fun getAllSubscriptions(): List<SubscriptionStatus>
 
@@ -117,19 +101,30 @@ interface SubscriptionStatusDao {
     @Query("UPDATE SubscriptionStatus SET accountExpiry = :expiryTime, lastUpdatedTs = :timestamp WHERE id = :id")
     suspend fun updateAccountExpiry(id: Int, expiryTime: Long, timestamp: Long): Int
 
-    @Query("UPDATE SubscriptionStatus SET developerPayload = :payload, lastUpdatedTs = :timestamp WHERE id = :id")
-    suspend fun updateDeveloperPayload(id: Int, payload: String, timestamp: Long): Int
-
     @Query(
         """
         UPDATE SubscriptionStatus 
         SET status = 3, lastUpdatedTs = :currentTime 
         WHERE billingExpiry > 0 AND billingExpiry < :currentTime 
         AND status NOT IN (3, 10)
-        AND (productId LIKE '%onetime%' OR productId LIKE '%inapp%' OR productId = 'test_product')
     """
     )
     suspend fun markExpiredSubscriptions(currentTime: Long): Int
+
+    @Query(
+        """
+        DELETE FROM SubscriptionStatus 
+        WHERE status = 3 
+        AND lastUpdatedTs < :cutoffTime
+    """
+    )
+    suspend fun deleteExpiredOlderThan(cutoffTime: Long): Int
+
+    @Query("DELETE FROM SubscriptionStatus WHERE status = :status")
+    suspend fun deleteByStatus(status: Int): Int
+
+    @Query("DELETE FROM SubscriptionStatus WHERE lastUpdatedTs < :cutoffTime")
+    suspend fun deleteOlderThan(cutoffTime: Long): Int
 
     // Reactive queries with Flow
     @Query("SELECT * FROM SubscriptionStatus ORDER BY lastUpdatedTs DESC LIMIT 1")
@@ -184,6 +179,19 @@ interface SubscriptionStatusDao {
         ORDER BY billingExpiry ASC
     """)
     suspend fun getExpiredGracePeriodSubscriptions(currentTime: Long): List<SubscriptionStatus>
+
+    // Batch operations
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(subscriptions: List<SubscriptionStatus>): List<Long>
+
+    @Update
+    suspend fun updateAll(subscriptions: List<SubscriptionStatus>): Int
+
+    @Delete
+    suspend fun deleteAll(subscriptions: List<SubscriptionStatus>): Int
+
+    @Query("DELETE FROM SubscriptionStatus")
+    suspend fun deleteAllSubscriptions(): Int
 
     // Complex state transition queries
     @Query(

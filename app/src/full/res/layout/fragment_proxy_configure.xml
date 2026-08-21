@@ -10,8 +10,8 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
         android:orientation="vertical"
+        android:layout_marginTop="10dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <androidx.appcompat.widget.AppCompatTextView
@@ -24,55 +24,31 @@
             android:paddingStart="10dp"
             android:paddingTop="10dp"
             android:paddingEnd="10dp"
-            android:gravity="center_vertical"
             android:paddingBottom="10dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
             android:text="@string/settings_lock_down_proxy_desc"
             android:textSize="@dimen/default_font_text_view"
             android:visibility="visible"
             app:drawableStartCompat="@drawable/dis_allowed" />
 
-        <RelativeLayout
-            android:id="@+id/rpn_header"
-            android:layout_width="match_parent"
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/rpn_title"
+            style="@style/TextAppearance.AppCompat.Subhead"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="55dp">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/rpn_title"
-                style="@style/TextAppearance.Material3.TitleSmall"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_centerVertical="true"
-                android:layout_alignParentStart="true"
-                android:layout_toStartOf="@id/rpn_refresh"
-                android:layout_marginTop="10dp"
-                android:layout_marginBottom="5dp"
-                android:padding="5dp"
-                android:text="@string/rpn_title"
-                android:textColor="?attr/colorPrimary" />
-
-            <androidx.appcompat.widget.AppCompatImageView
-                android:id="@+id/rpn_refresh"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:layout_centerInParent="true"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:layout_gravity="center"
-                android:layout_marginEnd="20dp"
-                android:padding="5dp"
-                android:src="@drawable/ic_refresh_white" />
-
-        </RelativeLayout>
+            android:layout_marginStart="55dp"
+            android:fontFamily="sans-serif-smallcaps"
+            android:lineSpacingExtra="5dp"
+            android:padding="5dp"
+            android:visibility="gone"
+            android:text="Rethink Proxy Network (RPN)"
+            android:textColor="?attr/accentGood"
+            android:textSize="@dimen/extra_large_font_text_view"
+            android:textStyle="bold" />
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardElevation="4dp"
-            android:layout_margin="4dp"
-            app:cardCornerRadius="8dp">
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -81,11 +57,12 @@
 
                 <RelativeLayout
                     android:id="@+id/settings_activity_rpn_container"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="?android:attr/selectableItemBackground"
                     android:paddingTop="15dp"
-                    android:paddingBottom="15dp">
+                    android:paddingBottom="15dp"
+                    android:visibility="visible">
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/settings_activity_rpn_icon"
@@ -96,8 +73,8 @@
                         android:layout_marginTop="5dp"
                         android:layout_marginEnd="5dp"
                         android:layout_marginBottom="5dp"
-                        android:alpha="0.5"
                         android:padding="10dp"
+                        android:alpha="0.5"
                         android:src="@drawable/ic_rethink_plus_sparkle" />
 
                     <LinearLayout
@@ -113,7 +90,7 @@
                             style="@style/TextAppearance.AppCompat.Subhead"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/proxy_rpn_heading"
+                            android:text="Rethink's Proxy Network"
                             android:textSize="@dimen/large_font_text_view" />
 
                         <androidx.appcompat.widget.AppCompatTextView
@@ -123,9 +100,8 @@
                             android:layout_gravity="center_vertical"
                             android:paddingTop="5dp"
                             android:paddingBottom="5dp"
-                            android:text="@string/proxy_rpn_desc_inactive"
+                            android:text="Reimagine the way you use the internet"
                             android:textSize="@dimen/default_font_text_view" />
-
                     </LinearLayout>
 
                     <androidx.appcompat.widget.AppCompatImageView
@@ -152,16 +128,18 @@
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/settings_wireguard_title"
-                style="@style/TextAppearance.Material3.TitleSmall"
+                style="@style/TextAppearance.AppCompat.Subhead"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_centerVertical="true"
                 android:layout_marginStart="55dp"
-                android:layout_marginTop="10dp"
-                android:layout_marginBottom="5dp"
+                android:fontFamily="sans-serif-smallcaps"
+                android:lineSpacingExtra="5dp"
                 android:padding="5dp"
                 android:text="@string/lbl_wireguard"
-                android:textColor="?attr/colorPrimary" />
+                android:textColor="?attr/accentGood"
+                android:textSize="@dimen/extra_large_font_text_view"
+                android:textStyle="bold" />
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/wg_refresh"
@@ -172,18 +150,365 @@
                 android:layout_gravity="center"
                 android:layout_marginEnd="20dp"
                 android:padding="5dp"
-                android:visibility="gone"
                 android:src="@drawable/ic_refresh_white" />
 
         </RelativeLayout>
 
 
-        <com.google.android.material.card.MaterialCardView
+<!-- WARP Tunnel Section -->
+<com.google.android.material.card.MaterialCardView
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
+    android:layout_marginBottom="4dp">
+
+    <LinearLayout
+        android:id="@+id/settings_activity_warp_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Title row -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardElevation="4dp"
-            android:layout_margin="4dp"
-            app:cardCornerRadius="8dp">
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:id="@+id/settings_activity_warp_img"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_vpn"
+                android:contentDescription="WARP Icon"
+                android:tint="?attr/accentGood" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/warp_tunnel_title"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/accentGood" />
+
+                <TextView
+                    android:id="@+id/settings_activity_warp_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/warp_status_unregistered"
+                    android:textSize="12sp"
+                    android:layout_marginTop="4dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Connect/disconnect switch row -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:visibility="gone"
+            android:id="@+id/settings_activity_warp_switch_row">
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/settings_activity_warp_switch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:padding="10dp" />
+
+        </RelativeLayout>
+
+        <!-- WireGuard -> WARP(SOCKS5) double hop -->
+        <LinearLayout
+            android:id="@+id/settings_activity_wg_s5_hop_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="wireguard - socks5 double hop"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/settings_activity_wg_s5_hop_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="route active WireGuard tunnels through WARP (127.0.0.1:40000)"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/settings_activity_wg_s5_hop_switch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp" />
+        </LinearLayout>
+
+
+        <!-- SNI override editor: max 20 chars, default cloudflare.com -->
+          <LinearLayout
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:layout_marginTop="12dp"
+              android:gravity="center_vertical"
+              android:orientation="horizontal">
+
+              <com.google.android.material.textfield.TextInputLayout
+                  android:layout_width="0dp"
+                  android:layout_height="wrap_content"
+                  android:layout_weight="1"
+                  android:hint="SNI (ClientHello)">
+
+                  <com.google.android.material.textfield.TextInputEditText
+                      android:id="@+id/settings_activity_warp_sni_edit"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:inputType="textUri"
+                      android:maxLength="20"
+                      android:singleLine="true"
+                      android:text="cloudflare.com" />
+              </com.google.android.material.textfield.TextInputLayout>
+
+              <com.google.android.material.button.MaterialButton
+                  android:id="@+id/settings_activity_warp_sni_save_btn"
+                  style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:layout_marginStart="8dp"
+                  android:text="Save"
+                  android:textColor="?attr/primaryTextColor" />
+
+              <com.google.android.material.button.MaterialButton
+                  android:id="@+id/settings_activity_warp_sni_reset_btn"
+                  style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:layout_marginStart="8dp"
+                  android:text="Reset"
+                  android:textColor="?attr/primaryTextColor" />
+          </LinearLayout>
+
+          <!-- config.json editor: advanced users can inspect/modify the
+               WARP registration payload produced by `usque register`. Hidden
+               until the device is registered. -->
+          <LinearLayout
+              android:id="@+id/settings_activity_warp_config_row"
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:layout_marginTop="12dp"
+              android:orientation="vertical"
+              android:visibility="gone">
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="WARP config.json"
+                  android:textSize="14sp"
+                  android:textStyle="bold" />
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="2dp"
+                  android:text="Advanced. Save restarts WARP if it is running."
+                  android:textSize="11sp"
+                  android:alpha="0.7" />
+
+              <com.google.android.material.textfield.TextInputLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="6dp"
+                  android:hint="config.json">
+
+                  <com.google.android.material.textfield.TextInputEditText
+                      android:id="@+id/settings_activity_warp_config_edit"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:minLines="6"
+                      android:maxLines="18"
+                      android:gravity="top|start"
+                      android:inputType="textMultiLine|textNoSuggestions"
+                      android:fontFamily="monospace"
+                      android:textSize="12sp"
+                      android:scrollbars="vertical" />
+              </com.google.android.material.textfield.TextInputLayout>
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="6dp"
+                  android:gravity="end"
+                  android:orientation="horizontal">
+
+                  <com.google.android.material.button.MaterialButton
+                      android:id="@+id/settings_activity_warp_config_reload_btn"
+                      style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:text="Reload"
+                      android:textColor="?attr/primaryTextColor" />
+
+                  <com.google.android.material.button.MaterialButton
+                      android:id="@+id/settings_activity_warp_config_save_btn"
+                      style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:layout_marginStart="8dp"
+                      android:text="Save"
+                      android:textColor="?attr/primaryTextColor" />
+              </LinearLayout>
+          </LinearLayout>
+
+          <!-- libusque.so argument editor: shows the exact CLI args passed
+               to the WARP binary and lets advanced users override them.
+               {config} is replaced with the on-disk config.json path,
+               {sni} with the current spoofed-SNI setting. Save restarts
+               WARP if it is running. Reset restores the default template. -->
+          <LinearLayout
+              android:id="@+id/settings_activity_warp_args_row"
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:layout_marginTop="12dp"
+              android:orientation="vertical"
+              android:visibility="gone">
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="libusque.so arguments"
+                  android:textSize="14sp"
+                  android:textStyle="bold" />
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="2dp"
+                  android:text="Advanced. Space-separated. Use {config} for the config.json path and {sni} for the spoofed SNI. Save restarts WARP if it is running."
+                  android:textSize="11sp"
+                  android:alpha="0.7" />
+
+              <com.google.android.material.textfield.TextInputLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="6dp"
+                  android:hint="socks -b 127.0.0.1 -p 40000 -c {config}">
+
+                  <com.google.android.material.textfield.TextInputEditText
+                      android:id="@+id/settings_activity_warp_args_edit"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:minLines="2"
+                      android:maxLines="6"
+                      android:gravity="top|start"
+                      android:inputType="textMultiLine|textNoSuggestions"
+                      android:autoLink="none"
+                      android:linksClickable="false"
+                      android:fontFamily="monospace"
+                      android:textSize="12sp"
+                      android:scrollbars="vertical" />
+              </com.google.android.material.textfield.TextInputLayout>
+
+              <!-- Read-only echo of the fully-substituted argv that will
+                   be passed to libusque.so on next start. Updates after
+                   Save / Reset / Reload so advanced users can verify their
+                   edits actually landed (e.g. that the ipv6 flag is present). -->
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="4dp"
+                  android:text="Effective args (next start):"
+                  android:textSize="11sp"
+                  android:alpha="0.7" />
+
+              <TextView
+                  android:id="@+id/settings_activity_warp_args_effective"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="2dp"
+                  android:fontFamily="monospace"
+                  android:textSize="11sp"
+                  android:textIsSelectable="true"
+                  android:textColor="?attr/accentGood" />
+
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="6dp"
+                  android:gravity="end"
+                  android:orientation="horizontal">
+
+                  <com.google.android.material.button.MaterialButton
+                      android:id="@+id/settings_activity_warp_args_reset_btn"
+                      style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:text="Reset"
+                      android:textColor="?attr/primaryTextColor" />
+
+                  <com.google.android.material.button.MaterialButton
+                      android:id="@+id/settings_activity_warp_args_reload_btn"
+                      style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:layout_marginStart="8dp"
+                      android:text="Reload"
+                      android:textColor="?attr/primaryTextColor" />
+
+                  <com.google.android.material.button.MaterialButton
+                      android:id="@+id/settings_activity_warp_args_save_btn"
+                      style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:layout_marginStart="8dp"
+                      android:text="Save"
+                      android:textColor="?attr/primaryTextColor" />
+              </LinearLayout>
+          </LinearLayout>
+
+          <!-- Register button (centered, visible until registered) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/settings_activity_warp_register_btn"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="12dp"
+            android:text="@string/warp_register_button"
+            android:textColor="?attr/primaryTextColor" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -253,113 +578,24 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/orbot_title"
-            style="@style/TextAppearance.Material3.TitleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="55dp"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="5dp"
-            android:padding="5dp"
-            android:text="@string/orbot"
-            android:textColor="?attr/colorPrimary" />
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardElevation="4dp"
-            android:layout_margin="4dp"
-            app:cardCornerRadius="8dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical">
-
-                <RelativeLayout
-                    android:id="@+id/settings_activity_orbot_container"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="?android:attr/selectableItemBackground"
-                    android:paddingTop="15dp"
-                    android:paddingBottom="20dp"
-                    android:visibility="visible">
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/settings_activity_orbot_icon"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_centerVertical="true"
-                        android:layout_marginStart="5dp"
-                        android:layout_marginTop="5dp"
-                        android:layout_marginEnd="5dp"
-                        android:layout_marginBottom="5dp"
-                        android:padding="10dp"
-                        android:src="@drawable/ic_orbot" />
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_centerVertical="true"
-                        android:layout_toStartOf="@id/settings_activity_orbot_img"
-                        android:layout_toEndOf="@id/settings_activity_orbot_icon"
-                        android:baselineAligned="true"
-                        android:orientation="vertical">
-
-                        <androidx.appcompat.widget.AppCompatTextView
-                            style="@style/TextAppearance.AppCompat.Subhead"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/settings_orbot_heading"
-                            android:textSize="@dimen/large_font_text_view" />
-
-                        <androidx.appcompat.widget.AppCompatTextView
-                            android:id="@+id/settings_activity_http_orbot_desc"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="fill"
-                            android:paddingTop="5dp"
-                            android:paddingBottom="5dp"
-                            android:text="@string/settings_orbot_desc"
-                            android:textSize="@dimen/default_font_text_view" />
-                    </LinearLayout>
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/settings_activity_orbot_img"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_alignParentEnd="true"
-                        android:layout_centerVertical="true"
-                        android:layout_marginEnd="10dp"
-                        android:padding="10dp"
-                        android:src="@drawable/ic_arrow_down_small" />
-
-                </RelativeLayout>
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/other_title"
-            style="@style/TextAppearance.Material3.TitleSmall"
+            style="@style/TextAppearance.AppCompat.Subhead"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="55dp"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="5dp"
+            android:fontFamily="sans-serif-smallcaps"
+            android:lineSpacingExtra="5dp"
             android:padding="5dp"
             android:text="@string/category_name_others"
-            android:textColor="?attr/colorPrimary" />
+            android:textColor="?attr/accentGood"
+            android:textSize="@dimen/extra_large_font_text_view"
+            android:textStyle="bold" />
 
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardElevation="4dp"
-            android:layout_margin="4dp"
-            app:cardCornerRadius="8dp">
+            android:layout_height="wrap_content">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -410,9 +646,9 @@
                             android:textSize="@dimen/default_font_text_view" />
                     </LinearLayout>
 
-                    <com.google.android.material.materialswitch.MaterialSwitch
+                    <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/settings_activity_socks5_switch"
-                        style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                        style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_alignParentEnd="true"
@@ -478,9 +714,9 @@
                             android:textSize="@dimen/default_font_text_view" />
                     </LinearLayout>
 
-                    <com.google.android.material.materialswitch.MaterialSwitch
+                    <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/settings_activity_http_proxy_switch"
-                        style="@style/CustomWidget.Material3.CompoundButton.MaterialSwitch"
+                        style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_alignParentEnd="true"

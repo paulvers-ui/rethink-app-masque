@@ -19,7 +19,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.widget.Button
 import androidx.test.core.app.ApplicationProvider
-import io.mockk.unmockkAll
+import io.mockk.*
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -29,10 +29,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
 import org.robolectric.shadows.ShadowLooper
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
+import kotlin.test.*
 
 /**
  * Unit tests for HomeScreenActivity's showDownloadDialog() method
@@ -54,7 +51,12 @@ class HomeScreenActivityDialogTest {
 
     @Before
     fun setUp() {
+        // Stop any Koin left over from a previous test class before getting the context,
+        // so the Application's possible startKoin call in onCreate() doesn't conflict.
+        try { org.koin.core.context.stopKoin() } catch (_: Exception) { /* ignore */ }
         context = ApplicationProvider.getApplicationContext<Context>()
+        // Stop whatever Koin was started by the Application (if any), so tests are Koin-free.
+        try { org.koin.core.context.stopKoin() } catch (_: Exception) { /* ignore */ }
         ShadowAlertDialog.reset()
     }
 
@@ -68,6 +70,7 @@ class HomeScreenActivityDialogTest {
             }
         }
         ShadowAlertDialog.reset()
+        try { org.koin.core.context.stopKoin() } catch (_: Exception) { /* ignore */ }
         unmockkAll()
     }
 

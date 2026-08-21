@@ -15,29 +15,27 @@
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/universal_heading"
-            style="@style/TextAppearance.Material3.TitleSmall"
+            style="@style/TextAppearance.AppCompat.Subhead"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="55dp"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="5dp"
+            android:layout_marginTop="15dp"
+            android:fontFamily="sans-serif-smallcaps"
+            android:lineSpacingExtra="5dp"
             android:padding="5dp"
             android:text="@string/firewall_act_universal_tab"
-            android:textColor="?attr/colorPrimary" />
+            android:textColor="?attr/accentGood"
+            android:textSize="@dimen/extra_large_font_text_view"
+            android:textStyle="bold" />
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardElevation="4dp"
-            android:layout_margin="4dp"
-            app:cardCornerRadius="8dp">
+            android:layout_height="wrap_content">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:paddingTop="5dp"
-                android:paddingBottom="5dp">
+                android:orientation="vertical">
 
                 <RelativeLayout
                     android:id="@+id/universal_firewall_rl"
@@ -69,19 +67,21 @@
 
                         <androidx.appcompat.widget.AppCompatTextView
                             android:id="@+id/universal_firewall_txt"
-                            style="@style/TextAppearance.Material3.BodyLarge.Emphasized"
+                            style="@style/TextAppearance.AppCompat.Subhead"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/univ_firewall_heading" />
+                            android:drawablePadding="10dp"
+                            android:text="@string/univ_firewall_heading"
+                            android:textSize="@dimen/large_font_text_view" />
 
                         <androidx.appcompat.widget.AppCompatTextView
                             android:id="@+id/universal_firewall_desc"
-                            style="@style/TextAppearance.Material3.BodyMedium"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:paddingTop="3dp"
+                            android:paddingTop="5dp"
+                            android:paddingBottom="5dp"
                             android:text="@string/universal_firewall_explanation"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
+                            android:textSize="@dimen/default_font_text_view" />
                     </LinearLayout>
 
                     <androidx.appcompat.widget.AppCompatImageView
@@ -95,14 +95,6 @@
                         android:src="@drawable/ic_right_arrow_white" />
 
                 </RelativeLayout>
-
-                <com.google.android.material.divider.MaterialDivider
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="5dp"
-                    android:layout_marginBottom="5dp"
-                    android:layout_marginStart="56dp"
-                    android:layout_marginEnd="16dp" />
 
                 <RelativeLayout
                     android:id="@+id/custom_ip_domain_universal_rl"
@@ -134,19 +126,19 @@
 
                         <androidx.appcompat.widget.AppCompatTextView
                             android:id="@+id/custom_ip_domain_universal_txt"
-                            style="@style/TextAppearance.Material3.BodyLarge.Emphasized"
+                            style="@style/TextAppearance.AppCompat.Subhead"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/univ_view_blocked_ip" />
+                            android:text="@string/univ_view_blocked_ip"
+                            android:textSize="@dimen/large_font_text_view" />
 
                         <androidx.appcompat.widget.AppCompatTextView
                             android:id="@+id/custom_ip_domain_universal_desc"
-                            style="@style/TextAppearance.Material3.BodyMedium"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:paddingTop="3dp"
+                            android:paddingTop="5dp"
                             android:text="@string/univ_view_blocked_ip_desc"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
+                            android:textSize="@dimen/default_font_text_view" />
                     </LinearLayout>
 
                     <androidx.appcompat.widget.AppCompatImageView
@@ -167,22 +159,21 @@
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/app_wise_heading"
-            style="@style/TextAppearance.Material3.TitleSmall"
+            style="@style/TextAppearance.AppCompat.Subhead"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="55dp"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="5dp"
+            android:fontFamily="sans-serif-smallcaps"
+            android:lineSpacingExtra="5dp"
             android:padding="5dp"
             android:text="@string/lbl_app_wise"
-            android:textColor="?attr/colorPrimary" />
+            android:textColor="?attr/accentGood"
+            android:textSize="@dimen/extra_large_font_text_view"
+            android:textStyle="bold" />
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardElevation="4dp"
-            android:layout_margin="4dp"
-            app:cardCornerRadius="8dp">
+            android:layout_height="wrap_content">
 
             <RelativeLayout
                 android:id="@+id/app_wise_ip_domain_rl"
@@ -214,19 +205,19 @@
 
                     <androidx.appcompat.widget.AppCompatTextView
                         android:id="@+id/app_wise_ip_domain_txt"
-                        style="@style/TextAppearance.Material3.BodyLarge.Emphasized"
+                        style="@style/TextAppearance.AppCompat.Subhead"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/app_ip_domain_rules" />
+                        android:text="@string/app_ip_domain_rules"
+                        android:textSize="@dimen/large_font_text_view" />
 
                     <androidx.appcompat.widget.AppCompatTextView
                         android:id="@+id/app_wise_ip_domain_desc"
-                        style="@style/TextAppearance.Material3.BodyMedium"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingTop="3dp"
+                        android:paddingTop="5dp"
                         android:text="@string/app_ip_domain_rules_desc"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
+                        android:textSize="@dimen/default_font_text_view" />
                 </LinearLayout>
 
                 <androidx.appcompat.widget.AppCompatImageView

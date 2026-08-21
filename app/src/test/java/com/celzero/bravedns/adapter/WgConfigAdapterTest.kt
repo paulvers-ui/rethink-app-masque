@@ -24,54 +24,35 @@ import androidx.test.core.app.ApplicationProvider
 import com.celzero.bravedns.adapter.OneWgConfigAdapter.DnsStatusListener
 import com.celzero.bravedns.database.WgConfigFiles
 import com.celzero.bravedns.database.WgHopMap
-import com.celzero.bravedns.net.doh.Transaction
 import com.celzero.bravedns.service.EventLogger
 import com.celzero.bravedns.service.ProxyManager
 import com.celzero.bravedns.service.ProxyManager.ID_WG_BASE
 import com.celzero.bravedns.service.VpnController
 import com.celzero.bravedns.service.WireguardManager
-import com.celzero.bravedns.util.UIUtils
 import com.celzero.bravedns.wireguard.WgHopManager
 import com.celzero.bravedns.wireguard.WgInterface
-import io.mockk.MockKAnnotations
-import io.mockk.Runs
-import io.mockk.coEvery
-import io.mockk.every
+import com.celzero.bravedns.util.UIUtils
+import com.celzero.bravedns.net.doh.Transaction
+import io.mockk.*
 import io.mockk.impl.annotations.MockK
-import io.mockk.just
-import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkAll
-import io.mockk.verify
+import org.junit.Assert.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.*
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import org.koin.core.context.GlobalContext
 import org.koin.dsl.module
 import org.koin.test.KoinTest
-import org.robolectric.RobolectricTestRunner
-import java.util.Optional
+import java.util.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-@org.robolectric.annotation.Config(
-    sdk = [28],
-    shadows = [com.celzero.bravedns.shadows.ShadowRouterStats::class]
-)
+@org.robolectric.annotation.Config(sdk = [28], application = android.app.Application::class, shadows = [com.celzero.bravedns.shadows.ShadowRouterStats::class])
 class WgConfigAdapterTest : KoinTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -82,31 +63,41 @@ class WgConfigAdapterTest : KoinTest {
     private lateinit var realAdapter: WgConfigAdapter
     private lateinit var realOneWgAdapter: OneWgConfigAdapter
 
-    @MockK private lateinit var mockDnsStatusListener: DnsStatusListener
-
-    @MockK private lateinit var mockViewHolder: WgConfigAdapter.WgInterfaceViewHolder
-
-    @MockK private lateinit var mockAdapter: WgConfigAdapter
-
-    @MockK private lateinit var mockLifecycleOwner: LifecycleOwner
-
-    @MockK private lateinit var mockLifecycle: Lifecycle
-
-    @MockK private lateinit var mockWgInterface: WgInterface
+    @MockK
+    private lateinit var mockDnsStatusListener: DnsStatusListener
 
     @MockK
-    private lateinit var eventLogger: EventLogger
+    private lateinit var mockViewHolder: WgConfigAdapter.WgInterfaceViewHolder
+
+    @MockK
+    private lateinit var mockAdapter: WgConfigAdapter
+
+    @MockK
+    private lateinit var mockLifecycleOwner: LifecycleOwner
+
+    @MockK
+    private lateinit var mockLifecycle: Lifecycle
+
+    @MockK
+    private lateinit var mockWgInterface: WgInterface
+
+    @MockK(relaxed = true)
+    private lateinit var mockEventLogger: EventLogger
 
     @Before
     fun setup() {
         MockKAnnotations.init(this)
-        Dispatchers.setMain(testDispatcher)
 
-        // Initialize Koin for dependency injection
+        // Get context FIRST so Application.onCreate() runs before we redirect Main.
+        // If setMain() is called first, app coroutines land on testDispatcher and
+        // register exceptions that appear as UncaughtExceptionsBeforeTest.
+        context = ApplicationProvider.getApplicationContext()
+
+        // Now stop whatever Koin was started (by us or by the Application) and start our own
         setupKoinForTesting()
 
-        // Use real Android context from Robolectric
-        context = ApplicationProvider.getApplicationContext()
+        // Only redirect Main AFTER Koin and the Application are fully set up
+        Dispatchers.setMain(testDispatcher)
 
         // Create real ViewGroup
         mockParent = LinearLayout(context)
@@ -117,7 +108,6 @@ class WgConfigAdapterTest : KoinTest {
         mockkObject(WireguardManager)
         mockkObject(WgHopManager)
         mockkObject(UIUtils)
-        mockkObject(EventLogger)
 
         // Setup basic mocks with CORRECT parameter types based on actual implementation
         every { ProxyManager.getAppCountForProxy(any<String>()) } returns 0
@@ -125,9 +115,9 @@ class WgConfigAdapterTest : KoinTest {
         every { WgHopManager.getMapBySrc(any<String>()) } returns emptyList()
         every { WgHopManager.getMapByHop(any<String>()) } returns emptyList()
         every { VpnController.hasTunnel() } returns true
-        coEvery { VpnController.getProxyStatusById(any<String>()) } returns Pair(1, "OK")
+        coEvery { VpnController.getProxyStatusById(any<String>()) } returns Pair(1L, "OK")
         coEvery { VpnController.getSupportedIpVersion(any<String>()) } returns Pair(true, false)
-        coEvery { VpnController.getDnsStatus(any<String>()) } returns 1
+        coEvery { VpnController.getDnsStatus(any<String>()) } returns 1L
         coEvery { VpnController.isSplitTunnelProxy(any<String>(), any()) } returns false
 
         // Don't mock getProxyStats in setup - let individual tests handle it
@@ -136,7 +126,6 @@ class WgConfigAdapterTest : KoinTest {
         // Setup UIUtils mock
         every { UIUtils.getProxyStatusStringRes(any()) } returns android.R.string.ok
         every { UIUtils.fetchColor(any(), any()) } returns 0xFF000000.toInt()
-        every { eventLogger.log(any(), any(), any(), any()) } just Runs
 
         // Setup lifecycle mocks
         every { mockLifecycleOwner.lifecycle } returns mockLifecycle
@@ -163,19 +152,18 @@ class WgConfigAdapterTest : KoinTest {
         every { mockViewHolder.cancelJobIfAny() } just Runs
 
         // Create real adapters for integration tests
-        realAdapter = WgConfigAdapter(context, mockDnsStatusListener, false, eventLogger)
-        realOneWgAdapter = OneWgConfigAdapter(context, mockDnsStatusListener, eventLogger)
+        realAdapter = WgConfigAdapter(context, mockDnsStatusListener, false, mockEventLogger)
+        realOneWgAdapter = OneWgConfigAdapter(context, mockDnsStatusListener, mockEventLogger)
     }
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
-        unmockkAll()
-
-        // Clean up Koin
-        if (GlobalContext.getOrNull() != null) {
-            GlobalContext.stopKoin()
-        }
+        // Each call is individually guarded so that a failure in one step
+        // never prevents stopKoin() from running — a leaked Koin instance
+        // causes KoinApplicationAlreadyStartedException in every subsequent class.
+        try { Dispatchers.resetMain() } catch (_: Exception) {}
+        try { unmockkAll() } catch (_: Exception) {}
+        try { GlobalContext.stopKoin() } catch (_: Exception) { /* ignore if not running */ }
     }
 
     private fun setupKoinForTesting() {
@@ -189,9 +177,7 @@ class WgConfigAdapterTest : KoinTest {
             modules(
                 module {
                     // Add specific repository mocks that the managers need
-                    single {
-                        mockk<com.celzero.bravedns.database.WgConfigFilesRepository>(relaxed = true)
-                    }
+                    single { mockk<com.celzero.bravedns.database.WgConfigFilesRepository>(relaxed = true) }
                     single { mockk<com.celzero.bravedns.database.WgHopMapRepository>(relaxed = true) }
 
                     // Add other potential dependencies
@@ -206,7 +192,6 @@ class WgConfigAdapterTest : KoinTest {
         id: Int = 1,
         name: String = "Test Config",
         isActive: Boolean = false,
-        isLockdown: Boolean = false,
         isCatchAll: Boolean = false,
         useOnlyOnMetered: Boolean = false,
         ssidEnabled: Boolean = false
@@ -216,7 +201,6 @@ class WgConfigAdapterTest : KoinTest {
         every { wgConfig.name } returns name
         every { wgConfig.isActive } returns isActive
         every { wgConfig.isCatchAll } returns isCatchAll
-        every { wgConfig.isLockdown } returns isLockdown
         every { wgConfig.useOnlyOnMetered } returns useOnlyOnMetered
         every { wgConfig.ssidEnabled } returns ssidEnabled
         return wgConfig
@@ -235,7 +219,7 @@ class WgConfigAdapterTest : KoinTest {
     fun `test real adapter initialization`() {
         assertNotNull("Real WgConfigAdapter should not be null", realAdapter)
         assertNotNull("Real OneWgConfigAdapter should not be null", realOneWgAdapter)
-
+        
         // Test initial state
         assertEquals("Initial item count should be 0", 0, realAdapter.itemCount)
         assertEquals("Initial item count should be 0", 0, realOneWgAdapter.itemCount)
@@ -258,10 +242,7 @@ class WgConfigAdapterTest : KoinTest {
         } catch (e: Exception) {
             // If ViewHolder creation fails due to resource/layout issues in test environment,
             // just verify the attempt was made and pass the test
-            assertTrue(
-                "ViewHolder creation attempted but failed due to test environment limitations: ${e.message}",
-                true
-            )
+            assertTrue("ViewHolder creation attempted but failed due to test environment limitations: ${e.message}", true)
         }
     }
 
@@ -327,7 +308,7 @@ class WgConfigAdapterTest : KoinTest {
         // Test getProxyStatusById with String parameter - SUSPEND FUNCTION
         val status = VpnController.getProxyStatusById("1001")
         assertNotNull("Expected status", status)
-        assertEquals("Expected status pair", Pair(1, "OK"), status)
+        assertEquals("Expected status pair", Pair(1L, "OK"), status)
 
         // Test getSupportedIpVersion with String parameter - SUSPEND FUNCTION
         val ipVersion = VpnController.getSupportedIpVersion("1001")
@@ -342,23 +323,21 @@ class WgConfigAdapterTest : KoinTest {
 
         // Test getDnsStatus with String parameter - SUSPEND FUNCTION
         val dnsStatus = VpnController.getDnsStatus("1001")
-        assertEquals("Expected DNS status", 1, dnsStatus)
+        assertEquals("Expected DNS status", 1L, dnsStatus)
     }
 
     // === DATA MODEL TESTS ===
 
     @Test
     fun `test WgConfigFiles creation with all properties`() {
-        val config =
-            createTestWgConfigFiles(
-                id = 123,
-                name = "TestConfig",
-                isActive = true,
-                isLockdown = false,
-                isCatchAll = true,
-                useOnlyOnMetered = true,
-                ssidEnabled = true
-            )
+        val config = createTestWgConfigFiles(
+            id = 123,
+            name = "TestConfig",
+            isActive = true,
+            isCatchAll = true,
+            useOnlyOnMetered = true,
+            ssidEnabled = true
+        )
 
         assertEquals("Expected ID: 123", 123, config.id)
         assertEquals("Expected name: TestConfig", "TestConfig", config.name)
@@ -366,13 +345,6 @@ class WgConfigAdapterTest : KoinTest {
         assertTrue("Expected isCatchAll: true", config.isCatchAll)
         assertTrue("Expected useOnlyOnMetered: true", config.useOnlyOnMetered)
         assertTrue("Expected ssidEnabled: true", config.ssidEnabled)
-    }
-
-    @Test
-    fun `test WgConfigFiles lockdown configuration`() {
-        val lockdownConfig = createTestWgConfigFiles(id = 1, isActive = false, isLockdown = true)
-
-        assertFalse("Expected isActive: false", lockdownConfig.isActive)
     }
 
     @Test
@@ -398,7 +370,11 @@ class WgConfigAdapterTest : KoinTest {
 
     @Test
     fun `test adapter with active configurations`() = testScope.runTest {
-        val activeConfig = createTestWgConfigFiles(id = 1, name = "Active Config", isActive = true)
+        val activeConfig = createTestWgConfigFiles(
+            id = 1,
+            name = "Active Config",
+            isActive = true
+        )
 
         mockViewHolder.update(activeConfig)
         verify { mockViewHolder.update(activeConfig) }
@@ -406,8 +382,11 @@ class WgConfigAdapterTest : KoinTest {
 
     @Test
     fun `test adapter with inactive configurations`() = testScope.runTest {
-        val inactiveConfig =
-            createTestWgConfigFiles(id = 2, name = "Inactive Config", isActive = false)
+        val inactiveConfig = createTestWgConfigFiles(
+            id = 2,
+            name = "Inactive Config",
+            isActive = false
+        )
 
         mockViewHolder.update(inactiveConfig)
         verify { mockViewHolder.update(inactiveConfig) }
@@ -415,8 +394,11 @@ class WgConfigAdapterTest : KoinTest {
 
     @Test
     fun `test adapter with lockdown configurations`() = testScope.runTest {
-        val lockdownConfig =
-            createTestWgConfigFiles(id = 3, name = "Lockdown Config", isActive = false, isLockdown = true)
+        val lockdownConfig = createTestWgConfigFiles(
+            id = 3,
+            name = "Lockdown Config",
+            isActive = false
+        )
 
         mockViewHolder.update(lockdownConfig)
         verify { mockViewHolder.update(lockdownConfig) }
@@ -429,13 +411,11 @@ class WgConfigAdapterTest : KoinTest {
         val catchAllConfig = createTestWgConfigFiles(isCatchAll = true)
         val meteredConfig = createTestWgConfigFiles(useOnlyOnMetered = true)
         val ssidConfig = createTestWgConfigFiles(ssidEnabled = true)
-        val combinedConfig =
-            createTestWgConfigFiles(
-                isCatchAll = true,
-                isLockdown = true,
-                useOnlyOnMetered = true,
-                ssidEnabled = true
-            )
+        val combinedConfig = createTestWgConfigFiles(
+            isCatchAll = true,
+            useOnlyOnMetered = true,
+            ssidEnabled = true
+        )
 
         // Test each configuration
         mockViewHolder.update(catchAllConfig)
@@ -451,16 +431,16 @@ class WgConfigAdapterTest : KoinTest {
     @Test
     fun `test status update scenarios`() = testScope.runTest {
         // Test different proxy statuses
-        coEvery { VpnController.getProxyStatusById("1001") } returns Pair(1, "Connected")
-        coEvery { VpnController.getProxyStatusById("1002") } returns Pair(2, "Connecting")
+        coEvery { VpnController.getProxyStatusById("1001") } returns Pair(1L, "Connected")
+        coEvery { VpnController.getProxyStatusById("1002") } returns Pair(2L, "Connecting")
         coEvery { VpnController.getProxyStatusById("1003") } returns Pair(null, "Error")
 
         val status1 = VpnController.getProxyStatusById("1001")
         val status2 = VpnController.getProxyStatusById("1002")
         val status3 = VpnController.getProxyStatusById("1003")
 
-        assertEquals("Expected connected status", Pair(1, "Connected"), status1)
-        assertEquals("Expected connecting status", Pair(2, "Connecting"), status2)
+        assertEquals("Expected connected status", Pair(1L, "Connected"), status1)
+        assertEquals("Expected connecting status", Pair(2L, "Connecting"), status2)
         assertEquals("Expected error status", Pair(null, "Error"), status3)
     }
 
@@ -569,13 +549,12 @@ class WgConfigAdapterTest : KoinTest {
 
     @Test
     fun `test complete adapter workflow`() = testScope.runTest {
-        val config =
-            createTestWgConfigFiles(
-                id = 1,
-                name = "Integration Test Config",
-                isActive = true,
-                isCatchAll = true
-            )
+        val config = createTestWgConfigFiles(
+            id = 1,
+            name = "Integration Test Config",
+            isActive = true,
+            isCatchAll = true
+        )
 
         // Test the complete workflow with proper error handling
         try {
@@ -601,13 +580,9 @@ class WgConfigAdapterTest : KoinTest {
         assertNotNull("Context should not be null", context)
         // Fix the context assertion to be more lenient
         val packageName = context.packageName
-        assertTrue(
-            "Expected valid package name, got: $packageName",
-            packageName.isNotEmpty() &&
-                (packageName.contains("test") ||
-                    packageName.contains("android") ||
-                    packageName == "org.robolectric.default")
-        )
+        // Robolectric uses the app's own package name (e.g. "com.celzero.bravedns"),
+        // not a test/robolectric sentinel value — just verify it is non-empty.
+        assertTrue("Expected valid package name, got: $packageName", packageName.isNotEmpty())
     }
 
     // Remove the problematic RouterStats tests that are causing native library issues
@@ -617,6 +592,8 @@ class WgConfigAdapterTest : KoinTest {
     // The RouterStats integration tests have been removed because they cause
     // native library loading issues that cannot be resolved in the unit test environment.
     // These would be better suited as integration tests that run on an actual device.
+
+
 
     // === ID_WG_BASE INTEGRATION TESTS ===
 
@@ -638,10 +615,10 @@ class WgConfigAdapterTest : KoinTest {
 
         configIds.forEach { configId ->
             val proxyId = ID_WG_BASE + configId
-            coEvery { VpnController.getProxyStatusById(proxyId.toString()) } returns Pair(1, "OK")
+            coEvery { VpnController.getProxyStatusById(proxyId.toString()) } returns Pair(1L, "OK")
 
             val status = VpnController.getProxyStatusById(proxyId.toString())
-            assertEquals("Expected status for config $configId", Pair(1, "OK"), status)
+            assertEquals("Expected status for config $configId", Pair(1L, "OK"), status)
         }
     }
 }

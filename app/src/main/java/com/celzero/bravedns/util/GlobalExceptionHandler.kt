@@ -15,23 +15,41 @@
  */
 package com.celzero.bravedns.util
 
-import com.celzero.bravedns.util.Logger.LOG_TAG_APP
+import Logger
+import Logger.LOG_TAG_APP
 import android.content.Context
+import android.os.Looper
 import com.celzero.bravedns.scheduler.EnhancedBugReport
 import com.celzero.bravedns.service.PersistentState
-import com.celzero.bravedns.util.Utilities.isFdroidFlavour
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.lang.ref.WeakReference
 import kotlin.system.exitProcess
 
 /**
- * Global Exception Handler for catching all uncaught exceptions
- * and reporting them to Firebase Analytics/Crashlytics
+ * Global uncaught exception handler.
+ *
+ * CARRIER-GRADE HARDENING (tests-lightver):
+ *   In this fork the app runs on always-on / block-without-VPN devices where a
+ *   process death means the whole subscriber loses connectivity ("state
+ *   blackout"). A single malformed DNS answer, a Firestack JNI callback that
+ *   raises, or an unexpected coroutine failure on a worker thread would
+ *   previously bring down the entire process because the default Android
+ *   handler calls Process.killProcess().
+ *
+ *   Policy:
+ *     - MAIN THREAD or java.lang.Error (OOM / StackOverflow / LinkageError):
+ *         propagate to the platform default handler. Swallowing an Error would
+ *         leave the JVM in an unrecoverable state; a hard-locked main thread
+ *         cannot serve VpnService callbacks anyway, so a fast restart via
+ *         START_STICKY is preferable.
+ *     - ANY OTHER background thread throwing a plain Exception:
+ *         log + report + SWALLOW. The offending thread has already terminated
+ *         by the time this handler returns; the VPN foreground service and its
+ *         sibling threads keep running so the always-on tunnel survives the
+ *         "death packet".
+ *
+ *   Do NOT weaken this behaviour without understanding the uptime requirement.
  */
 class GlobalExceptionHandler private constructor(
     private val defaultHandler: Thread.UncaughtExceptionHandler?,
@@ -39,15 +57,10 @@ class GlobalExceptionHandler private constructor(
 ) : Thread.UncaughtExceptionHandler, KoinComponent {
 
     private val contextRef: WeakReference<Context>? = contextRef?.let { WeakReference(it) }
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val persistentState by inject<PersistentState>()
     companion object {
         private var instance: GlobalExceptionHandler? = null
 
-        /**
-         * Initialize the global exception handler
-         * This should be called early in the application lifecycle
-         */
         fun initialize(ctx: Context) {
             if (instance != null) {
                 Logger.w(LOG_TAG_APP, "err-handler already initialized")
@@ -58,35 +71,56 @@ class GlobalExceptionHandler private constructor(
             instance = GlobalExceptionHandler(defaultHandler, ctx.applicationContext)
             Thread.setDefaultUncaughtExceptionHandler(instance)
 
-            Logger.i(LOG_TAG_APP, "err-handler initialized successfully")
+            Logger.i(LOG_TAG_APP, "err-handler initialized (carrier-grade mode)")
         }
 
-        /**
-         * Get the current instance of the global exception handler
-         */
         fun getInstance(): GlobalExceptionHandler? = instance
     }
 
     override fun uncaughtException(thread: Thread, throwable: Throwable) {
+        val isMainThread = try {
+            Looper.getMainLooper().thread === thread
+        } catch (_: Throwable) {
+            // if we cannot even query the main looper, default to "unsafe to swallow"
+            true
+        }
+        // Error subclasses (OOM, StackOverflow, LinkageError, ...) leave the JVM in
+        // an undefined state — never swallow them.
+        val isFatalError = throwable is Error
+
         try {
             val exception = Logger.throwableToException(throwable)
-            Logger.e(LOG_TAG_APP, "uncaught exception in thread ${thread.name}", exception)
-
-            // Report to Firebase if available
+            Logger.e(
+                LOG_TAG_APP,
+                "uncaught in thread='${thread.name}' main=$isMainThread fatal=$isFatalError",
+                exception
+            )
             reportToFirebase(exception)
-
-            // Add some custom context information
             logExceptionContext(thread, exception)
-
         } catch (e: Exception) {
             Logger.e(LOG_TAG_APP, "err while handling uncaught exception", e)
-        } finally {
-            // Call the default handler to ensure proper app termination
-            defaultHandler?.uncaughtException(thread, throwable) ?: run {
-                // If no default handler, terminate the process
-                Logger.e(LOG_TAG_APP, "no default exception handler found, terminating process")
+        }
+
+        if (isMainThread || isFatalError) {
+            // Let the platform tear the process down cleanly; Android will restart
+            // the VpnService via START_STICKY.
+            try {
+                defaultHandler?.uncaughtException(thread, throwable) ?: run {
+                    Logger.e(LOG_TAG_APP, "no default exception handler; terminating")
+                    exitProcess(1)
+                }
+            } catch (t: Throwable) {
+                Logger.e(LOG_TAG_APP, "default handler itself threw; forcing exit", null)
                 exitProcess(1)
             }
+        } else {
+            // Non-main thread, non-Error: keep the process alive so the VPN tunnel
+            // and firewall stay up. The offending thread has already died.
+            Logger.w(
+                LOG_TAG_APP,
+                "AUDIT: swallowed background-thread crash to preserve VPN uptime " +
+                    "(thread='${thread.name}', ${throwable.javaClass.simpleName}: ${throwable.message})"
+            )
         }
     }
 
@@ -94,8 +128,6 @@ class GlobalExceptionHandler private constructor(
      * Report the uncaught exception to Firebase
      */
     private fun reportToFirebase(exception: Exception) {
-        if (isFdroidFlavour()) return
-
         try {
             FirebaseErrorReporting.recordException(exception)
         } catch (e: Exception) {
@@ -110,13 +142,11 @@ class GlobalExceptionHandler private constructor(
     private fun logExceptionContext(thread: Thread, exception: Throwable) {
         try {
             val stackTrace = exception.stackTraceToString()
-            val threadInfo = "Thread: ${thread.name} (State: ${thread.state})"
+            @Suppress("DEPRECATION")
+            val threadInfo = "Thread: ${thread.name} (ID: ${thread.id}, State: ${thread.state})"
 
             val stringBuilder = StringBuilder()
             stringBuilder.appendLine("---Uncaught Exception ${thread.name}---")
-            stringBuilder.appendLine("Date: ${Utilities.convertLongToTime(System.currentTimeMillis(),
-                Constants.TIME_FORMAT_3)}")
-            stringBuilder.appendLine("App version: ${persistentState.appVersion}")
             stringBuilder.appendLine("Exception Type: ${exception.javaClass.name}")
             stringBuilder.appendLine("Exception Message: ${exception.message}")
             stringBuilder.appendLine(threadInfo)
@@ -147,36 +177,31 @@ class GlobalExceptionHandler private constructor(
      * Attempt to write logs to file with fallback options when context is unavailable
      */
     private fun writeLogsToFileWithFallback(msg: String) {
-        scope.launch {
-            try {
-                // First try: get context from WeakReference
-                val context = contextRef?.get()
-                if (context != null) {
-                    val token = persistentState.firebaseUserToken
-                    EnhancedBugReport.writeLogsToFile(context, token, msg)
-                    Logger.i(LOG_TAG_APP, "crash logs written to file successfully")
-                    return@launch
-                }
-
-                // Fallback: log warning and ensure the crash info is at least logged
-                Logger.w(
-                    LOG_TAG_APP,
-                    "context is null or has been garbage collected during crash handling"
-                )
-                Logger.w(LOG_TAG_APP, "attempting to preserve crash info in system logs")
-
-                // Additional fallback: try to write to standard error as last resort
-                try {
-                    System.err.println("=== CRITICAL CRASH INFO (Context Unavailable) ===")
-                    System.err.println(msg)
-                    System.err.println("=== END CRITICAL CRASH INFO ===")
-                } catch (e: Exception) {
-                    Logger.e(LOG_TAG_APP, "failed to write crash info to stderr", e)
-                }
-
-            } catch (e: Exception) {
-                Logger.e(LOG_TAG_APP, "err in writeLogsToFileWithFallback", e)
+        try {
+            // First try: get context from WeakReference
+            val context = contextRef?.get()
+            if (context != null) {
+                val token = persistentState.firebaseUserToken
+                EnhancedBugReport.writeLogsToFile(context, token,msg)
+                Logger.i(LOG_TAG_APP, "crash logs written to file successfully")
+                return
             }
+
+            // Fallback: log warning and ensure the crash info is at least logged
+            Logger.w(LOG_TAG_APP, "context is null or has been garbage collected during crash handling")
+            Logger.w(LOG_TAG_APP, "attempting to preserve crash info in system logs")
+
+            // Additional fallback: try to write to standard error as last resort
+            try {
+                System.err.println("=== CRITICAL CRASH INFO (Context Unavailable) ===")
+                System.err.println(msg)
+                System.err.println("=== END CRITICAL CRASH INFO ===")
+            } catch (e: Exception) {
+                Logger.e(LOG_TAG_APP, "failed to write crash info to stderr", e)
+            }
+
+        } catch (e: Exception) {
+            Logger.e(LOG_TAG_APP, "err in writeLogsToFileWithFallback", e)
         }
     }
 }

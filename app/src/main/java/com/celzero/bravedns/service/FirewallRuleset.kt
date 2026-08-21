@@ -170,12 +170,6 @@ enum class FirewallRuleset(val id: String, val title: Int, val desc: Int, val ac
         R.string.firewall_rule_exempt_dns_proxied_desc,
         R.integer.allow
     ),
-    RULE9B(
-        "Orbot setup",
-        R.string.firewall_rule_exempt_orbot_setup,
-        R.string.firewall_rule_exempt_orbot_setup_desc,
-        R.integer.allow
-    ),
     RULE10(
         "Http block",
         R.string.firewall_rule_block_http,
@@ -265,7 +259,6 @@ enum class FirewallRuleset(val id: String, val title: Int, val desc: Int, val ac
                 RULE7.id -> RULE7
                 RULE8.id -> RULE8
                 RULE9.id -> RULE9
-                RULE9B.id -> RULE9B
                 RULE10.id -> RULE10
                 RULE11.id -> RULE11
                 RULE12.id -> RULE12
@@ -308,7 +301,6 @@ enum class FirewallRuleset(val id: String, val title: Int, val desc: Int, val ac
                 RULE7.id -> R.drawable.ic_prevent_dns_leaks
                 RULE8.id -> R.drawable.bs_firewall_home_screen
                 RULE9.id -> R.drawable.bs_dns_home_screen
-                RULE9B.id -> R.drawable.ic_orbot
                 RULE10.id -> R.drawable.ic_http
                 RULE11.id -> R.drawable.ic_global_lockdown
                 RULE12.id -> R.drawable.ic_proxy_white
@@ -337,19 +329,11 @@ enum class FirewallRuleset(val id: String, val title: Int, val desc: Int, val ac
         fun isBypassRule(rule: FirewallRuleset): Boolean {
             return rule.id == RULE1H.id || rule.id == RULE2B.id || rule.id == RULE2C.id ||
                 rule.id == RULE2F.id || rule.id == RULE2H.id || rule.id == RULE2I.id ||
-                rule.id == RULE8.id || rule.id == RULE9B.id
+                rule.id == RULE8.id
         }
 
         fun isProxied(rule: FirewallRuleset): Boolean {
             return rule.id == RULE12.id
-        }
-
-        // Returns the trust/bypass rule that explains why a connection was allowed (these
-        // take precedence over universal/app block rules), or null when no such rule applied.
-        fun getAllowReason(ruleId: String?): FirewallRuleset? {
-            if (ruleId == null) return null
-            val rule = getFirewallRule(ruleId) ?: return null
-            return if (rule.act == R.integer.allow && isBypassRule(rule)) rule else null
         }
 
         fun isProxyError(rule: String?): Boolean {
@@ -371,7 +355,6 @@ enum class FirewallRuleset(val id: String, val title: Int, val desc: Int, val ac
                 RULE7.id -> true
                 RULE8.id -> true
                 RULE9.id -> true
-                RULE9B.id -> true
                 RULE15.id -> true
                 RULE19.id -> true
                 else -> false

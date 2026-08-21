@@ -19,14 +19,9 @@ import android.content.Context
 import android.util.Log
 import com.bumptech.glide.Glide
 import com.bumptech.glide.GlideBuilder
-import com.bumptech.glide.Priority
 import com.bumptech.glide.Registry
 import com.bumptech.glide.annotation.GlideModule
 import com.bumptech.glide.integration.okhttp3.OkHttpUrlLoader
-import com.bumptech.glide.load.DataSource
-import com.bumptech.glide.load.Key
-import com.bumptech.glide.load.Options
-import com.bumptech.glide.load.data.DataFetcher
 import com.bumptech.glide.load.engine.cache.InternalCacheDiskCacheFactory
 import com.bumptech.glide.load.engine.cache.LruResourceCache
 import com.bumptech.glide.load.engine.executor.GlideExecutor
@@ -37,8 +32,6 @@ import com.bumptech.glide.load.model.MultiModelLoaderFactory
 import com.bumptech.glide.module.AppGlideModule
 import okhttp3.OkHttpClient
 import java.io.InputStream
-import java.nio.ByteBuffer
-import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
@@ -61,7 +54,7 @@ class RethinkGlideModule : AppGlideModule() {
         // default disk cache executors thread count is 1, which is not enough for disk cache
         // operations. Increasing the thread count to available processors.
         val diskCacheBuilder = GlideExecutor.newDiskCacheBuilder()
-        val threadCount = Math.max(Runtime.getRuntime().availableProcessors(), 1)
+        val threadCount = Math.min(Runtime.getRuntime().availableProcessors(), 1)
         diskCacheBuilder.setThreadCount(threadCount)
         diskCacheBuilder.setName("g-disk-cache")
         builder.setDiskCacheExecutor(diskCacheBuilder.build())
@@ -76,92 +69,45 @@ class RethinkGlideModule : AppGlideModule() {
 
     override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
         super.registerComponents(context, glide, registry)
+        val client: OkHttpClient =
+            OkHttpClient.Builder()
+                .readTimeout(5, TimeUnit.SECONDS)
+                .connectTimeout(3, TimeUnit.SECONDS)
+                .build()
 
-        val client: OkHttpClient = OkHttpClient.Builder()
-            .readTimeout(5, TimeUnit.SECONDS)
-            .connectTimeout(3, TimeUnit.SECONDS)
-            .build()
-        registry.replace(GlideUrl::class.java, InputStream::class.java, OkHttpUrlLoader.Factory(client))
-
-        // Prevent NoModelLoaderAvailableException when Glide.with(...).load(Unit) is called.
-        //
-        // WHY prepend() and not replace():
-        //   replace() only replaces an *existing* registration. kotlin.Unit is not a built-in
-        //   Glide type so replace() silently does nothing, leaving Unit completely unregistered.
-        //   Glide then throws NoModelLoaderAvailableException at ResourceCacheGenerator when it
-        //   tries to build cache keys, before buildLoadData() is ever called.
-        //
-        //   prepend() inserts at the front of the loader chain unconditionally, so the
-        //   NoOpUnitLoader is found first and returns a stable LoadData (backed by a no-op
-        //   DataFetcher that calls onLoadFailed) Glide treats that as a clean cache miss and
-        //   falls through to the placeholder / error drawable without crashing.
-        registry.prepend(Unit.javaClass, InputStream::class.java, NoOpUnitInputStreamLoaderFactory())
-        registry.prepend(Unit.javaClass, ByteBuffer::class.java, NoOpUnitByteBufferLoaderFactory())
+        val factory: OkHttpUrlLoader.Factory = OkHttpUrlLoader.Factory(client)
+        registry.replace(GlideUrl::class.java, InputStream::class.java, factory)
+        
+        // handle com.bumptech.glide.Registry$NoModelLoaderAvailableException:
+        // Failed to find any ModelLoaders registered for model class: class kotlin.Unit
+        registry.append(Unit::class.java, InputStream::class.java, UnitModelLoaderFactory())
     }
 
-    inner class NoOpUnitInputStreamLoaderFactory : ModelLoaderFactory<Unit, InputStream> {
-        override fun build(multiFactory: MultiModelLoaderFactory): ModelLoader<Unit, InputStream> =
-            NoOpUnitInputStreamLoader()
-        override fun teardown() = Unit
+    // handle com.bumptech.glide.Registry$NoModelLoaderAvailableException for kotlin.Unit
+    inner class UnitModelLoaderFactory : ModelLoaderFactory<Unit, InputStream> {
+        override fun build(multiFactory: MultiModelLoaderFactory): ModelLoader<Unit, InputStream> {
+            return UnitModelLoader()
+        }
+
+        override fun teardown() {
+            // no-op
+        }
     }
 
-    inner class NoOpUnitInputStreamLoader : ModelLoader<Unit, InputStream> {
-        override fun handles(model: Unit): Boolean = true
+    // Custom ModelLoader for Unit class
+    inner class UnitModelLoader : ModelLoader<Unit, InputStream> {
+        override fun handles(model: Unit): Boolean {
+            return model == Unit
+        }
 
         override fun buildLoadData(
             model: Unit,
             width: Int,
             height: Int,
-            options: Options
-        ): ModelLoader.LoadData<InputStream> =
-            // A stable, content-free cache key so Glide can generate cache keys without crashing,
-            // paired with a fetcher that immediately reports "no data" via onLoadFailed.
-            ModelLoader.LoadData(NoOpKey, NoOpInputStreamFetcher)
-    }
-
-    inner class NoOpUnitByteBufferLoaderFactory : ModelLoaderFactory<Unit, ByteBuffer> {
-        override fun build(multiFactory: MultiModelLoaderFactory): ModelLoader<Unit, ByteBuffer> =
-            NoOpUnitByteBufferLoader()
-        override fun teardown() = Unit
-    }
-
-    inner class NoOpUnitByteBufferLoader : ModelLoader<Unit, ByteBuffer> {
-        override fun handles(model: Unit): Boolean = true
-
-        override fun buildLoadData(
-            model: Unit,
-            width: Int,
-            height: Int,
-            options: Options
-        ): ModelLoader.LoadData<ByteBuffer> =
-            ModelLoader.LoadData(NoOpKey, NoOpByteBufferFetcher)
-    }
-
-    private object NoOpKey : Key {
-        override fun updateDiskCacheKey(messageDigest: MessageDigest) {
-            messageDigest.update("NoOpUnitKey".toByteArray(Charsets.UTF_8))
+            options: com.bumptech.glide.load.Options
+        ): ModelLoader.LoadData<InputStream>? {
+            // Return null to indicate that this model cannot be loaded
+            return null
         }
-        override fun equals(other: Any?) = other is NoOpKey
-        override fun hashCode() = javaClass.hashCode()
-    }
-
-    private object NoOpInputStreamFetcher : DataFetcher<InputStream> {
-        override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
-            callback.onLoadFailed(Exception("Unit model, no image to load"))
-        }
-        override fun cleanup() = Unit
-        override fun cancel()  = Unit
-        override fun getDataClass(): Class<InputStream> = InputStream::class.java
-        override fun getDataSource(): DataSource = DataSource.LOCAL
-    }
-
-    private object NoOpByteBufferFetcher : DataFetcher<ByteBuffer> {
-        override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in ByteBuffer>) {
-            callback.onLoadFailed(Exception("Unit model, no image to load"))
-        }
-        override fun cleanup() = Unit
-        override fun cancel()  = Unit
-        override fun getDataClass(): Class<ByteBuffer> = ByteBuffer::class.java
-        override fun getDataSource(): DataSource = DataSource.LOCAL
     }
 }

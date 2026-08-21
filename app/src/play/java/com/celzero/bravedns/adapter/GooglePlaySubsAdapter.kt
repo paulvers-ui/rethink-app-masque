@@ -14,20 +14,15 @@
  * limitations under the License.
  */
 package com.celzero.bravedns.adapter
-
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_IAB
-import com.celzero.bravedns.util.Logger.LOG_TAG_UI
-import android.animation.AnimatorSet
-import android.animation.ObjectAnimator
+/*
+import Logger.LOG_IAB
+import Logger.LOG_TAG_UI
 import android.content.Context
 import android.graphics.Paint
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
-import com.android.billingclient.api.BillingClient.ProductType
 import com.celzero.bravedns.R
 import com.celzero.bravedns.databinding.ListItemPlaySubsBinding
 import com.celzero.bravedns.databinding.ListItemShimmerCardBinding
@@ -35,36 +30,26 @@ import com.celzero.bravedns.iab.InAppBillingHandler
 import com.celzero.bravedns.iab.ProductDetail
 import com.celzero.bravedns.util.UIUtils.fetchColor
 import com.facebook.shimmer.ShimmerFrameLayout
-import java.util.Locale
 
-class GooglePlaySubsAdapter(
-    val listener: SubscriptionChangeListener,
-    val context: Context,
-    var pds: List<ProductDetail> = emptyList(),
-    productId: String? = null,
-    planId: String? = null,
-    var showShimmer: Boolean = true
-) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-
-    private var selectedProductId: String? = productId
-    private var selectedPlanId: String? = planId
+class GooglePlaySubsAdapter(val listener: SubscriptionChangeListener, val context: Context, var pds: List<ProductDetail> = emptyList(), pos: Int = 0, var showShimmer: Boolean = true): RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    var selectedPos = -1
 
     companion object {
-        private const val SHIMMER_ITEM_COUNT = 4
+        private const val SHIMMER_ITEM_COUNT = 2
         private const val VIEW_TYPE_SHIMMER = 0
         private const val VIEW_TYPE_REAL = 1
-        private const val TAG = "GooglePlaySubsAdapter"
     }
+
 
     override fun getItemViewType(position: Int): Int {
         return if (showShimmer) VIEW_TYPE_SHIMMER else VIEW_TYPE_REAL
     }
 
-    override fun getItemCount(): Int {
-        return if (showShimmer) SHIMMER_ITEM_COUNT else pds.size
-    }
+    override fun onCreateViewHolder(
+        parent: ViewGroup,
+        viewType: Int
+    ): RecyclerView.ViewHolder {
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         return if (viewType == VIEW_TYPE_SHIMMER) {
             val binding = ListItemShimmerCardBinding.inflate(LayoutInflater.from(parent.context), parent, false)
             ShimmerViewHolder(binding)
@@ -74,53 +59,43 @@ class GooglePlaySubsAdapter(
         }
     }
 
-    fun setSelectedProduct(productId: String?, planId: String?) {
-        val oldId = selectedProductId
-        val oldPlanId = selectedPlanId
-        selectedProductId = productId
-        selectedPlanId = planId
-
-        val oldPos = pds.indexOfFirst { it.productId == oldId && it.planId == oldPlanId }
-        val newPos = pds.indexOfFirst { it.productId == productId && it.planId == planId }
-
-        if (oldPos != -1) notifyItemChanged(oldPos)
-        if (newPos != -1) notifyItemChanged(newPos)
+    init {
+        selectedPos = pos
     }
 
     interface SubscriptionChangeListener {
         fun onSubscriptionSelected(productId: String, planId: String)
     }
 
-    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        when (holder) {
-            is ShimmerViewHolder -> holder.shimmerLayout.startShimmer()
-            is SubscriptionPlansViewHolder -> holder.bind(pds[position], position)
+    override fun onBindViewHolder(
+        holder: RecyclerView.ViewHolder,
+        position: Int
+    ) {
+        if (holder is ShimmerViewHolder) {
+            holder.shimmerLayout.startShimmer()
+        } else if (holder is SubscriptionPlansViewHolder) {
+            holder.bind(pds[position], position)
         }
     }
 
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
-        if (holder is ShimmerViewHolder) holder.shimmerLayout.stopShimmer()
+        if (holder is ShimmerViewHolder) {
+            holder.shimmerLayout.stopShimmer()
+        }
         super.onViewRecycled(holder)
     }
 
     fun setData(data: List<ProductDetail>) {
-        Logger.d(LOG_TAG_UI, "$TAG setData called with ${data.size} products, showShimmer: $showShimmer -> false")
-        val oldList = pds
-        val wasShimmer = showShimmer
         this.pds = data
         showShimmer = false
-
-        if (wasShimmer) {
-            // transition from shimmer to real data
-            notifyDataSetChanged()
-        } else {
-            // Real data - real data: use DiffUtil
-            val diff = DiffUtil.calculateDiff(ProductDiffCallback(oldList, data))
-            diff.dispatchUpdatesTo(this)
-        }
+        notifyDataSetChanged()
     }
 
-    class ShimmerViewHolder(binding: ListItemShimmerCardBinding): RecyclerView.ViewHolder(binding.root) {
+    override fun getItemCount(): Int {
+        return if (showShimmer) SHIMMER_ITEM_COUNT else pds.size
+    }
+
+    inner class ShimmerViewHolder(private val binding: ListItemShimmerCardBinding) : RecyclerView.ViewHolder(binding.root) {
         val shimmerLayout: ShimmerFrameLayout = binding.shimmerViewContainer
     }
 
@@ -128,235 +103,72 @@ class GooglePlaySubsAdapter(
         RecyclerView.ViewHolder(binding.root) {
 
         fun bind(prod: ProductDetail, pos: Int) {
+            // remove (Rethink: DNS + Firewall + VPN) from the title
             val pricing = prod.pricingDetails.firstOrNull() ?: return
+            val title = pricing.planTitle.replace(" (Rethink: DNS + Firewall + VPN)", "")
+            var offerPrice = ""
+            var originalPrice = ""
+            /**
+            *   sample
+             * [productDetail=ProductDetail(productId=test_product_acp, planId=test-proxy-yearly, productTitle=test_product_acp (Rethink: DNS + Firewall + VPN), productType=subs, pricingDetails=[PricingPhase(recurringMode=ORIGINAL, price=₹1,700, currencyCode=INR, planTitle=Yearly, billingCycleCount=0, billingPeriod=P1Y, priceAmountMicros=1700000000, freeTrialPeriod=0)]), productDetails=ProductDetails{jsonString='{"productId":"test_product_acp","type":"subs","title":"test_product_acp (Rethink: DNS + Firewall + VPN)","name":"test_product_acp","localizedIn":["en-GB"],"skuDetailsToken":"AEuhp4JS1isixh_29bFQ6VAUZIGGn46BJIo2_Vdg5EpA40dZnrVghFzBmVEOCGhoBDTY","subscriptionOfferDetails":[{"offerIdToken":"Aezw0slCKFuN3u6CLJqjmmCXlPvzNEDtWjWlaD4dLU71Z2xdPT337FKuo8z5Q\/3dPfd8A5GAY7JiV9TByoq1EBYQRIYcIlKt\/bUO","basePlanId":"test-proxy-yearly","pricingPhases":[{"priceAmountMicros":1700000000,"priceCurrencyCode":"INR","formattedPrice":"₹1,700.00","billingPeriod":"P1Y","recurrenceMode":1}],"offerTags":[]},{"offerIdToken":"Aezw0sk0TeTw2PEG172yjUKkSak0JtKFsIcSLQUrKJDRkkSOnFxZvvhgFlLOlOp\/Jge6TIvquUNLNbQ0U5BR0wZ3PnTYUfZwnhZ2","basePlanId":"test-proxy-monthly","pricingPhases":[{"priceAmountMicros":210000000,"priceCurrencyCode":"INR","formattedPrice":"₹210.00","billingPeriod":"P1M","recurrenceMode":1}],"offerTags":[]}]}', parsedJson={"productId":"test_product_acp","type":"subs","title":"test_product_acp (Rethink: DNS + Firewall + VPN)","name":"test_product_acp","localizedIn":["en-GB"],"skuDetailsToken":"AEuhp4JS1isixh_29bFQ6VAUZIGGn46BJIo2_Vdg5EpA40dZnrVghFzBmVEOCGhoBDTY","subscriptionOfferDetails":[{"offerIdToken":"Aezw0slCKFuN3u6CLJqjmmCXlPvzNEDtWjWlaD4dLU71Z2xdPT337FKuo8z5Q\/3dPfd8A5GAY7JiV9TByoq1EBYQRIYcIlKt\/bUO","basePlanId":"test-proxy-yearly","pricingPhases":[{"priceAmountMicros":1700000000,"priceCurrencyCode":"INR","formattedPrice":"₹1,700.00","billingPeriod":"P1Y","recurrenceMode":1}],"offerTags":[]},{"offerIdToken":"Aezw0sk0TeTw2PEG172yjUKkSak0JtKFsIcSLQUrKJDRkkSOnFxZvvhgFlLOlOp\/Jge6TIvquUNLNbQ0U5BR0wZ3PnTYUfZwnhZ2","basePlanId":"test-proxy-monthly","pricingPhases":[{"priceAmountMicros":210000000,"priceCurrencyCode":"INR","formattedPrice":"₹210.00","billingPeriod":"P1M","recurrenceMode":1}],"offerTags":[]}]}, productId='test_product_acp', productType='subs', title='test_product_acp (Rethink: DNS + Firewall + VPN)', productDetailsToken='AEuhp4JS1isixh_29bFQ6VAUZIGGn46BJIo2_Vdg5EpA40dZnrVghFzBmVEOCGhoBDTY', subscriptionOfferDetails=[com.android.billingclient.api.ProductDetails$SubscriptionOfferDetails@83478a9, com.android.billingclient.api.ProductDetails$SubscriptionOfferDetails@6d10e2e]}, offerDetails=com.android.billingclient.api.ProductDetails$SubscriptionOfferDetails@83478a9), QueryProductDetail(productDetail=ProductDetail(productId=test_product_acp, planId=test-proxy-monthly, productTitle=test_product_acp (Rethink: DNS + Firewall + VPN), productType=subs, pricingDetails=[PricingPhase(recurringMode=ORIGINAL, price=₹210, currencyCode=INR, planTitle=Monthly, billingCycleCount=0, billingPeriod=P1M, priceAmountMicros=210000000, freeTrialPeriod=0)]), productDetails=ProductDetails{jsonString='{"productId":"test_product_acp","type":"subs","title":"test_product_acp (Rethink: DNS + Firewall + VPN)","name":"test_product_acp","localizedIn":["en-GB"],"skuDetailsToken":"AEuhp4JS1isixh_29bFQ6VAUZIGGn46BJIo2_Vdg5EpA40dZnrVghFzBmVEOCGhoBDTY","subscriptionOfferDetails":[{"offerIdToken":"Aezw0slCKFuN3u6CLJqjmmCXlPvzNEDtWjWlaD4dLU71Z2xdPT337FKuo8z5Q\/3dPfd8A5GAY7JiV9TByoq1EBYQRIYcIlKt\/bUO","basePlanId":"test-proxy-yearly","pricingPhases":[{"priceAmountMicros":1700000000,"priceCurrencyCode":"INR","formattedPrice":"₹1,700.00","billingPeriod":"P1Y","recurrenceMode":1}],"offerTags":[]},{"offerIdToken":"Aezw0sk0TeTw2PEG172yjUKkSak0JtKFsIcSLQUrKJDRkkSOnFxZvvhgFlLOlOp\/Jge6TIvquUNLNbQ0U5BR0wZ3PnTYUfZwnhZ2","basePlanId":"test-proxy-monthly","pricingPhases":[{"priceAmountMicros":210000000,"priceCurrencyCode":"INR","formattedPrice":"₹21
+             *
+             * Pricing Phase: DISCOUNTED, Price: ₹189, Currency: INR, Plan Title: Monthly, Billing Period: P1M, Price Amount Micros: 189000000, Free Trial Period: 0, cycleCount: 1
+             * Pricing Phase: ORIGINAL, Price: ₹210, Currency: INR, Plan Title: Monthly, Billing Period: P1M, Price Amount Micros: 210000000, Free Trial Period: 0, cycleCount: 0
+             */
 
-            val planTitle = pricing.planTitle
-
-            var currentPrice = ""
-            var currentPriceMicros = 0L
-            var discountedPrice = ""
-            var discountedPriceMicros = 0L
-            var currencyCode = ""
-            var freeTrialDays = 0
-            var isYearly = false
-
-            prod.pricingDetails.forEach { phase ->
-                when {
-                    phase.freeTrialPeriod > 0 -> freeTrialDays = phase.freeTrialPeriod
-                    phase.recurringMode == InAppBillingHandler.RecurringMode.DISCOUNTED -> {
-                        discountedPrice = phase.price
-                        discountedPriceMicros = phase.priceAmountMicros
-                        currencyCode = phase.currencyCode
-                    }
-                    phase.recurringMode == InAppBillingHandler.RecurringMode.ORIGINAL -> {
-                        currentPrice = phase.price
-                        currentPriceMicros = phase.priceAmountMicros
-                        isYearly = phase.billingPeriod.contains("Y")
-                        currencyCode = phase.currencyCode
-                    }
+            prod.pricingDetails.forEach {
+                if (it.freeTrialPeriod > 0) {
+                    offerPrice = "Trial period: ${it.freeTrialPeriod} days"
+                } else if (it.recurringMode == InAppBillingHandler.RecurringMode.DISCOUNTED && it.price.isNotEmpty()) {
+                    offerPrice = it.price
+                } else if (it.recurringMode == InAppBillingHandler.RecurringMode.ORIGINAL && it.price.isNotEmpty()) {
+                    originalPrice = it.price
                 }
             }
 
-            val displayPrice = discountedPrice.ifEmpty { currentPrice }
-            val displayPriceMicros = if (discountedPriceMicros > 0) discountedPriceMicros else currentPriceMicros
-            val isSelected = prod.productId == selectedProductId && prod.planId == selectedPlanId
-            val isInApp = prod.productType == ProductType.INAPP
-
-            // plan duration label
-            val durationMonths = getInAppDurationMonths(prod.planId)
-            binding.planDuration.text = if (isInApp && durationMonths > 0) {
-                formatDurationLabel(durationMonths, planTitle)
-            } else {
-                planTitle
-            }
-
-            Logger.d(LOG_TAG_UI, "$TAG InAppBilling Binding plan: ${prod.productId}, ${prod.planId}, Title: $planTitle, Price: $displayPrice, discount: $discountedPrice FreeTrial: $freeTrialDays days, Yearly: $isYearly, InApp: $isInApp")
-
-            // Original Price (struck through, below price)
-            if (discountedPrice.isNotEmpty() && currentPrice.isNotEmpty()) {
-                binding.originalPrice.visibility = View.VISIBLE
-                binding.originalPrice.text = currentPrice
-                binding.originalPrice.paintFlags = binding.originalPrice.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-            } else {
+            if (offerPrice.isEmpty()) {
                 binding.originalPrice.visibility = View.GONE
-            }
-
-            val durationMonthsForCalc: Int = when {
-                isInApp  -> getInAppDurationMonths(prod.planId)
-                isYearly -> 12
-                else     -> 1 // monthly subscription
-            }
-
-            if (displayPriceMicros > 0 && durationMonthsForCalc > 0) {
-                val perMonthMicros = displayPriceMicros / durationMonthsForCalc
-                val perMonthFormatted = formatMicrosAsCurrency(perMonthMicros, currencyCode, displayPrice)
-                if (perMonthFormatted != null) {
-                    binding.pricePerMonth.visibility = View.VISIBLE
-                    binding.pricePerMonth.text = context.getString(R.string.price_per_month_format, perMonthFormatted)
-                } else {
-                    binding.pricePerMonth.visibility = View.GONE
-                }
-                // Show the aggregate total only for multi-period plans (yearly subs, 2yr/5yr INAPP).
-                // For monthly subs durationMonthsForCalc == 1, so the per-month price IS the total
-                // no need to repeat it in the smaller field.
-                if (durationMonthsForCalc > 1 && displayPrice.isNotEmpty()) {
-                    binding.price.visibility = View.VISIBLE
-                    binding.price.text = displayPrice
-                } else {
-                    binding.price.text = displayPrice
-                    binding.pricePerMonth.visibility = View.GONE
-                }
+                binding.offerPrice.text = originalPrice
             } else {
-                // per-month cannot be calculated (unknown purchase duration).
-                // Show at least the full price in the primary field.
-                binding.price.visibility = View.GONE
-                if (displayPrice.isNotEmpty()) {
-                    binding.pricePerMonth.visibility = View.VISIBLE
-                    binding.pricePerMonth.text = displayPrice
-                } else {
-                    binding.pricePerMonth.visibility = View.GONE
-                }
+                binding.offerPrice.text = offerPrice
+                binding.originalPrice.visibility = View.VISIBLE
+                binding.originalPrice.paintFlags = binding.offerPrice.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+                binding.originalPrice.text = originalPrice
             }
 
-            val billingText = getBillingText(prod.productType)
-            if (freeTrialDays > 0) {
-                binding.billingInfo.text = context.getString(R.string.trial_days_format, freeTrialDays)
-            } else {
-                binding.billingInfo.text = billingText
-            }
+            binding.productName.text = title
+            setCardStroke(selectedPos == pos)
+            Logger.d(LOG_TAG_UI, "Product Title: $title (${selectedPos == pos}), Price: $originalPrice, Offer: $offerPrice")
+            setupClickListeners(prod, pos)
+        }
 
-            if (discountedPrice.isNotEmpty()) {
-                val pct = calculateSavings(currentPrice, discountedPrice)
-                if (pct > 0) {
-                    binding.savingsText.visibility = View.VISIBLE
-                    binding.savingsText.text = context.getString(R.string.save_percentage, "${pct}%")
-                } else {
-                    binding.savingsText.visibility = View.GONE
-                }
-            } else {
-                binding.savingsText.visibility = View.GONE
-            }
-
-            // selection via card stroke only (no radio button)
-            applySelectionStyle(isSelected)
-
-            Logger.d(LOG_TAG_UI, "$TAG Premium Plan: $planTitle, Price: $displayPrice, Yearly: $isYearly, Selected: $isSelected")
-
-            binding.planCard.setOnClickListener {
-                val oldId = selectedProductId
-                val oldPlanId = selectedPlanId
-                selectedProductId = prod.productId
-                selectedPlanId = prod.planId
+        private fun setupClickListeners(prod: ProductDetail, pos: Int) {
+            binding.subsCard.setOnClickListener {
+                // update the selected item
+                selectedPos = pos
+                // inform the activity about the selected item
                 listener.onSubscriptionSelected(prod.productId, prod.planId)
-                Logger.d(LOG_IAB, "Selected Plan: ${prod.productId}, ${prod.planId}")
-
-                val oldPos = pds.indexOfFirst { it.productId == oldId && it.planId == oldPlanId }
-                if (oldPos != -1) notifyItemChanged(oldPos)
-                notifyItemChanged(pos)
-                animateSelection()
+                Logger.d(LOG_IAB, "Selected Subscription: ${prod.productId}, ${prod.planId}")
+                notifyDataSetChanged()
             }
         }
 
-        /**
-         * Returns the total duration in months for a given plan ID, or 0 if unknown.
-         */
-        private fun getInAppDurationMonths(planId: String): Int = when (planId) {
-            InAppBillingHandler.ONE_TIME_PRODUCT_2YRS -> 24
-            InAppBillingHandler.ONE_TIME_PRODUCT_5YRS -> 60
-            InAppBillingHandler.ONE_TIME_PRODUCT_ID -> 24 // legacy default 2yr
-            else -> 0
-        }
-
-        /**
-         * Formats a duration in months to a human-readable label like "2 Years" or appends to
-         * planTitle.
-         */
-        private fun formatDurationLabel(months: Int, planTitle: String): String {
-            return when {
-                months >= 12 && months % 12 == 0 -> {
-                    val yrs = months / 12
-                    context.resources.getQuantityString(R.plurals.duration_years, yrs, yrs)
-                }
-                else -> planTitle
-            }
-        }
-
-        /**
-         * Attempts to format [micros] as a currency string using the same symbol/format as
-         * [sampleFormatted] (the already-formatted full price from Play). Strips digits/decimal
-         * from [sampleFormatted] and replaces with the per-month amount.
-         */
-        private fun formatMicrosAsCurrency(micros: Long, currencyCode: String, sampleFormatted: String): String? {
-            return try {
-                val amount = micros / 1_000_000.0
-                // Extract currency prefix/suffix from sample (e.g. "₹" or "US$")
-                val numericPart = sampleFormatted.replace(Regex("[0-9,. ]+"), "").trim()
-                val formatted = if (amount >= 100) {
-                    String.format(Locale.getDefault(), "%.0f", amount)
-                } else {
-                    String.format(Locale.getDefault(), "%.2f", amount).trimEnd('0').trimEnd('.')
-                }
-                if (numericPart.isNotEmpty()) "$numericPart$formatted" else "$currencyCode $formatted"
-            } catch (e: Exception) {
-                Logger.w(LOG_TAG_UI, "$TAG GPPA err formatting micros as currency, ${e.message}")
-                null
-            }
-        }
-
-        private fun applySelectionStyle(selected: Boolean) {
-            if (selected) {
-                binding.planCard.strokeWidth = 3
-                binding.planCard.strokeColor = fetchColor(context, R.attr.accentGood)
-                binding.planCard.cardElevation = context.resources.displayMetrics.density * 4f
+        private fun setCardStroke(checked: Boolean) {
+            if (checked) {
+                binding.subsCard.strokeWidth = 2
             } else {
-                binding.planCard.strokeWidth = 1
-                binding.planCard.strokeColor = fetchColor(context, R.attr.chipBgColorNeutral)
-                binding.planCard.cardElevation = context.resources.displayMetrics.density * 1f
+                binding.subsCard.strokeWidth = 0
             }
+            binding.subsCard.strokeColor = getStrokeColorForStatus(checked)
         }
 
-        private fun animateSelection() {
-            val scaleX = ObjectAnimator.ofFloat(binding.planCard, "scaleX", 1f, 0.96f, 1f)
-            val scaleY = ObjectAnimator.ofFloat(binding.planCard, "scaleY", 1f, 0.96f, 1f)
-            AnimatorSet().apply {
-                playTogether(scaleX, scaleY)
-                duration = 120
-                start()
+        private fun getStrokeColorForStatus(isActive: Boolean): Int {
+            return if (isActive) {
+                fetchColor(context, R.attr.accentGood)
+            } else {
+                fetchColor(context, R.attr.chipBgColorNeutral)
             }
         }
-
-        private fun calculateSavings(originalPrice: String, discountedPrice: String): Int {
-            return try {
-                val original = originalPrice.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
-                val discounted = discountedPrice.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
-                if (original > 0 && discounted > 0) ((original - discounted) / original * 100).toInt() else 0
-            } catch (e: Exception) {
-                Logger.e(LOG_TAG_UI, "$TAG err calculating savings: ${e.message}")
-                0
-            }
-        }
-
-        private fun getBillingText(productType: String): String {
-            if (productType == ProductType.INAPP) {
-                return context.getString(R.string.billing_no_recurring)
-            }
-            return context.getString(R.string.billing_info)
-        }
-    }
-
-    /** DiffUtil callback for efficient list updates */
-    private class ProductDiffCallback(
-        private val old: List<ProductDetail>,
-        private val new: List<ProductDetail>
-    ): DiffUtil.Callback() {
-        override fun getOldListSize() = old.size
-
-        override fun getNewListSize() = new.size
-
-        override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean =
-            old[oldPos].productId == new[newPos].productId && old[oldPos].planId == new[newPos].planId
-
-        override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean =
-            old[oldPos] == new[newPos]
     }
 }
+*/

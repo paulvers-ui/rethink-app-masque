@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:versionCode="67"
-    android:versionName="v056"> <!-- 67 for v056 -->
+    android:versionCode="54"
+    android:versionName="v055v"> <!-- 54 for v055v -->
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
@@ -15,16 +15,29 @@
     <!-- Allows applications to change network connectivity state -->
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
-    
-    <!-- WiFi and Location permissions required for SSID access -->
+
+    <!-- WiFi state is used to detect network changes -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:targetApi="29" />
-    
-    <!-- Android 11 introduces changes related to package visibility. These changes affect
-    apps only if they target Android 11.
-    https://developer.android.com/training/package-visibility -->
+
+    <!--
+        QUERY_ALL_PACKAGES — Required for the per-app firewall feature.
+
+        RethinkDNS is a per-app firewall and DNS filter. Its core function is to let
+        users create allow/block rules for specific installed applications. To display
+        the list of all installed apps (with icons, names, and traffic stats) and apply
+        per-app rules, the app must enumerate every installed package on the device.
+        Without QUERY_ALL_PACKAGES, Android 11+ only returns apps that explicitly list
+        RethinkDNS in their <queries> element — making the per-app firewall non-functional.
+
+        There is no narrower alternative: a static <queries> element cannot substitute
+        for the dynamic full-package list used to build a real per-app firewall engine.
+
+        Privacy mitigation: the package list is used ONLY to build the in-app firewall
+        UI and apply rules inside the local VPN service. No package inventory is ever
+        transmitted to any remote server.
+
+        See: https://developer.android.com/training/package-visibility/use-cases
+    -->
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
@@ -33,33 +46,110 @@
         android:name="android.permission.INTERACT_ACROSS_USERS"
         tools:ignore="ProtectedPermissions" />
 
-    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!--
+        FIX #5 — Memory safety: re-enable GWP-ASan and upgrade MTE from off → async.
 
-    <!-- https://github.com/celzero/rethink-app/issues/786 set memtagMode to off -->
+        ORIGINAL STATE:
+            android:allowNativeHeapPointerTagging="false"
+            android:gwpAsanMode="never"
+            android:memtagMode="off"
+        All three were set in response to issue #786 to work around pointer-tagging
+        incompatibilities in libusque.so.
+
+        FIX RATIONALE:
+
+        (1) gwpAsanMode: "never" → removed (defaults to "always" on Android 14+).
+            GWP-ASan is a SAMPLING-BASED heap-safety tool that is completely independent
+            of MTE/pointer tagging.  It instruments malloc/free at the allocator level and
+            has negligible overhead (~0% steady-state; ~1% when a sampled allocation is in
+            flight).  There is NO reason related to libusque.so to disable it.  Re-enabling
+            it catches heap-buffer-overflows and use-after-free bugs in production, which
+            is especially important given the high-privilege nature of this VPN process.
+
+        (2) memtagMode: "off" → "async".
+            ASYNC mode has a ~93% per-occurrence detection rate for MTE tag mismatches
+            and defers faulting until the next kernel boundary, so it has low runtime
+            overhead suitable for production.  If libusque.so performs pointer arithmetic
+            that violates MTE tag semantics it will now surface as a detectable crash
+            rather than silent memory corruption.  If ASYNC proves incompatible with
+            libusque.so on specific ARM9 devices, a targeted per-process override can be
+            added (see the <process> tag in the manifest) rather than disabling MTE
+            globally for the entire application.
+
+        (3) allowNativeHeapPointerTagging: kept "false" for now.
+            Hardware pointer tagging (HWASan-style top-byte tagging in the allocator) is
+            distinct from MTE but also requires that native code does not mask or compare
+            pointer addresses in ways that strip the tag bits.  Until libusque.so is
+            audited or updated for pointer-tag safety this attribute stays false to
+            avoid crashes.  Track in a follow-up issue.
+    -->
+    <!--
+        FIX — Improper android backup configuration.
+
+        android:allowBackup="false" disables Auto Backup entirely on Android 6–11.
+        android:fullBackupContent points to backup_rules.xml (Android 6–11) which
+        explicitly excludes all sensitive data domains as defence-in-depth.
+        android:dataExtractionRules points to data_extraction_rules.xml (Android 12+)
+        which excludes cloud backup and device-to-device transfers, and sets
+        disableIfNoEncryptionCapabilities="true" so no backup runs on devices that
+        cannot guarantee end-to-end encryption.
+
+        RethinkDNS holds VPN/WireGuard private keys, DNS-over-HTTPS/TLS credentials,
+        and blocklist configs in SharedPreferences and internal storage.  Leaking
+        this data via Auto Backup to Google Drive or a device transfer would expose
+        cryptographic key material.
+    -->
+    <!--
+        AVAILABILITY FIX — process is being killed by lowmemorykiller / OEM task killers.
+
+        This APK is built as a privileged, system_ext, platform-signed app
+        (see Android.bp: privileged: true, platform_apis: true). On such a build
+        android:persistent="true" is honoured by ActivityManager:
+          * the process is started at boot, before the launcher;
+          * it is excluded from lowmemorykiller and from "clear all"/task killers;
+          * if it ever does die (native crash, SIGKILL) AMS restarts it immediately.
+        This is the supported way to keep a carrier-device resolver from blacking
+        out the network, and it is deliberately paired with the boot receiver and
+        with onTaskRemoved()/START_STICKY in BraveVPNService so a non-privileged
+        build still recovers, just less strongly.
+
+        NOTE: android:persistent is a no-op (and lint-ignored) for non-system
+        installs, so it is safe to keep in a single shared manifest.
+    -->
     <application
         android:name=".RethinkDnsApplication"
+        android:persistent="true"
         android:allowBackup="false"
-        android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:largeHeap="true"
         android:allowNativeHeapPointerTagging="false"
-        android:gwpAsanMode="never"
-        android:memtagMode="off"
-        android:pageSizeCompat="enabled"
-        android:enableOnBackInvokedCallback="true"
+        android:memtagMode="async"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:networkSecurityConfig="@xml/network_security_config"
-        tools:ignore="ForegroundServicePermission">
+        tools:ignore="ForegroundServicePermission,PersistentAttribute">
 
+        <activity
+            android:name=".ui.PrepareVpnActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!--
+            ExportedService suppressed: BraveVPNService MUST be exported so Android's
+            VpnService framework can bind to it. The android:permission restricts binding
+            to the system (protectionLevel="signature|privileged").
+        -->
         <service
             android:name=".service.BraveVPNService"
             android:exported="true"
             android:foregroundServiceType="systemExempted|connectedDevice"
             android:permission="android.permission.BIND_VPN_SERVICE"
-            android:stopWithTask="false">
+            android:stopWithTask="false"
+            tools:ignore="ExportedService">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
@@ -70,12 +160,18 @@
                 android:name="android.net.VpnService.SUPPORTS_LOCKDOWN"
                 android:value="true" />
         </service>
+        <!--
+            ExportedService suppressed: BraveTileService MUST be exported so the Quick
+            Settings framework can bind to it. The android:permission restricts binding
+            to the system tile framework (protectionLevel="signature|privileged").
+        -->
         <service
             android:name=".service.BraveTileService"
             android:exported="true"
             android:icon="@drawable/shield_green"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            tools:ignore="ExportedService"
             tools:targetApi="24">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
@@ -87,4 +183,22 @@
         </service>
 
     </application>
+
+    <!--
+        CAMERA permission — baseline removal for non-full-flavor builds.
+
+        The CAMERA permission is injected automatically by the zxing QR-scanner AAR
+        (com.journeyapps:zxing-android-embedded). zxing is a fullImplementation
+        dependency present only in the full flavor. This tools:node="remove" ensures
+        non-full builds (headless, website) never accidentally inherit CAMERA from a
+        transitive dependency.
+
+        The full-flavor manifest (app/src/full/AndroidManifest.xml) overrides this
+        with an explicit declaration that documents the purpose and marks the camera
+        hardware feature as android:required="false".
+    -->
+    <uses-permission
+        android:name="android.permission.CAMERA"
+        tools:node="remove" />
+
 </manifest>

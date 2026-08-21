@@ -1,10 +1,12 @@
 package com.celzero.bravedns.wireguard
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_PROXY
+import Logger
+import Logger.LOG_TAG_PROXY
 import com.celzero.bravedns.database.WgHopMap
 import com.celzero.bravedns.database.WgHopMapRepository
+import com.celzero.bravedns.service.ProxyManager.ID_S5_BASE
 import com.celzero.bravedns.service.ProxyManager.ID_WG_BASE
+import com.celzero.bravedns.service.UsqueManager
 import com.celzero.bravedns.service.VpnController
 import com.celzero.bravedns.service.WireguardManager
 import com.celzero.bravedns.service.WireguardManager.INVALID_CONF_ID
@@ -31,7 +33,7 @@ object WgHopManager: KoinComponent {
             return maps.size
         }
         maps.clear()
-        maps = CopyOnWriteArrayList(db.getAllWgs())
+        maps = CopyOnWriteArrayList(db.getAll())
         printMaps()
         Logger.i(LOG_TAG_PROXY, "$TAG load complete: ${maps.size}")
         return maps.size
@@ -246,4 +248,135 @@ object WgHopManager: KoinComponent {
         CoroutineScope(Dispatchers.IO).launch { f() }
     }
 
+
+    // ── WG -> WARP(S5) double hop ────────────────────────────────────────────
+    // Everything below is the non-persisted "wireguard - socks5 double hop"
+    // path. It deliberately does NOT go through WgHopMap/Room (that schema
+    // assumes both sides are WireGuard configs). Every step is mirrored into
+    // an on-disk log file so a failed hop can be diagnosed without logcat.
+
+    private const val HOP_LOG_FILE = "wg_warp_hop.txt"
+
+    private fun appCtx(): android.content.Context? =
+        try {
+            org.koin.java.KoinJavaComponent.get<android.content.Context>(
+                android.content.Context::class.java
+            )
+        } catch (_: Throwable) {
+            null
+        }
+
+    /** Logs to logcat and appends to filesDir/wg_warp_hop.txt. */
+    fun hlog(msg: String) {
+        Logger.i(LOG_TAG_PROXY, "$TAG $msg")
+        try {
+            val ctx = appCtx() ?: return
+            val ts = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US)
+                .format(java.util.Date())
+            java.io.File(ctx.filesDir, HOP_LOG_FILE).appendText("$ts $msg\n")
+        } catch (_: Exception) {}
+    }
+
+    fun getHopLogFile(): java.io.File? = appCtx()?.let { java.io.File(it.filesDir, HOP_LOG_FILE) }
+
+    fun readHopLog(): String =
+        try {
+            val f = getHopLogFile()
+            if (f != null && f.exists()) f.readText() else "no double-hop log yet"
+        } catch (e: Exception) {
+            "error reading log: ${e.message}"
+        }
+
+    fun clearHopLog() {
+        try { getHopLogFile()?.delete() } catch (_: Exception) {}
+    }
+
+    /** Hops [srcWgId]'s own traffic through the currently-running WARP/usque
+     * SOCKS5 proxy. Returns false immediately if WARP isn't running — don't
+     * let firestack attempt a hop into a dead proxy.
+     *
+     * After the hop is created the live hop status is read back, so the log
+     * says whether firestack actually holds a via-ref (Part A of the spec). */
+    suspend fun hopIntoWarp(srcWgId: Int): Pair<Boolean, String> {
+        if (!UsqueManager.isRunning()) {
+            hlog("hopIntoWarp: usque/WARP not running, skip (wg$srcWgId)")
+            return Pair(false, "WARP is not running")
+        }
+        val srcId = ID_WG_BASE + srcWgId
+        val hopId = ID_S5_BASE
+        hlog("hopIntoWarp: $srcId -> $hopId (usque up on 127.0.0.1:${UsqueManager.SOCKS_PORT})")
+        val res = VpnController.createWgHop(srcId, hopId)
+        hlog("hopIntoWarp: createWgHop($srcId, $hopId) ok=${res.first} msg=${res.second}")
+        val (ts, err) = VpnController.hopStatus(srcId, hopId)
+        hlog("hopIntoWarp: hopStatus($srcId, $hopId) since=$ts err=$err via?=${ts != null}")
+        return res
+    }
+
+    /** Reverses [hopIntoWarp]. Safe to call even if no hop is currently set. */
+    suspend fun unhopFromWarp(srcWgId: Int): Pair<Boolean, String> {
+        val srcId = ID_WG_BASE + srcWgId
+        val res = VpnController.removeHop(srcId)
+        hlog("unhopFromWarp: removeHop($srcId) ok=${res.first} msg=${res.second}")
+        return res
+    }
+
+    /**
+     * Part A of the spec: the raw manual test. Calls
+     * VpnController.createWgHop("wg<id>", "S5") directly — no persistence, no
+     * auto-trigger, no UI state — then reads the hop status back so the caller
+     * can tell the two failure modes apart:
+     *
+     *  - via-ref set (status non-null)  -> firestack side works; only the
+     *    auto-trigger integration is missing.
+     *  - via? false after a successful  -> the problem is deeper than wiring
+     *    createWgHop                       (viaCanRoute()/Router().Contains()).
+     *
+     * Returns a human-readable report which is also written to the log file.
+     */
+    suspend fun manualWarpHopTest(srcWgId: Int): String {
+        val srcId = ID_WG_BASE + srcWgId
+        val hopId = ID_S5_BASE
+        val sb = StringBuilder()
+        fun step(s: String) { sb.append(s).append('\n'); hlog("manualTest: $s") }
+
+        step("---- Part A manual test: $srcId -> $hopId ----")
+        step("usque/WARP running=${UsqueManager.isRunning()} port=${UsqueManager.SOCKS_PORT}")
+        val before = VpnController.hopStatus(srcId, hopId)
+        step("before: hopStatus since=${before.first} err=${before.second} via?=${before.first != null}")
+
+        val res = VpnController.createWgHop(srcId, hopId)
+        step("createWgHop -> ok=${res.first} msg=${res.second}")
+
+        val after = VpnController.hopStatus(srcId, hopId)
+        val viaSet = after.first != null
+        step("after: hopStatus since=${after.first} err=${after.second} via?=$viaSet")
+        step(
+            if (viaSet)
+                "RESULT: via-ref IS set — firestack hop works; watch logcat for " +
+                    "'wg: $srcId hop: set via-ref' and the MTU drop from 1420 " +
+                    "(SOCKS5/QUIC overhead). Only the auto-trigger wiring is missing."
+            else
+                "RESULT: via? false after createWgHop — the problem is deeper than " +
+                    "wiring; re-check viaCanRoute()/Router().Contains() on the firestack side."
+        )
+        step("---- end Part A manual test ----")
+        return sb.toString()
+    }
+
+    /** Toggle entry point used by the "wireguard - socks5 double hop" switch:
+     *  hops (or unhops) every currently active WireGuard config. */
+    suspend fun setDoubleHopForAllConfigs(enable: Boolean): String {
+        val configs = WireguardManager.getActiveConfigs()
+        hlog("setDoubleHop($enable): ${configs.size} active wg config(s)")
+        if (configs.isEmpty()) {
+            hlog("setDoubleHop($enable): no active WireGuard config")
+            return "no active WireGuard config"
+        }
+        val sb = StringBuilder()
+        configs.forEach { cfg ->
+            val r = if (enable) hopIntoWarp(cfg.getId()) else unhopFromWarp(cfg.getId())
+            sb.append("wg${cfg.getId()}: ok=${r.first} ${r.second}\n")
+        }
+        return sb.toString().trim()
+    }
 }

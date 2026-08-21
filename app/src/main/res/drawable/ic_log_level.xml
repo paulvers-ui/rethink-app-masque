@@ -5,12 +5,12 @@
     android:viewportWidth="32"
     android:viewportHeight="32">
   <path
-      android:fillColor="?attr/svgStrokeColor"
+      android:fillColor="#FFFFFF"
       android:pathData="m30,30h-8v-26h8zM24,28h4v-22h-4z"/>
   <path
-      android:fillColor="?attr/svgStrokeColor"
+      android:fillColor="#FFFFFF"
       android:pathData="m20,30h-8v-18h8zM14,28h4v-14h-4z"/>
   <path
-      android:fillColor="?attr/svgStrokeColor"
+      android:fillColor="#FFFFFF"
       android:pathData="m10,30h-8v-12h8z"/>
 </vector>

@@ -40,9 +40,6 @@ interface ODoHEndpointDAO {
     @Query("select * from ODoHEndpoint order by isSelected desc")
     fun getODoHEndpointLiveData(): PagingSource<Int, ODoHEndpoint>
 
-    @Query("select * from ODoHEndpoint order by isSelected desc")
-    suspend fun getAllAsList(): List<ODoHEndpoint>
-
     @Transaction
     @Query(
         "select * from ODoHEndpoint where resolver like :query or name like :query order by isSelected desc"
@@ -65,7 +62,4 @@ interface ODoHEndpointDAO {
     fun getConnectedODoH(): ODoHEndpoint?
 
     @Query("select count(*) from ODoHEndpoint") fun getCount(): Int
-
-    @Query("select * from ODoHEndpoint order by name asc")
-    fun getAll(): List<ODoHEndpoint>
 }

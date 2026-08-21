@@ -21,10 +21,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import com.celzero.bravedns.util.Constants.Companion.INVALID_UID
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,7 +36,7 @@ import org.robolectric.shadows.ShadowPackageManager
  * These tests use Robolectric for Android framework mocking.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28]) // Target Android API 28
+@Config(sdk = [28], application = android.app.Application::class) // Target Android API 28
 class AppInfoActivityUnitTest {
 
     private lateinit var context: Context
@@ -49,8 +46,12 @@ class AppInfoActivityUnitTest {
     @Before
     fun setUp() {
         println("$testTag: Setting up AppInfoActivityUnitTest environment")
-        
+
+        // Stop any Koin left by a prior test class before creating the context
+        try { org.koin.core.context.stopKoin() } catch (_: Exception) { /* ignore */ }
         context = RuntimeEnvironment.getApplication()
+        // Also stop any Koin that Application.onCreate() may have started
+        try { org.koin.core.context.stopKoin() } catch (_: Exception) { /* ignore */ }
         println("$testTag: Created Robolectric context: ${context.javaClass.simpleName}")
         
         shadowPackageManager = shadowOf(context.packageManager)

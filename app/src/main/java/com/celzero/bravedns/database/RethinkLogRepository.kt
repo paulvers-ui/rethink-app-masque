@@ -52,10 +52,6 @@ class RethinkLogRepository(private val logDao: RethinkLogDao) {
         logDao.clearAllData()
     }
 
-    suspend fun clearLogsByRule(rule: String) {
-        logDao.clearLogsByRule(rule)
-    }
-
     fun logsCount(): LiveData<Long> {
         return logDao.logsCount()
     }

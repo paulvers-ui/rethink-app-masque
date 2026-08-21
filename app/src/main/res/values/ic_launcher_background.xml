@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- fork logo is a white star on a black disc; adaptive-icon background
+         must be black so the foreground reads correctly inside the mask -->
+    <color name="ic_launcher_background">#000000</color>
 </resources>

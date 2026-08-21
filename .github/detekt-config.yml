@@ -1,49 +1,264 @@
-# Detekt configuration file
-# Excludes test files from code scanning
-# excludes magic numbers, return count, long parameter, long methods
+# ============================================================
+#  Detekt config — Detekt 2.0.0-alpha.1 compatible
+#  Tuned for VPN / DNS / Firewall Android app
+# ============================================================
+
+potential-bugs:
+  active: true
+
+  UnsafeCallOnNullableType:
+    active: true
+
+  UnsafeCast:
+    active: true
+
+  NullableToStringCall:
+    active: true
+
+  LateinitUsage:
+    active: true
+    ignoreOnClassesPattern: ".*ViewModel|.*Activity|.*Fragment|.*Service"
+    ignoreAnnotated:
+      - "Inject"
+      - "KoinComponent"
+
+  UnreachableCode:
+    active: true
+
+  IgnoredReturnValue:
+    active: true
+    returnValueAnnotations:
+      - "CheckResult"
+      - "CheckReturnValue"
+
+  EqualsWithHashCodeExist:
+    active: true
+
+exceptions:
+  active: true
+
+  TooGenericExceptionCaught:
+    active: true
+    exceptionNames:
+      - Error
+      - Exception
+      - RuntimeException
+      - Throwable
+    allowedExceptionNameRegex: "_|(ignore|expected).*"
+
+  TooGenericExceptionThrown:
+    active: true
+    exceptionNames:
+      - Error
+      - Exception
+      - RuntimeException
+      - Throwable
+
+  SwallowedException:
+    active: true
+    ignoredExceptionTypes:
+      - InterruptedException
+      - NumberFormatException
+      - ParseException
+    allowedExceptionNameRegex: "_|(ignore|expected).*"
+
+  ExceptionRaisedInUnexpectedLocation:
+    active: true
+    methodNames:
+      - equals
+      - finalize
+      - hashCode
+      - toString
+
+  RethrowCaughtException:
+    active: true
+
+  ThrowingExceptionsWithoutMessageOrCause:
+    active: true
+    exceptions:
+      - IllegalArgumentException
+      - IllegalStateException
+
+  ThrowingNewInstanceOfSameException:
+    active: true
+
+coroutines:
+  active: true
+
+  RedundantSuspendModifier:
+    active: true
+
+  GlobalCoroutineUsage:
+    active: true
+
+  SleepInsteadOfDelay:
+    active: true
+
+  SuspendFunWithFlowReturnType:
+    active: true
+
+  SuspendFunSwallowedCancellation:
+    active: true
+
+complexity:
+  active: true
+
+  CyclomaticComplexMethod:
+    active: true
+    allowedComplexity: 15
+    ignoreSingleWhenExpression: true
+
+  CognitiveComplexMethod:
+    active: true
+    allowedComplexity: 20
+
+  LongMethod:
+    active: true
+
+  LongParameterList:
+    active: true
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+
+  NestedBlockDepth:
+    active: true
+    allowedDepth: 5
+
+  TooManyFunctions:
+    active: true
+    ignoreDeprecated: true
+    ignorePrivate: false
+    ignoreOverridden: false
+
+  LargeClass:
+    active: true
+
+  StringLiteralDuplication:
+    active: true
+    ignoreAnnotation: true
 
 style:
+  active: true
+
   MaxLineLength:
     active: true
-    maxLineLength: 1400
+    maxLineLength: 140
     excludePackageStatements: true
     excludeImportStatements: true
     excludeCommentStatements: false
     excludeRawStrings: true
 
-  ForbiddenComment:
-    active: false
-
   MagicNumber:
-    active: false
-
-  ReturnCount:
-    active: false
-
-
-exceptions:
-  TooGenericExceptionCaught:
     active: true
-    exceptionNames:
-      - Throwable
-      - Error
+    ignoreNumbers:
+      - '-1'
+      - '0'
+      - '1'
+      - '2'
+    ignoreHashCodeFunction: true
+    ignorePropertyDeclaration: true
+    ignoreConstantDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreNamedArgument: true
+    ignoreEnums: true
 
+  ForbiddenComment:
+    active: true
+    comments:
+      - reason: "Resolve this TODO before merging"
+        value: "TODO:"
+      - reason: "FIXMEs must not be merged"
+        value: "FIXME:"
 
-coroutines:
-  RedundantSuspendModifier:
-    active: false
+  ForbiddenMethodCall:
+    active: true
+    methods:
+      - reason: "Use Logger singleton instead"
+        value: "kotlin.io.println"
+      - reason: "Use Logger — not android.util.Log"
+        value: "android.util.Log.d"
+      - reason: "Use Logger — not android.util.Log"
+        value: "android.util.Log.e"
+      - reason: "Use Logger — not android.util.Log"
+        value: "android.util.Log.i"
+      - reason: "Use Logger — not android.util.Log"
+        value: "android.util.Log.w"
 
+  VarCouldBeVal:
+    active: true
+    ignoreAnnotated:
+      - "JvmField"
 
-complexity:
-  TooManyFunctions:
-    active: false
+  UnnecessaryLet:
+    active: true
 
-  LargeClass:
-    active: false
+  UnnecessaryApply:
+    active: true
 
-  LongParameterList:
-    active: false
+naming:
+  active: true
 
-  LongMethod:
-    active: false
+  ClassNaming:
+    active: true
+    classPattern: '[A-Z][a-zA-Z0-9]*'
 
+  FunctionNaming:
+    active: true
+    functionPattern: '([a-z][a-zA-Z0-9]*)|(`.*`)'
+
+  BooleanPropertyNaming:
+    active: true
+    allowedPattern: '^(is|has|are|should|can|did|will)[A-Z].*'
+
+  VariableNaming:
+    active: true
+    variablePattern: '[a-z][A-Za-z0-9]*'
+    privateVariablePattern: '(_)?[a-z][A-Za-z0-9]*'
+
+  PackageNaming:
+    active: true
+    packagePattern: '[a-z]+(\.[a-z][A-Za-z0-9]*)*'
+
+performance:
+  active: true
+
+  ArrayPrimitive:
+    active: true
+
+  SpreadOperator:
+    active: true
+
+  ForEachOnRange:
+    active: true
+
+empty-blocks:
+  active: true
+
+  EmptyCatchBlock:
+    active: true
+    allowedExceptionNameRegex: "_|(ignore|expected).*"
+
+  EmptyIfBlock:
+    active: true
+
+  EmptyElseBlock:
+    active: true
+
+  EmptyWhenBlock:
+    active: true
+
+  EmptyTryBlock:
+    active: true
+
+  EmptyFinallyBlock:
+    active: true
+
+  EmptyDoWhileBlock:
+    active: true
+
+  EmptyForBlock:
+    active: true
+
+  EmptyWhileBlock:
+    active: true

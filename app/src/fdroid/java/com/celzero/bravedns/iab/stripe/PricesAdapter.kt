@@ -5,7 +5,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import com.celzero.bravedns.util.Logger
 
 class PricesAdapter : RecyclerView.Adapter<PricesAdapter.PriceViewHolder>() {
 
@@ -33,9 +32,9 @@ class PricesAdapter : RecyclerView.Adapter<PricesAdapter.PriceViewHolder>() {
         private val details: TextView = itemView.findViewById(android.R.id.text2)
 
         fun bind(price: Price) {
-            Logger.i("StripeApi","Price: $price, title: ${price.id}, details: ${price.unit_amount}, ${price.currency}, ${price.product}")
+            Logger.i("StripeApi", "Price: $price, id: ${price.id}, amount: ${price.unitAmount}, currency: ${price.currency}, product: ${price.product}")
             title.text = "Product: ${price.product}"
-            details.text = "Price: ${price.unit_amount / 100.0} ${price.currency.uppercase()}"
+            details.text = "Price: ${price.unitAmount / 100.0} ${price.currency.uppercase()}"
         }
     }
 }

@@ -15,8 +15,8 @@
  */
 package com.celzero.bravedns.database
 
-import com.celzero.bravedns.util.Logger
-import com.celzero.bravedns.util.Logger.LOG_TAG_APP_DB
+import Logger
+import Logger.LOG_TAG_APP_DB
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
@@ -25,8 +25,6 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.celzero.bravedns.sponsor.database.SponsorDao
-import com.celzero.bravedns.sponsor.database.SponsorEntity
 import com.celzero.bravedns.util.Constants
 
 @Database(
@@ -42,8 +40,6 @@ import com.celzero.bravedns.util.Constants
         CustomDomain::class,
         RethinkDnsEndpoint::class,
         RethinkRemoteFileTag::class,
-        RethinkLocalFileTag::class,
-        LocalBlocklistPacksMap::class,
         RemoteBlocklistPacksMap::class,
         WgConfigFiles::class,
         ProxyApplicationMapping::class,
@@ -53,91 +49,27 @@ import com.celzero.bravedns.util.Constants
         RpnProxy::class,
         WgHopMap::class,
         SubscriptionStatus::class,
-        SubscriptionStateHistory::class,
-        CountryConfig::class,
-        SponsorEntity::class
+        SubscriptionStateHistory::class
     ],
-    version = 32,
-    exportSchema = false
+    version = 27,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val DATABASE_NAME = "bravedns.db"
-        // Pre-packaged asset at the current schema version (31). Because the asset's
-        // user_version matches @Database.version and its room_master_table identity_hash
-        // matches the hash Room 2.8.1 computes for v31, Room opens it with NO migration
-        // and NO schema validation at first launch. This avoids the 22->31 migration path
-        // running on the freshly-copied asset, which was a source of the
-        // "Bad database header" failure seen after clearing app storage.
-        private const val DATABASE_PATH = "database/rethink_v31.db"
+        private const val DATABASE_PATH = "database/rethink_v22.db"
         private const val PRAGMA = "pragma wal_checkpoint(full)"
-        private const val APP_NOTES_MAX_LENGTH = 500
 
         // setJournalMode() is added as part of issue #344
         // modified the journal mode from TRUNCATE to AUTOMATIC.
-        // The actual value will be TRUNCATE if it is a low-RAM device.
+        // The actual value will be TRUNCATE when the it is a low-RAM device.
         // Otherwise, WRITE_AHEAD_LOGGING will be used.
         // Ref:
         // https://developer.android.com/reference/android/arch/persistence/room/RoomDatabase.JournalMode#automatic
-        // A valid SQLite database file is at least 100 bytes (the header page) and begins
-        // with the 16-byte magic string "SQLite format 3\0". Files failing this check are
-        // treated as corrupt/truncated so the pre-packaged asset can be re-copied by Room's
-        // createFromAsset() instead of being reused as-is.
-        private fun isValidSQLiteFile(file: java.io.File): Boolean {
-            if (file.length() < 100) return false
-            return try {
-                java.io.RandomAccessFile(file, "r").use { raf ->
-                    val magic = ByteArray(16)
-                    raf.readFully(magic)
-                    String(magic, Charsets.ISO_8859_1).startsWith("SQLite format 3")
-                }
-            } catch (_: Exception) {
-                false
-            }
-        }
-
-        fun buildDatabase(context: Context): AppDatabase {
-            val appContext = context.applicationContext
-            // Self-heal: if a corrupt/truncated bravedns.db is present on disk (e.g. a
-            // 0-byte file left behind by a premature ATTACH in LogDatabase.populateDatabase
-            // after the user clears app storage via Android settings), delete it so that
-            // Room's createFromAsset() re-copies the pre-packaged asset and the seed data
-            // (default DoH/DNSCrypt/RDNS/DoT/ODoH rows) is restored. Without this, Room sees
-            // that the file already exists and skips the asset copy, failing with:
-            //   "Bad database header, unable to read 4 bytes at offset 60" (user_version).
-            val dbFile = appContext.getDatabasePath(DATABASE_NAME)
-            if (dbFile.exists() && !isValidSQLiteFile(dbFile)) {
-                Logger.i(
-                    LOG_TAG_APP_DB,
-                    "Corrupt DB file detected (${dbFile.length()} bytes); deleting to allow asset re-copy"
-                )
-                dbFile.delete()
-                // remove sidecar files so a stale wal/shm cannot resurrect broken state
-                appContext.getDatabasePath("$DATABASE_NAME-wal").delete()
-                appContext.getDatabasePath("$DATABASE_NAME-shm").delete()
-            }
-
-            return try {
-                newBuilder(appContext).also { it.openHelper.writableDatabase }
-            } catch (e: IllegalStateException) {
-                val message = e.message.orEmpty()
-                if ("Room cannot verify" !in message && "data integrity" !in message) {
-                    throw e
-                }
-                Logger.w(LOG_TAG_APP_DB, "Schema mismatch; recreating database: $message")
-                appContext.deleteDatabase(DATABASE_NAME)
-                newBuilder(appContext)
-            }
-        }
-
-        private fun newBuilder(context: Context): AppDatabase =
-            Room.databaseBuilder(
-                context,
-                AppDatabase::class.java,
-                DATABASE_NAME
-            )
+        fun buildDatabase(context: Context) =
+            Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, DATABASE_NAME)
                 .createFromAsset(DATABASE_PATH)
                 .addCallback(roomCallback)
                 .setJournalMode(JournalMode.AUTOMATIC)
@@ -158,7 +90,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_15_16)
                 .addMigrations(MIGRATION_16_17)
                 .addMigrations(MIGRATION_17_18)
-                .addMigrations(MIGRATION_18_19)
+                .addMigrations(migration1819(context))
                 .addMigrations(MIGRATION_19_20)
                 .addMigrations(MIGRATION_20_21)
                 .addMigrations(MIGRATION_21_22)
@@ -167,18 +99,12 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_24_25)
                 .addMigrations(MIGRATION_25_26)
                 .addMigrations(MIGRATION_26_27)
-                .addMigrations(MIGRATION_27_28)
-                .addMigrations(MIGRATION_28_29)
-                .addMigrations(MIGRATION_29_30)
-                .addMigrations(MIGRATION_30_31)
-                .addMigrations(MIGRATION_31_32)
                 .build()
 
         private val roomCallback: Callback =
             object : Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
-                    createAppInfoNotesLengthTriggers(db)
                     Logger.i(LOG_TAG_APP_DB, "Database created, ${db.version}")
                 }
 
@@ -192,27 +118,8 @@ abstract class AppDatabase : RoomDatabase() {
                     Logger.i(LOG_TAG_APP_DB, "Database opened, ${db.version}")
                 }
             }
-        private fun createAppInfoNotesLengthTriggers(db: SupportSQLiteDatabase) {
-            db.execSQL(
-                "CREATE TRIGGER IF NOT EXISTS trg_appinfo_notes_length_insert " +
-                        "BEFORE INSERT ON AppInfo " +
-                        "WHEN length(NEW.notes) > $APP_NOTES_MAX_LENGTH " +
-                        "BEGIN " +
-                        "SELECT RAISE(ABORT, 'AppInfo.notes exceeds $APP_NOTES_MAX_LENGTH characters'); " +
-                        "END"
-            )
 
-            db.execSQL(
-                "CREATE TRIGGER IF NOT EXISTS trg_appinfo_notes_length_update " +
-                        "BEFORE UPDATE OF notes ON AppInfo " +
-                        "WHEN length(NEW.notes) > $APP_NOTES_MAX_LENGTH " +
-                        "BEGIN " +
-                        "SELECT RAISE(ABORT, 'AppInfo.notes exceeds $APP_NOTES_MAX_LENGTH characters'); " +
-                        "END"
-            )
-        }
-
-        internal val MIGRATION_1_2: Migration =
+        private val MIGRATION_1_2: Migration =
             object : Migration(1, 2) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("DELETE from AppInfo")
@@ -223,7 +130,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_2_3: Migration =
+        private val MIGRATION_2_3: Migration =
             object : Migration(2, 3) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("DELETE from AppInfo ")
@@ -238,7 +145,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_3_4: Migration =
+        private val MIGRATION_3_4: Migration =
             object : Migration(3, 4) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -284,7 +191,7 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     // Perform insert of endpoints
                     db.execSQL(
-                        "INSERT OR REPLACE INTO DoHEndpoint(id,dohName,dohURL,dohExplanation, isSelected,isCustom,modifiedDataTime,latency) values(1,'Cloudflare','https://cloudflare-dns.com/dns-query','Does not block any DNS requests. Uses Cloudflare''s 1.1.1.1 DNS endpoint.',0,0,0,0)"
+                        "INSERT OR REPLACE INTO DoHEndpoint(id,dohName,dohURL,dohExplanation, isSelected,isCustom,modifiedDataTime,latency) values(1,'Cloudflare','https://cloudflare-dns.com/dns-query','Does not block any DNS requests. Uses Cloudflare''s 1.1.1.1 DNS endpoint.',1,0,0,0)"
                     )
                     db.execSQL(
                         "INSERT OR REPLACE INTO DoHEndpoint(id,dohName,dohURL,dohExplanation, isSelected,isCustom,modifiedDataTime,latency) values(2,'Cloudflare Family','https://family.cloudflare-dns.com/dns-query','Blocks malware and adult content. Uses Cloudflare''s 1.1.1.3 DNS endpoint.',0,0,0,0)"
@@ -293,7 +200,7 @@ abstract class AppDatabase : RoomDatabase() {
                         "INSERT OR REPLACE INTO DoHEndpoint(id,dohName,dohURL,dohExplanation, isSelected,isCustom,modifiedDataTime,latency) values(3,'Cloudflare Security','https://security.cloudflare-dns.com/dns-query','Blocks malicious content. Uses Cloudflare''s 1.1.1.2 DNS endpoint.',0,0,0,0)"
                     )
                     db.execSQL(
-                        "INSERT OR REPLACE INTO DoHEndpoint(id,dohName,dohURL,dohExplanation, isSelected,isCustom,modifiedDataTime,latency) values(4,'RethinkDNS Basic (default)','https://basic.bravedns.com/1:YBcgAIAQIAAIAABgIAA=','Blocks malware and more. Uses RethinkDNS''s non-configurable basic endpoint.',1,0,0,0)"
+                        "INSERT OR REPLACE INTO DoHEndpoint(id,dohName,dohURL,dohExplanation, isSelected,isCustom,modifiedDataTime,latency) values(4,'RethinkDNS Basic (default)','https://basic.bravedns.com/1:YBcgAIAQIAAIAABgIAA=','Blocks malware and more. Uses RethinkDNS''s non-configurable basic endpoint.',0,0,0,0)"
                     )
                     db.execSQL(
                         "INSERT OR REPLACE INTO DoHEndpoint(id,dohName,dohURL,dohExplanation, isSelected,isCustom,modifiedDataTime,latency) values(5,'RethinkDNS Plus','https://basic.bravedns.com/','Configurable DNS endpoint: Provides in-depth analytics of your Internet traffic, allows you to set custom rules and more.',0,0,0,0)"
@@ -301,7 +208,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_4_5: Migration =
+        private val MIGRATION_4_5: Migration =
             object : Migration(4, 5) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("DELETE from DNSProxyEndpoint")
@@ -348,7 +255,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_5_6: Migration =
+        private val MIGRATION_5_6: Migration =
             object : Migration(5, 6) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -385,7 +292,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_6_7: Migration =
+        private val MIGRATION_6_7: Migration =
             object : Migration(6, 7) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -403,7 +310,7 @@ abstract class AppDatabase : RoomDatabase() {
          * is added as default and not used. Now the UID=0(ANDROID) is added to the non-app
          * category.
          */
-        internal val MIGRATION_7_8: Migration =
+        private val MIGRATION_7_8: Migration =
             object : Migration(7, 8) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -416,7 +323,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_8_9: Migration =
+        private val MIGRATION_8_9: Migration =
             object : Migration(8, 9) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -425,7 +332,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_9_10: Migration =
+        private val MIGRATION_9_10: Migration =
             object : Migration(9, 10) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -434,7 +341,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_10_11: Migration =
+        private val MIGRATION_10_11: Migration =
             object : Migration(10, 11) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -446,7 +353,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_11_12: Migration =
+        private val MIGRATION_11_12: Migration =
             object : Migration(11, 12) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     addMoreDohToList(db)
@@ -621,17 +528,15 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_12_13: Migration =
+        private val MIGRATION_12_13: Migration =
             object : Migration(12, 13) {
                 override fun migrate(db: SupportSQLiteDatabase) {
-                    db.execSQL(
-                        "INSERT OR REPLACE INTO DNSProxyEndpoint(proxyName, proxyType, proxyAppName, proxyIP, proxyPort, isSelected, isCustom, modifiedDataTime,latency) values ('Orbot','External','org.torproject.android','127.0.0.1',5400,0,0,0,0)"
-                    )
+                    // no-op: Orbot proxy endpoint insertion removed
                 }
             }
 
         // migration part of v053k
-        internal val MIGRATION_13_14: Migration =
+        private val MIGRATION_13_14: Migration =
             object : Migration(13, 14) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     // modify the default blocklist to OISD
@@ -646,7 +551,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
 
         // migration part of v053l
-        internal val MIGRATION_14_15: Migration =
+        private val MIGRATION_14_15: Migration =
             object : Migration(14, 15) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE RethinkLocalFileTag add column pack TEXT DEFAULT ''")
@@ -661,7 +566,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
 
         // migration part of v053m
-        internal val MIGRATION_15_16: Migration =
+        private val MIGRATION_15_16: Migration =
             object : Migration(15, 16) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     modifyAppInfo(db)
@@ -699,7 +604,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
 
         // migration part of v054
-        internal val MIGRATION_16_17: Migration =
+        private val MIGRATION_16_17: Migration =
             object : Migration(16, 17) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("DROP table if exists CustomDomain")
@@ -777,7 +682,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_17_18: Migration =
+        private val MIGRATION_17_18: Migration =
             object : Migration(17, 18) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     with(db) {
@@ -797,7 +702,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_18_19: Migration =
+        private fun migration1819(context: Context): Migration =
             object : Migration(18, 19) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     with(db) {
@@ -889,7 +794,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_19_20: Migration =
+        private val MIGRATION_19_20: Migration =
             object : Migration(19, 20) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     // quad9
@@ -904,7 +809,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_20_21: Migration =
+        private val MIGRATION_20_21: Migration =
             object : Migration(20, 21) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -965,13 +870,6 @@ abstract class AppDatabase : RoomDatabase() {
                         "CASE WHEN EXISTS (select isSelected from ProxyEndpoint_backup where proxyName = 'Socks5') THEN (select isSelected from ProxyEndpoint_backup where proxyName = 'Socks5') ELSE 0 END"
                     val isUDPSocks5 =
                         "CASE WHEN EXISTS (select isUDP from ProxyEndpoint_backup where proxyName = 'Socks5') THEN (select isUDP from ProxyEndpoint_backup where proxyName = 'Socks5') ELSE 0 END"
-                    // orbot
-                    val pipOrbot =
-                        "CASE WHEN EXISTS (select proxyIP from ProxyEndpoint_backup where proxyName = 'ORBOT') THEN (select proxyIP from ProxyEndpoint_backup where proxyName = 'ORBOT') ELSE '127.0.0.1' END"
-                    val portOrbot =
-                        "CASE WHEN EXISTS (select proxyPort from ProxyEndpoint_backup where proxyName = 'ORBOT') THEN (select proxyPort from ProxyEndpoint_backup where proxyName = 'ORBOT') ELSE 9050 END"
-                    val isSelectedOrbot =
-                        "CASE WHEN EXISTS (select isSelected from ProxyEndpoint_backup where proxyName = 'ORBOT') THEN (select isSelected from ProxyEndpoint_backup where proxyName = 'ORBOT') ELSE 0 END"
 
                     // backup the table ProxyEndpoint
                     db.execSQL("DROP TABLE IF EXISTS ProxyEndpoint_backup")
@@ -988,18 +886,12 @@ abstract class AppDatabase : RoomDatabase() {
                     db.execSQL(
                         "INSERT INTO ProxyEndpoint (proxyName, proxyMode, proxyType, proxyAppName, proxyIP, userName, password, proxyPort, isSelected, isCustom, isUDP, modifiedDataTime, latency) VALUES('HTTP', 1, 'NONE', '', '', '', '', 0, 0, 0, 0, 0, 0)"
                     )
-                    db.execSQL(
-                        "INSERT INTO ProxyEndpoint (proxyName, proxyMode, proxyType, proxyAppName, proxyIP, userName, password, proxyPort, isSelected, isCustom, isUDP, modifiedDataTime, latency) VALUES('SOCKS5 Orbot', 2, 'NONE', 'org.torproject.android', ($pipOrbot), '', '', ($portOrbot), ($isSelectedOrbot), 0, 0, 0, 0)"
-                    )
-                    db.execSQL(
-                        "INSERT INTO ProxyEndpoint (proxyName, proxyMode, proxyType, proxyAppName, proxyIP, userName, password, proxyPort, isSelected, isCustom, isUDP, modifiedDataTime, latency) VALUES('HTTP Orbot', 3, 'NONE', 'org.torproject.android', '', '', '', 0, 0, 0, 0, 0, 0)"
-                    )
                     db.execSQL("DROP TABLE IF EXISTS ProxyEndpoint_backup")
                     Logger.i(LOG_TAG_APP_DB, "MIGRATION_20_21: added DoT and ODoH endpoints")
                 }
             }
 
-        internal val MIGRATION_21_22: Migration =
+        private val MIGRATION_21_22: Migration =
             object : Migration(21, 22) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     // fix: migration with the WgConfigFiles seen in play store crash
@@ -1036,7 +928,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_22_23: Migration =
+        private val MIGRATION_22_23: Migration =
             object : Migration(22, 23) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -1046,7 +938,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_23_24: Migration =
+        private val MIGRATION_23_24: Migration =
             object : Migration(23, 24) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -1056,7 +948,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
 
         // migration part of v055o
-        internal val MIGRATION_24_25: Migration =
+        private val MIGRATION_24_25: Migration =
             object : Migration(24, 25) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
@@ -1150,7 +1042,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_25_26: Migration =
+        private val MIGRATION_25_26: Migration =
             object : Migration(25, 26) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     try {
@@ -1167,7 +1059,7 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
-        internal val MIGRATION_26_27: Migration =
+        private val MIGRATION_26_27: Migration =
             object : Migration(26, 27) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     // delete the column isLockdown from WgConfigFiles
@@ -1178,178 +1070,22 @@ abstract class AppDatabase : RoomDatabase() {
                     // insert new columns with default values (modifiedTs)
                     db.execSQL("ALTER TABLE WgConfigFiles ADD COLUMN modifiedTs INTEGER NOT NULL DEFAULT 0")
                     Logger.i(LOG_TAG_APP_DB, "MIGRATION_26_27: removed isLockdown column")
-                    db.execSQL(
-                        """
-                                           CREATE TABLE IF NOT EXISTS CountryConfig (
-                                               cc TEXT PRIMARY KEY NOT NULL,
-                                               catchAll INTEGER NOT NULL DEFAULT 0,
-                                               lockdown INTEGER NOT NULL DEFAULT 0,
-                                               mobileOnly INTEGER NOT NULL DEFAULT 0,
-                                               ssidBased INTEGER NOT NULL DEFAULT 0,
-                                               lastModified INTEGER NOT NULL DEFAULT 0,
-                                               enabled INTEGER NOT NULL DEFAULT 1,
-                                               priority INTEGER NOT NULL DEFAULT 0
-                                           )
-                                           """.trimIndent()
-                    )
-                    Logger.i(LOG_TAG_APP_DB, "MIGRATION_26_27: created CountryConfig table")
-                }
-            }
-
-        internal val MIGRATION_27_28: Migration =
-            object : Migration(27, 28) {
-                override fun migrate(db: SupportSQLiteDatabase) {
                     // Add modifiedTs column to AppInfo table to track when firewall/proxy rules change
                     try {
                         db.execSQL("ALTER TABLE AppInfo ADD COLUMN modifiedTs INTEGER NOT NULL DEFAULT 0")
                         // Backfill all existing rows with 0 (already done by DEFAULT 0)
-                        Logger.i(LOG_TAG_APP_DB, "MIGRATION_27_28: added modifiedTs column to AppInfo")
+                        Logger.i(LOG_TAG_APP_DB, "MIGRATION_26_27: added modifiedTs column to AppInfo")
                     } catch (e: Exception) {
-                        Logger.e(LOG_TAG_APP_DB, "MIGRATION_27_28: modifiedTs column already exists, ignore", e)
+                        Logger.e(LOG_TAG_APP_DB, "MIGRATION_26_27: modifiedTs column already exists, ignore", e)
                     }
-                }
-            }
-
-        internal val MIGRATION_28_29: Migration =
-            object : Migration(28, 29) {
-                override fun migrate(db: SupportSQLiteDatabase) {
-
+                    // Add tempAllowEnabled and tempAllowExpiryTime columns to AppInfo table for temporary allow feature
                     try {
                         db.execSQL("ALTER TABLE AppInfo ADD COLUMN tempAllowEnabled INTEGER NOT NULL DEFAULT 0")
                         db.execSQL("ALTER TABLE AppInfo ADD COLUMN tempAllowExpiryTime INTEGER NOT NULL DEFAULT 0")
-                        Logger.i(LOG_TAG_APP_DB, "MIGRATION_28_29: added tempAllowEnabled, tempAllowExpiryTime to AppInfo")
+                        Logger.i(LOG_TAG_APP_DB, "MIGRATION_26_27: added tempAllowEnabled and tempAllowExpiryTime columns to AppInfo")
                     } catch (e: Exception) {
-                        Logger.e(LOG_TAG_APP_DB, "MIGRATION_28_29: temp allow columns already exist, ignore", e)
+                        Logger.e(LOG_TAG_APP_DB, "MIGRATION_26_27: temp allow columns already exist, ignore", e)
                     }
-
-                    // Safety: drop RpnWinServers if it exists from any prior development build
-                    try {
-                        db.execSQL("DROP INDEX IF EXISTS index_RpnWinServers_countryCode")
-                        db.execSQL("DROP INDEX IF EXISTS index_RpnWinServers_isActive")
-                        db.execSQL("DROP TABLE IF EXISTS RpnWinServers")
-                    } catch (_: Exception) {
-                        // ignore
-                    }
-
-                    db.execSQL("DROP TABLE IF EXISTS CountryConfig")
-                    db.execSQL(
-                        """
-                        CREATE TABLE CountryConfig (
-                            id TEXT PRIMARY KEY NOT NULL,
-                            cc TEXT NOT NULL,
-                            name TEXT NOT NULL DEFAULT '',
-                            address TEXT NOT NULL DEFAULT '',
-                            city TEXT NOT NULL DEFAULT '',
-                            key TEXT NOT NULL DEFAULT '',
-                            load INTEGER NOT NULL DEFAULT 0,
-                            link INTEGER NOT NULL DEFAULT 0,
-                            count INTEGER NOT NULL DEFAULT 0,
-                            isActive INTEGER NOT NULL DEFAULT 1,
-                            catchAll INTEGER NOT NULL DEFAULT 0,
-                            lockdown INTEGER NOT NULL DEFAULT 0,
-                            mobileOnly INTEGER NOT NULL DEFAULT 0,
-                            ssidBased INTEGER NOT NULL DEFAULT 0,
-                            priority INTEGER NOT NULL DEFAULT 0,
-                            ssids TEXT NOT NULL DEFAULT '',
-                            lastModified INTEGER NOT NULL DEFAULT 0,
-                            isEnabled INTEGER NOT NULL DEFAULT 1,
-                            premium INTEGER NOT NULL DEFAULT 0
-                        )
-                        """.trimIndent()
-                    )
-                    db.execSQL("CREATE INDEX IF NOT EXISTS index_CountryConfig_cc ON CountryConfig(cc)")
-                    db.execSQL("CREATE INDEX IF NOT EXISTS index_CountryConfig_isActive ON CountryConfig(isActive)")
-                    Logger.i(LOG_TAG_APP_DB, "MIGRATION_28_29: recreated CountryConfig with final schema")
-
-                    // SubscriptionStatus: audit / billing columns
-                    // Each ALTER is guarded individually so a partial prior run cannot leave
-                    // the DB in an inconsistent state.
-                    try {
-                        db.execSQL("ALTER TABLE SubscriptionStatus ADD COLUMN previousProductId TEXT NOT NULL DEFAULT ''")
-                    } catch (_: Exception) {}
-                    try {
-                        db.execSQL("ALTER TABLE SubscriptionStatus ADD COLUMN previousPurchaseToken TEXT NOT NULL DEFAULT ''")
-                    } catch (_: Exception) {}
-                    try {
-                        db.execSQL("ALTER TABLE SubscriptionStatus ADD COLUMN replacedAt INTEGER NOT NULL DEFAULT 0")
-                    } catch (_: Exception) {}
-                    try {
-                        db.execSQL("ALTER TABLE SubscriptionStatus ADD COLUMN windowDays INTEGER NOT NULL DEFAULT 0")
-                    } catch (_: Exception) {}
-                    try {
-                        db.execSQL("ALTER TABLE SubscriptionStatus ADD COLUMN orderId TEXT NOT NULL DEFAULT ''")
-                    } catch (_: Exception) {}
-                    try {
-                        db.execSQL("ALTER TABLE SubscriptionStatus ADD COLUMN deviceId TEXT NOT NULL DEFAULT ''")
-                    } catch (_: Exception) {}
-                    try {
-                        db.execSQL("UPDATE SubscriptionStatus SET deviceId = 'pip/identity.json' WHERE deviceId != '' AND deviceId != 'pip/identity.json'")
-                    } catch (_: Exception) {}
-
-                    // WgConfigFiles: isLockdown column
-                    try {
-                        db.execSQL("ALTER TABLE WgConfigFiles ADD COLUMN isLockdown INTEGER NOT NULL DEFAULT 0")
-                        Logger.i(LOG_TAG_APP_DB, "MIGRATION_28_29: added isLockdown to WgConfigFiles")
-                    } catch (e: Exception) {
-                        Logger.e(LOG_TAG_APP_DB, "MIGRATION_28_29: isLockdown already exists in WgConfigFiles, ignore", e)
-                    }
-                }
-            }
-
-        internal val MIGRATION_29_30: Migration =
-            object : Migration(29, 30) {
-                override fun migrate(db: SupportSQLiteDatabase) {
-                    try {
-                        db.execSQL(
-                            "ALTER TABLE CountryConfig ADD COLUMN selectionCount INTEGER NOT NULL DEFAULT 0"
-                        )
-                        db.execSQL(
-                            "ALTER TABLE CountryConfig ADD COLUMN isFavourite INTEGER NOT NULL DEFAULT 0"
-                        )
-                        db.execSQL(
-                            "CREATE INDEX IF NOT EXISTS index_CountryConfig_isFavourite ON CountryConfig(isFavourite)"
-                        )
-                        db.execSQL(
-                            "ALTER TABLE CountryConfig ADD COLUMN hopEnabled INTEGER NOT NULL DEFAULT 0"
-                        )
-                        Logger.i(LOG_TAG_APP_DB, "MIGRATION_29_30: added selectionCount, isFavourite, hopEnabled to CountryConfig")
-                    } catch (e: Exception) {
-                        Logger.e(LOG_TAG_APP_DB, "MIGRATION_29_30: columns already exist, ignore", e)
-                    }
-                }
-            }
-
-        private val MIGRATION_30_31: Migration =
-            object : Migration(30, 31) {
-                override fun migrate(db: SupportSQLiteDatabase) {
-                    if (!doesColumnExistInTable(db, "AppInfo", "notes")) {
-                        try {
-                            db.execSQL(
-                                "ALTER TABLE AppInfo ADD COLUMN notes TEXT NOT NULL DEFAULT ''"
-                            )
-                            Logger.i(LOG_TAG_APP_DB, "MIGRATION_30_31: added notes column to AppInfo")
-                        } catch (e: Exception) {
-                            Logger.e(LOG_TAG_APP_DB, "MIGRATION_30_31: failed to add notes column", e)
-                            throw e
-                        }
-                    } else {
-                        Logger.i(LOG_TAG_APP_DB, "MIGRATION_30_31: notes column already exists in AppInfo")
-                    }
-                }
-            }
-        private val MIGRATION_31_32: Migration =
-            object : Migration(31, 32) {
-                override fun migrate(db: SupportSQLiteDatabase) {
-                    db.execSQL(
-                        "ALTER TABLE AppInfo ADD COLUMN notes TEXT NOT NULL DEFAULT ''"
-                    )
-
-                    createAppInfoNotesLengthTriggers(db)
-
-                    Logger.i(
-                        LOG_TAG_APP_DB,
-                        "MIGRATION_31_32: added AppInfo.notes and enforced max length"
-                    )
                 }
             }
 
@@ -1359,11 +1095,30 @@ abstract class AppDatabase : RoomDatabase() {
             tableName: String,
             columnToCheck: String
         ): Boolean {
-            try {
-                db.query("SELECT * FROM $tableName LIMIT 0", emptyArray())
-                    .use { cursor -> return cursor.getColumnIndex(columnToCheck) != -1 }
+            // Two-step approach: first confirm the table exists via a fully parameterized
+            // sqlite_master query, then use PRAGMA table_info to enumerate columns.
+            // Neither step interpolates tableName into the SQL string.
+            return try {
+                val tableExists = db.query(
+                    "SELECT 1 FROM sqlite_master WHERE type=? AND name=?",
+                    arrayOf("table", tableName)
+                ).use { it.moveToFirst() }
+                if (!tableExists) return false
+
+                // safeTable is only used in PRAGMA (an identifier context, not a value
+                // context), after we have already verified it in sqlite_master.
+                val safeTable = tableName.replace(Regex("[^A-Za-z0-9_]"), "")
+                db.query("PRAGMA table_info($safeTable)", emptyArray()).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val nameIdx = cursor.getColumnIndex("name")
+                        if (nameIdx >= 0 && cursor.getString(nameIdx) == columnToCheck) {
+                            return true
+                        }
+                    }
+                    false
+                }
             } catch (_: Exception) {
-                return false
+                false
             }
         }
     }
@@ -1396,9 +1151,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun rethinkRemoteFileTagDao(): RethinkRemoteFileTagDao
 
-    abstract fun rethinkLocalFileTagDao(): RethinkLocalFileTagDao
 
-    abstract fun localBlocklistPacksMapDao(): LocalBlocklistPacksMapDao
 
     abstract fun remoteBlocklistPacksMapDao(): RemoteBlocklistPacksMapDao
 
@@ -1422,15 +1175,9 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun subscriptionStateHistoryDao(): SubscriptionStateHistoryDao
 
-    abstract fun sponsorDao(): SponsorDao
-
-    abstract fun countryConfigDAO(): CountryConfigDAO
-
     fun appInfoRepository() = AppInfoRepository(appInfoDAO())
 
     fun dohEndpointRepository() = DoHEndpointRepository(dohEndpointsDAO())
-
-    fun countryConfigRepository() = CountryConfigRepository(countryConfigDAO())
 
     fun dnsCryptEndpointRepository() = DnsCryptEndpointRepository(dnsCryptEndpointDAO())
 
@@ -1448,11 +1195,6 @@ abstract class AppDatabase : RoomDatabase() {
     fun rethinkEndpointRepository() = RethinkDnsEndpointRepository(rethinkEndpointDao())
 
     fun rethinkRemoteFileTagRepository() = RethinkRemoteFileTagRepository(rethinkRemoteFileTagDao())
-
-    fun rethinkLocalFileTagRepository() = RethinkLocalFileTagRepository(rethinkLocalFileTagDao())
-
-    fun localBlocklistPacksMapRepository() =
-        LocalBlocklistPacksMapRepository(localBlocklistPacksMapDao())
 
     fun remoteBlocklistPacksMapRepository() =
         RemoteBlocklistPacksMapRepository(remoteBlocklistPacksMapDao())
