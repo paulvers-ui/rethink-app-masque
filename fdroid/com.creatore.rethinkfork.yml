@@ -1,11 +1,11 @@
-# Placeholders rellenados con valores reales y verificados (commit v1.0.0,
-# SHAs de srclibs, NDK). Lo que NO se ha hecho todavía: correr `fdroid build`
-# en el buildserver -- ver el paso 4 de fdroid/GUIA-FDROID.md. Sin eso, no
-# hay garantía de que prebuild: compile de verdad; es el paso que suele
-# necesitar ajustes con gomobile. Probarlo antes de abrir el MR.
+# Placeholders filled with real, verified values (commit v1.0.0, srclib
+# SHAs, NDK version). What's NOT been done yet: running `fdroid build` on
+# the buildserver -- see step 4 of fdroid/GUIA-FDROID.md. Without that,
+# there's no guarantee prebuild: actually compiles -- it's the step that
+# usually needs adjusting with gomobile. Test it before opening the MR.
 #
-# Destino final: metadata/com.creatore.rethinkfork.yml dentro de tu fork
-# de gitlab.com/fdroid/fdroiddata
+# Final destination: metadata/com.creatore.rethinkfork.yml inside your
+# fork of gitlab.com/fdroid/fdroiddata
 
 Categories:
   - Security
@@ -16,23 +16,23 @@ SourceCode: https://github.com/paulvers-ui/rethink-app-masque
 IssueTracker: https://github.com/paulvers-ui/rethink-app-masque/issues
 
 AutoName: Rethink Dns Fork
-Summary: Cliente DNS cifrado, cortafuegos y proxy WireGuard
+Summary: Encrypted DNS client, firewall, and WireGuard proxy
 
 Description: |-
-    Fork de Rethink DNS + Firewall + VPN con estos cambios respecto al original:
+    Fork of Rethink DNS + Firewall + VPN with these changes from the original:
 
-    * Package ID propio (com.creatore.rethinkfork), coexiste con el original.
-    * Un único tema, Dark Plus -- el resto de temas se quitaron del selector.
-    * Alertas de sonido cuando cambia el estado de la red (túnel caído,
-      proxy sin salud, cambio de interfaz), silenciadas para no repetirse
-      en ráfaga; el sonido se elige desde el selector de notificaciones
-      del propio sistema.
-    * El proxy WARP se sirve sobre MASQUE vía usque
-      (github.com/paulvers-ui/usque, fork de Diniboy1123/usque) en vez del
-      cliente WireGuard oficial de Cloudflare.
-    * Enlace de patrocinio propio (ko-fi) en vez del de RethinkDNS.
-    * DNS de respaldo: se quitó RethinkDNS de la lista, Cloudflare por
-      defecto.
+    * Own package ID (com.creatore.rethinkfork), coexists with the original.
+    * A single theme, Dark Plus -- every other option was removed from the
+      picker.
+    * Sound alerts when network status changes (tunnel down, unhealthy
+      proxy, interface switch), debounced so a burst doesn't repeat; the
+      sound is picked from the system's own notification picker.
+    * WARP is served over MASQUE via usque
+      (github.com/paulvers-ui/usque, a fork of Diniboy1123/usque) instead
+      of Cloudflare's official WireGuard client.
+    * Own sponsor link (ko-fi) instead of RethinkDNS's.
+    * Fallback DNS: RethinkDNS removed from the list, Cloudflare by
+      default.
 
 RepoType: git
 Repo: https://github.com/paulvers-ui/rethink-app-masque.git
@@ -45,12 +45,12 @@ Builds:
     gradle:
       - fdroidFull
 
-    # ── El núcleo del asunto ────────────────────────────────────────────
-    # F-Droid compila todo desde fuente y rechaza binarios ya compilados.
-    # Estos dos van en el repo y hay que borrarlos y regenerarlos aquí.
-    # firestack@<sha> tiene que salir de la rama n2 de este fork -- es la
-    # única con la API que espera el Kotlin de la app (OnQuery de 3 args,
-    # Gostr/Gobyte). Confirma el HEAD real antes de fijar el sha:
+    # ── The core of it ──────────────────────────────────────────────────
+    # F-Droid builds everything from source and rejects prebuilt binaries.
+    # These two live in the repo and have to be deleted and rebuilt here.
+    # firestack@<sha> has to come from this fork's n2 branch -- it's the
+    # only one with the API this app's Kotlin expects (3-arg OnQuery,
+    # Gostr/Gobyte). Confirm the real HEAD before pinning the sha:
     #   git ls-remote https://github.com/paulvers-ui/usque.git main
     #   git ls-remote https://github.com/paulvers-ui/firestack.git n2
     srclibs:
@@ -64,12 +64,12 @@ Builds:
 
     prebuild:
       # 1) usque -> jniLibs/arm64-v8a/libusque.so
-      #    Es un ejecutable PIE de Go, no una librería. Tiene que llamarse
-      #    lib*.so para que Android lo extraiga a nativeLibraryDir y se pueda
-      #    ejecutar; por eso el nombre, aunque no sea un .so de verdad.
+      #    It's a Go PIE executable, not a library. It has to be named
+      #    lib*.so so Android extracts it to nativeLibraryDir and can
+      #    execute it -- hence the name, even though it isn't a real .so.
       #
-      #    Sin NDK ni CC: el goreleaser.yml de este fork compila con
-      #    CGO_ENABLED=0 -- es Go puro cruzado a android/arm64, nada de cgo.
+      #    No NDK or CC needed: this fork's goreleaser.yml builds with
+      #    CGO_ENABLED=0 -- pure Go cross-compiled to android/arm64, no cgo.
       - pushd $$usque$$
       - GOOS=android GOARCH=arm64 CGO_ENABLED=0
         go build -buildmode=pie -trimpath -ldflags="-s -w" -o libusque.so .
@@ -78,20 +78,20 @@ Builds:
       - cp $$usque$$/libusque.so app/src/main/jniLibs/arm64-v8a/libusque.so
 
       # 2) firestack -> app/libs/firestack.aar
-      #    make-aar hace `make clean && make intra`; ver BUILD.md en ese repo.
-      #    Este SÍ necesita el NDK (gomobile bind), por eso ndk: sigue abajo.
+      #    make-aar runs `make clean && make intra`; see BUILD.md in that repo.
+      #    This one DOES need the NDK (gomobile bind), hence ndk: below.
       - pushd $$firestack$$
       - ./make-aar nogo nodebug
       - popd
       - mkdir -p app/libs
       - cp $$firestack$$/firestack.aar app/libs/firestack.aar
 
-      # 3) resolver firestack desde el aar local, no desde JitPack.
-      #    JitPack no está en la lista de repos que F-Droid permite.
+      # 3) resolve firestack from the local aar, not from JitPack.
+      #    JitPack isn't on F-Droid's list of allowed dependency repos.
       - sed -i -e 's/^firestackRepo=.*/firestackRepo=local/' ../gradle.properties
 
-    # gomobile necesita el NDK; la versión debe coincidir con la de BUILD.md
-    # del repo de firestack.
+    # gomobile needs the NDK; the version must match the one in firestack's
+    # own BUILD.md.
     ndk: "28.2.13676358"
 
 AutoUpdateMode: None
