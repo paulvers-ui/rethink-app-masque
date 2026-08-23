@@ -104,6 +104,11 @@ jobs:
           git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
           cd /tmp/firestack
           git checkout -q "${FIRESTACK_COMMIT}"
+          # make-aar está commiteado en el repo fuente sin el bit de ejecución
+          # (modo git 100644, no 100755) -- git no lo hereda del filesystem
+          # de quien lo subió, así que un clone limpio siempre lo pierde.
+          # No es específico de este runner ni un problema intermitente.
+          chmod +x make-aar
           ./make-aar nogo nodebug
           mkdir -p "${GITHUB_WORKSPACE}/app/libs"
           cp firestack.aar "${GITHUB_WORKSPACE}/app/libs/firestack.aar"
