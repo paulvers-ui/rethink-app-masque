@@ -1,0 +1,88 @@
+# Punto de partida para fdroiddata. NO es un fichero terminado:
+# hay que rellenar los <PLACEHOLDER> y probarlo con `fdroid build` antes
+# de mandarlo. Ver fdroid/GUIA-FDROID.md.
+#
+# Destino final: metadata/com.creatore.rethinkfork.yml dentro de tu fork
+# de gitlab.com/fdroid/fdroiddata
+
+Categories:
+  - Security
+  - Internet
+License: Apache-2.0
+AuthorName: <TU NOMBRE>
+SourceCode: https://github.com/paulvers-ui/rethink-app-masque
+IssueTracker: https://github.com/paulvers-ui/rethink-app-masque/issues
+
+AutoName: Rethink Dns Fork
+Summary: Cliente DNS cifrado, cortafuegos y proxy WireGuard
+
+Description: |-
+    Fork de Rethink DNS + Firewall + VPN.
+
+    <Describe QUÉ CAMBIA respecto al original. F-Droid rechaza forks que no
+    explican en qué se diferencian: ya tienen el original publicado.>
+
+RepoType: git
+Repo: https://github.com/paulvers-ui/rethink-app-masque.git
+
+Builds:
+  - versionName: <p.ej. 1.0.0>
+    versionCode: 54
+    commit: <TAG del release, no una rama>
+    subdir: app
+    gradle:
+      - fdroidFull
+
+    # ── El núcleo del asunto ────────────────────────────────────────────
+    # F-Droid compila todo desde fuente y rechaza binarios ya compilados.
+    # Estos dos van en el repo y hay que borrarlos y regenerarlos aquí.
+    # firestack@<sha> tiene que salir de la rama n2 de este fork -- es la
+    # única con la API que espera el Kotlin de la app (OnQuery de 3 args,
+    # Gostr/Gobyte). Confirma el HEAD real antes de fijar el sha:
+    #   git ls-remote https://github.com/paulvers-ui/usque.git main
+    #   git ls-remote https://github.com/paulvers-ui/firestack.git n2
+    srclibs:
+      - usque@<COMMIT de paulvers-ui/usque, rama main>
+      - firestack@<COMMIT de paulvers-ui/firestack, rama n2>
+
+    rm:
+      - app/src/main/jniLibs/arm64-v8a/libusque.so
+      - app/src/main/jniLibs/arm64-v8a/libusque.so.working.sha256
+      - app/libs/firestack.aar
+
+    prebuild:
+      # 1) usque -> jniLibs/arm64-v8a/libusque.so
+      #    Es un ejecutable PIE de Go, no una librería. Tiene que llamarse
+      #    lib*.so para que Android lo extraiga a nativeLibraryDir y se pueda
+      #    ejecutar; por eso el nombre, aunque no sea un .so de verdad.
+      #
+      #    Sin NDK ni CC: el goreleaser.yml de este fork compila con
+      #    CGO_ENABLED=0 -- es Go puro cruzado a android/arm64, nada de cgo.
+      - pushd $$usque$$
+      - GOOS=android GOARCH=arm64 CGO_ENABLED=0
+        go build -buildmode=pie -trimpath -ldflags="-s -w" -o libusque.so .
+      - popd
+      - mkdir -p app/src/main/jniLibs/arm64-v8a
+      - cp $$usque$$/libusque.so app/src/main/jniLibs/arm64-v8a/libusque.so
+
+      # 2) firestack -> app/libs/firestack.aar
+      #    make-aar hace `make clean && make intra`; ver BUILD.md en ese repo.
+      #    Este SÍ necesita el NDK (gomobile bind), por eso ndk: sigue abajo.
+      - pushd $$firestack$$
+      - ./make-aar nogo nodebug
+      - popd
+      - mkdir -p app/libs
+      - cp $$firestack$$/firestack.aar app/libs/firestack.aar
+
+      # 3) resolver firestack desde el aar local, no desde JitPack.
+      #    JitPack no está en la lista de repos que F-Droid permite.
+      - sed -i -e 's/^firestackRepo=.*/firestackRepo=local/' ../gradle.properties
+
+    # gomobile necesita el NDK; la versión debe coincidir con la de BUILD.md
+    # del repo de firestack.
+    ndk: <p.ej. 28.2.13676358>
+
+AutoUpdateMode: None
+UpdateCheckMode: Tags
+CurrentVersion: <igual que versionName>
+CurrentVersionCode: 54
