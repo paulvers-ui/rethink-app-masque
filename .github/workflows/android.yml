@@ -8,6 +8,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Must match release-apk.yml exactly: SAME cache key means this job
+      # normally reuses the firestack.aar that workflow already built,
+      # instead of needing its own NDK/Go/gomobile setup on every PR.
+      #
+      # Why this matters, not just for speed: without -PfirestackRepo=local
+      # pointing at this exact commit, Gradle falls back to
+      # firestackRepo=ossrh (the project default) and resolves
+      # com.celzero:firestack:0.5.5 from Maven Central instead -- a
+      # completely different, unrelated firestack build. That mismatch is
+      # exactly what broke this workflow: BraveVPNService.kt's
+      # logFD/crashFD overrides (added to satisfy paulvers-ui/firestack@n2's
+      # Bridge interface) fail to compile against 0.5.5's Bridge, which
+      # doesn't declare those methods at all -- "'logFD' overrides nothing".
+      # Same interface, same commit, in both builds is the actual fix;
+      # anything else just moves which build breaks.
+      NDKVER: "28.2.13676358"
+      SDKVER: "36"
+      FIRESTACK_COMMIT: "05a664580caca8e30a912b75f2ffe480560e70ae"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -17,6 +36,7 @@ jobs:
           cache: gradle
       - run: chmod +x gradlew
       - uses: gradle/actions/setup-gradle@v4
+
       - name: Configure variant
         run: |
           if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
@@ -25,12 +45,63 @@ jobs:
           else
             echo "VARIANT=assembleFdroidFullDebug" >> $GITHUB_ENV
           fi
+
+      # Same cache key release-apk.yml writes to. On main, that workflow
+      # runs on every push and populates this -- so the common case here
+      # is a cache hit and none of the steps below (NDK, Go, the actual
+      # firestack build) run at all.
+      - id: firestack-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/firestack-aar-cache/firestack.aar
+          key: firestack-aar-${{ env.FIRESTACK_COMMIT }}-ndk${{ env.NDKVER }}
+
+      - name: 🐼 Go 1.26+ (only needed on a cache miss)
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.26'
+          cache: false
+
+      - name: 🤖 Setup Android SDK (only needed on a cache miss)
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: 🤖 Install NDK ${{ env.NDKVER }} (only needed on a cache miss)
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        run: sdkmanager --install "ndk;${NDKVER}" || echo "NDKVER=0" >> "$GITHUB_ENV"
+
+      - name: 🏗️ Build firestack.aar (paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }}) -- cache miss fallback
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        run: |
+          set -eu
+          git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
+          cd /tmp/firestack
+          git checkout -q "${FIRESTACK_COMMIT}"
+          chmod +x make-aar
+          ./make-aar nogo nodebug
+          mkdir -p /tmp/firestack-aar-cache
+          cp firestack.aar /tmp/firestack-aar-cache/firestack.aar
+
+      - name: 📋 Place firestack-local.aar
+        run: |
+          set -eu
+          test -s /tmp/firestack-aar-cache/firestack.aar || {
+            echo "::error::firestack.aar missing after cache-restore/build step"
+            exit 1
+          }
+          mkdir -p app/libs
+          cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack-local.aar
+        shell: bash
+
       - uses: nick-fields/retry@v3
         with:
           timeout_minutes: 15
           max_attempts: 1
-          command: ./gradlew ${{ env.VARIANT }} --info --warning-mode all --no-configuration-cache
-      - run: ./gradlew testFdroidFullDebugUnitTest --no-configuration-cache --continue
+          command: ./gradlew ${{ env.VARIANT }} -PfirestackRepo=local --info --warning-mode all --no-configuration-cache
+      - run: ./gradlew testFdroidFullDebugUnitTest -PfirestackRepo=local --no-configuration-cache --continue
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -38,7 +109,7 @@ jobs:
           path: app/build/reports/tests/
           retention-days: 30
           if-no-files-found: warn
-      - run: ./gradlew lintFdroidFullDebug --no-configuration-cache
+      - run: ./gradlew lintFdroidFullDebug -PfirestackRepo=local --no-configuration-cache
         continue-on-error: true
       - if: always()
         uses: actions/upload-artifact@v4

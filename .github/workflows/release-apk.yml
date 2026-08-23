@@ -142,10 +142,16 @@ jobs:
           packages: ''
 
       - name: 🤖 Install SDK ${{ env.SDKVER }} + NDK ${{ env.NDKVER }}
+        # max_attempts: 1 -- retries only help against transient network
+        # blips (a dropped download, a flaky mirror). Every real failure
+        # this pipeline has hit so far has been a deterministic bug (a
+        # missing chmod, a wrong dependency name, a genuine Kotlin compile
+        # error) that fails identically on every attempt -- retrying just
+        # burns CI minutes waiting to fail the same way again.
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 10
-          max_attempts: 3
+          max_attempts: 1
           command: |
             sdkmanager --install "platforms;android-${SDKVER}" "build-tools;${SDKVER}.0.0"
             sdkmanager --install "ndk;${NDKVER}" || echo "NDKVER=0" >> "$GITHUB_ENV"
@@ -161,7 +167,7 @@ jobs:
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 20
-          max_attempts: 2
+          max_attempts: 1
           command: |
             set -eu
             # No auth needed -- firestack is a public repo. An earlier
