@@ -230,46 +230,6 @@
 
         </RelativeLayout>
 
-        <!-- WireGuard -> WARP(SOCKS5) double hop -->
-        <LinearLayout
-            android:id="@+id/settings_activity_wg_s5_hop_row"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="wireguard - socks5 double hop"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/settings_activity_wg_s5_hop_desc"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="route active WireGuard tunnels through WARP (127.0.0.1:40000)"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/settings_activity_wg_s5_hop_switch"
-                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="10dp" />
-        </LinearLayout>
-
-
         <!-- SNI override editor: max 20 chars, default cloudflare.com -->
           <LinearLayout
               android:layout_width="match_parent"
