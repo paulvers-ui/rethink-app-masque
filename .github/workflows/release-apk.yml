@@ -1,0 +1,185 @@
+# Compila el APK de release (fdroidFull -- sin Firebase/Play Services),
+# lo firma con el keystore guardado en secrets, y lo publica como GitHub
+# Release al empujar un tag v*.
+#
+# Este workflow NO "publica en Obtainium" ni "publica en IzzyOnDroid" --
+# eso no existe como paso automatizable:
+#
+#   - Obtainium es una app que instala CADA USUARIO en su propio teléfono;
+#     ellos la apuntan a este repo. Lo único que Obtainium necesita de
+#     nuestro lado son Releases de GitHub bien etiquetadas con el APK
+#     adjunto, que es exactamente lo que este workflow produce.
+#
+#   - IzzyOnDroid es un repo curado por terceros. Incluir una app ahí es
+#     una solicitud manual (Request for Packaging / merge request contra
+#     su fdroiddata en GitLab), revisada por una persona, una sola vez --
+#     no algo que un Action en TU repo pueda empujar. Una vez aceptada,
+#     su propia infraestructura vigila tus Releases de GitHub -- que,
+#     otra vez, es lo que este workflow ya produce.
+#
+# En corto: este workflow es el prerrequisito de los dos. Ver
+# fdroid/GUIA-FDROID.md para el paso manual de IzzyOnDroid.
+name: 📦 Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag a compilar (debe existir ya, ej. v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      NDKVER: "28.2.13676358"
+      SDKVER: "36"
+      # commit verificado de paulvers-ui/firestack, rama n2 -- la unica con
+      # la API que este Kotlin espera (OnQuery de 3 args, Gostr/Gobyte).
+      # Actualiza esto solo despues de confirmar el HEAD real con:
+      #   git ls-remote https://github.com/paulvers-ui/firestack.git n2
+      FIRESTACK_COMMIT: "0159488a03e052fed4d62cd62f3ddc8142f8f70f"
+
+    steps:
+      - name: 🥏 Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0   # gitVersion en build.gradle usa `git describe --tags`
+
+      - name: 🔎 Verificar que hay secrets de firma
+        run: |
+          missing=""
+          [ -z "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ] && missing="$missing RELEASE_KEYSTORE_BASE64"
+          [ -z "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" ] && missing="$missing RELEASE_KEYSTORE_PASSWORD"
+          [ -z "${{ secrets.RELEASE_KEY_ALIAS }}" ] && missing="$missing RELEASE_KEY_ALIAS"
+          [ -z "${{ secrets.RELEASE_KEY_PASSWORD }}" ] && missing="$missing RELEASE_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Faltan secrets:$missing"
+            echo "::error::Corre primero el workflow '🔑 Generar keystore de release' (una sola vez) y guarda lo que te da."
+            exit 1
+          fi
+        shell: bash
+
+      - name: ☕ JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 🐼 Go 1.26+ (para compilar firestack)
+        uses: actions/setup-go@v6
+        with:
+          go-version: '>=1.26'
+
+      - name: 🤖 Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: 🤖 Instalar SDK ${{ env.SDKVER }} + NDK ${{ env.NDKVER }}
+        run: |
+          set -eu
+          sdkmanager --install "platforms;android-${SDKVER}" "build-tools;${SDKVER}.0.0"
+          if sdkmanager --install "ndk;${NDKVER}"; then
+            echo "usando NDK fijo ${NDKVER}"
+          else
+            echo "NDKVER=0" >> "$GITHUB_ENV"
+            echo "::warning::NDK ${NDKVER} no disponible; usando el del runner"
+          fi
+        shell: bash
+
+      - name: 🏗️ Compilar firestack.aar (paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }})
+        run: |
+          set -eu
+          git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
+          cd /tmp/firestack
+          git checkout -q "${FIRESTACK_COMMIT}"
+          ./make-aar nogo nodebug
+          mkdir -p "${GITHUB_WORKSPACE}/app/libs"
+          cp firestack.aar "${GITHUB_WORKSPACE}/app/libs/firestack.aar"
+        shell: bash
+
+      - name: 🔑 Decodificar el keystore
+        run: |
+          set -eu
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "${GITHUB_WORKSPACE}/release.keystore"
+          echo "RELEASE_KEYSTORE_PATH=${GITHUB_WORKSPACE}/release.keystore" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: ⚙️ Permisos de gradlew
+        run: chmod +x gradlew
+
+      - name: 🚂 Compilar APK de release (fdroidFull)
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleFdroidFullRelease \
+            -PfirestackRepo=local \
+            --no-configuration-cache --info --warning-mode all
+        shell: bash
+
+      - name: 🔎 Verificar y renombrar el APK
+        id: apk
+        run: |
+          set -eu
+          src=$(find app/build/outputs/apk/fdroidFull/release -name "*.apk" | head -1)
+          test -n "$src" || { echo "::error::No se encontró ningún APK compilado"; exit 1; }
+
+          # confirma que quedó firmado -- un APK sin firmar no instala en
+          # ningún dispositivo real, así que esto detiene el release aquí
+          # en vez de publicar algo inútil.
+          if ! "$ANDROID_HOME"/build-tools/${SDKVER}.0.0/apksigner verify "$src" > /dev/null 2>&1; then
+            echo "::error::El APK no pasó la verificación de firma -- revisa los secrets de RELEASE_KEY*"
+            exit 1
+          fi
+
+          ver="${{ inputs.tag || github.ref_name }}"
+          out="RethinkDnsFork-${ver}-fdroid.apk"
+          cp "$src" "$out"
+          sha256sum "$out" > "${out}.sha256"
+          echo "apk_path=${out}" >> "$GITHUB_OUTPUT"
+          echo "sha_path=${out}.sha256" >> "$GITHUB_OUTPUT"
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: 🚀 Subir como artefacto (respaldo, independiente del release)
+        uses: actions/upload-artifact@v6
+        with:
+          name: apk-${{ steps.apk.outputs.version }}
+          path: |
+            ${{ steps.apk.outputs.apk_path }}
+            ${{ steps.apk.outputs.sha_path }}
+          if-no-files-found: error
+
+      - name: 📦 Publicar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.apk.outputs.version }}
+          name: Rethink Dns Fork ${{ steps.apk.outputs.version }}
+          generate_release_notes: true
+          body: |
+            APK firmado, compilado desde este commit por GitHub Actions.
+
+            **Instalación con [Obtainium](https://github.com/ImranR98/Obtainium):**
+            añade este repositorio (`paulvers-ui/rethink-app-masque`) como fuente
+            "GitHub" -- Obtainium detecta este Release automáticamente.
+
+            firestack compilado desde `paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }}`
+            (rama `n2`). Variante `fdroidFull` -- sin Firebase ni Google Play Services.
+
+            SHA256 del APK en el archivo `.sha256` adjunto.
+          files: |
+            ${{ steps.apk.outputs.apk_path }}
+            ${{ steps.apk.outputs.sha_path }}
