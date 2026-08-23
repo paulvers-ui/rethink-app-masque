@@ -1,24 +1,23 @@
-# Compila el APK de release (fdroidFull -- sin Firebase/Play Services),
-# lo firma con el keystore guardado en secrets, y lo publica como GitHub
-# Release al empujar un tag v*.
+# Builds the release APKs (fdroidFull -- no Firebase/Play Services),
+# signs them with the keystore stored in secrets, and publishes them
+# to GitHub Releases when a v* tag is pushed.
 #
-# Este workflow NO "publica en Obtainium" ni "publica en IzzyOnDroid" --
-# eso no existe como paso automatizable:
+# This workflow does NOT "publish to Obtainium" or "publish to IzzyOnDroid" --
+# that isn't an automatable step:
 #
-#   - Obtainium es una app que instala CADA USUARIO en su propio teléfono;
-#     ellos la apuntan a este repo. Lo único que Obtainium necesita de
-#     nuestro lado son Releases de GitHub bien etiquetadas con el APK
-#     adjunto, que es exactamente lo que este workflow produce.
+#   - Obtainium is installed by EACH USER on their own phone; they point it
+#     at this repo. All it needs from this side is well-tagged GitHub
+#     Releases with the APK attached, which is exactly what this produces.
 #
-#   - IzzyOnDroid es un repo curado por terceros. Incluir una app ahí es
-#     una solicitud manual (Request for Packaging / merge request contra
-#     su fdroiddata en GitLab), revisada por una persona, una sola vez --
-#     no algo que un Action en TU repo pueda empujar. Una vez aceptada,
-#     su propia infraestructura vigila tus Releases de GitHub -- que,
-#     otra vez, es lo que este workflow ya produce.
+#   - IzzyOnDroid is a third-party curated repo. Getting an app listed there
+#     is a manual request (Request for Packaging / merge request against
+#     their fdroiddata on GitLab), reviewed by a person, once -- not
+#     something an Action in this repo can push. Once accepted, their own
+#     infrastructure watches this repo's GitHub Releases -- again, what
+#     this workflow already produces.
 #
-# En corto: este workflow es el prerrequisito de los dos. Ver
-# fdroid/GUIA-FDROID.md para el paso manual de IzzyOnDroid.
+# In short: this workflow is the real prerequisite for both. See
+# fdroid/GUIA-FDROID.md for the manual IzzyOnDroid step.
 name: 📦 Release APK
 
 on:
@@ -28,12 +27,20 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag a compilar (debe existir ya, ej. v1.0.0)'
+        description: 'Tag to build (must already exist, e.g. v1.0.0)'
         required: true
         type: string
 
 permissions:
   contents: write
+
+# Cancels a superseded run of THIS workflow for the same tag -- e.g. a
+# workflow_dispatch retry on a tag that's already building from the push
+# trigger. Does not touch runs for other tags/branches (the group key
+# includes the ref), so two different releases can still build in parallel.
+concurrency:
+  group: release-apk-${{ inputs.tag || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-release:
@@ -43,9 +50,9 @@ jobs:
     env:
       NDKVER: "28.2.13676358"
       SDKVER: "36"
-      # commit verificado de paulvers-ui/firestack, rama n2 -- la unica con
-      # la API que este Kotlin espera (OnQuery de 3 args, Gostr/Gobyte).
-      # Actualiza esto solo despues de confirmar el HEAD real con:
+      # Verified commit on paulvers-ui/firestack, branch n2 -- the only one
+      # with the API this Kotlin expects (3-arg OnQuery, Gostr/Gobyte).
+      # Only bump this after confirming the real HEAD with:
       #   git ls-remote https://github.com/paulvers-ui/firestack.git n2
       FIRESTACK_COMMIT: "0159488a03e052fed4d62cd62f3ddc8142f8f70f"
 
@@ -54,9 +61,10 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.tag || github.ref }}
-          fetch-depth: 0   # gitVersion en build.gradle usa `git describe --tags`
+          fetch-depth: 0   # gitVersion in build.gradle uses `git describe --tags`,
+                            # and the changelog step below needs the previous tag too.
 
-      - name: 🔎 Verificar que hay secrets de firma
+      - name: 🔎 Check signing secrets are present
         run: |
           missing=""
           [ -z "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ] && missing="$missing RELEASE_KEYSTORE_BASE64"
@@ -64,8 +72,8 @@ jobs:
           [ -z "${{ secrets.RELEASE_KEY_ALIAS }}" ] && missing="$missing RELEASE_KEY_ALIAS"
           [ -z "${{ secrets.RELEASE_KEY_PASSWORD }}" ] && missing="$missing RELEASE_KEY_PASSWORD"
           if [ -n "$missing" ]; then
-            echo "::error::Faltan secrets:$missing"
-            echo "::error::Corre primero el workflow '🔑 Generar keystore de release' (una sola vez) y guarda lo que te da."
+            echo "::error::Missing secrets:$missing"
+            echo "::error::Run the '🔑 Generate release keystore' workflow first (once) and save what it gives you."
             exit 1
           fi
         shell: bash
@@ -76,55 +84,93 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: 🐼 Go 1.26+ (para compilar firestack)
+      - name: 🚂 Setup Gradle (caches wrapper, dependencies, build cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 🐼 Go 1.26+ (to build firestack)
         uses: actions/setup-go@v6
         with:
           go-version: '>=1.26'
+          # There's no go.mod at this repo's root (only inside the firestack
+          # clone further down, which doesn't exist yet at this point in the
+          # job), so setup-go's own dependency cache has nothing to key off
+          # and fails to restore every run with a harmless but confusing
+          # warning. Disabling it here removes the noise; firestack.aar gets
+          # its own cache below instead, keyed the right way.
+          cache: false
 
       - name: 🤖 Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: ''
 
-      - name: 🤖 Instalar SDK ${{ env.SDKVER }} + NDK ${{ env.NDKVER }}
+      - name: 🤖 Install SDK ${{ env.SDKVER }} + NDK ${{ env.NDKVER }}
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          command: |
+            set -eu
+            sdkmanager --install "platforms;android-${SDKVER}" "build-tools;${SDKVER}.0.0"
+            if sdkmanager --install "ndk;${NDKVER}"; then
+              echo "using pinned NDK ${NDKVER}"
+            else
+              echo "NDKVER=0" >> "$GITHUB_ENV"
+              echo "::warning::NDK ${NDKVER} unavailable; falling back to whatever the runner has (make-aar treats NDKVER=0 as 'use the newest installed')"
+            fi
+
+      - name: 💾 Cache firestack.aar
+        id: firestack-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/firestack-aar-cache/firestack.aar
+          # Rebuilds only when the pinned commit or NDK version changes --
+          # gomobile bind is the slowest step in this whole job, and the
+          # pinned commit rarely moves between releases.
+          key: firestack-aar-${{ env.FIRESTACK_COMMIT }}-ndk${{ env.NDKVER }}
+
+      - name: 🏗️ Build firestack.aar (paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }})
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 2
+          command: |
+            set -eu
+            git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
+            cd /tmp/firestack
+            git checkout -q "${FIRESTACK_COMMIT}"
+            # make-aar is committed upstream without the executable bit (git
+            # mode 100644, not 100755) -- git doesn't preserve permissions
+            # from whoever's filesystem it was pushed from, so a fresh clone
+            # always loses it. Not a runner quirk or intermittent failure.
+            chmod +x make-aar
+            ./make-aar nogo nodebug
+            mkdir -p /tmp/firestack-aar-cache
+            cp firestack.aar /tmp/firestack-aar-cache/firestack.aar
+
+      - name: 📋 Place firestack.aar
         run: |
           set -eu
-          sdkmanager --install "platforms;android-${SDKVER}" "build-tools;${SDKVER}.0.0"
-          if sdkmanager --install "ndk;${NDKVER}"; then
-            echo "usando NDK fijo ${NDKVER}"
-          else
-            echo "NDKVER=0" >> "$GITHUB_ENV"
-            echo "::warning::NDK ${NDKVER} no disponible; usando el del runner"
-          fi
+          test -s /tmp/firestack-aar-cache/firestack.aar || {
+            echo "::error::firestack.aar missing after build/cache-restore step"
+            exit 1
+          }
+          mkdir -p app/libs
+          cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack.aar
         shell: bash
 
-      - name: 🏗️ Compilar firestack.aar (paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }})
-        run: |
-          set -eu
-          git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
-          cd /tmp/firestack
-          git checkout -q "${FIRESTACK_COMMIT}"
-          # make-aar está commiteado en el repo fuente sin el bit de ejecución
-          # (modo git 100644, no 100755) -- git no lo hereda del filesystem
-          # de quien lo subió, así que un clone limpio siempre lo pierde.
-          # No es específico de este runner ni un problema intermitente.
-          chmod +x make-aar
-          ./make-aar nogo nodebug
-          mkdir -p "${GITHUB_WORKSPACE}/app/libs"
-          cp firestack.aar "${GITHUB_WORKSPACE}/app/libs/firestack.aar"
-        shell: bash
-
-      - name: 🔑 Decodificar el keystore
+      - name: 🔑 Decode the keystore
         run: |
           set -eu
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "${GITHUB_WORKSPACE}/release.keystore"
           echo "RELEASE_KEYSTORE_PATH=${GITHUB_WORKSPACE}/release.keystore" >> "$GITHUB_ENV"
         shell: bash
 
-      - name: ⚙️ Permisos de gradlew
+      - name: ⚙️ gradlew permissions
         run: chmod +x gradlew
 
-      - name: 🚂 Compilar APK de release (fdroidFull)
+      - name: 🚂 Build release APKs (fdroidFull)
         env:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
@@ -135,56 +181,150 @@ jobs:
             --no-configuration-cache --info --warning-mode all
         shell: bash
 
-      - name: 🔎 Verificar y renombrar el APK
-        id: apk
+      # app/build.gradle enables splits.abi with universalApk true, which
+      # means this ONE Gradle invocation produces THREE APKs: a universal
+      # one plus one restricted to each of armeabi-v7a / arm64-v8a. AGP's
+      # output filename convention for split APKs has changed across
+      # versions historically, so rather than guess a literal filename
+      # pattern (and risk silently grabbing the wrong one -- e.g. shipping
+      # an arm64-only build as if it were universal, which would simply
+      # fail to install for anyone on a different ABI), every APK found is
+      # inspected directly with aapt and classified by what it actually
+      # contains.
+      - name: 🔎 Discover, verify, and classify the built APKs
+        id: apks
         run: |
           set -eu
-          src=$(find app/build/outputs/apk/fdroidFull/release -name "*.apk" | head -1)
-          test -n "$src" || { echo "::error::No se encontró ningún APK compilado"; exit 1; }
+          AAPT="$ANDROID_HOME/build-tools/${SDKVER}.0.0/aapt"
+          APKSIGNER="$ANDROID_HOME/build-tools/${SDKVER}.0.0/apksigner"
 
-          # confirma que quedó firmado -- un APK sin firmar no instala en
-          # ningún dispositivo real, así que esto detiene el release aquí
-          # en vez de publicar algo inútil.
-          if ! "$ANDROID_HOME"/build-tools/${SDKVER}.0.0/apksigner verify "$src" > /dev/null 2>&1; then
-            echo "::error::El APK no pasó la verificación de firma -- revisa los secrets de RELEASE_KEY*"
-            exit 1
+          mapfile -t found < <(find app/build/outputs/apk/fdroidFull/release -name "*.apk")
+          test "${#found[@]}" -gt 0 || { echo "::error::No APK was produced"; exit 1; }
+          echo "Found ${#found[@]} APK(s):"
+          printf '  %s\n' "${found[@]}"
+
+          declare universal="" arm64="" armv7=""
+          ver="${{ inputs.tag || github.ref_name }}"
+
+          for f in "${found[@]}"; do
+            # A build that isn't signed can't be installed on a real device,
+            # so this stops the release here rather than shipping something
+            # unusable -- checked per-APK, before any of them get renamed
+            # or classified.
+            if ! "$APKSIGNER" verify "$f" > /dev/null 2>&1; then
+              echo "::error::$f failed signature verification -- check the RELEASE_KEY* secrets"
+              exit 1
+            fi
+
+            appid=$("$AAPT" dump badging "$f" | grep -oP "package: name='\K[^']+")
+            if [ "$appid" != "com.creatore.rethinkfork" ]; then
+              echo "::error::$f has applicationId '$appid', expected com.creatore.rethinkfork -- wrong variant got built"
+              exit 1
+            fi
+
+            natives=$("$AAPT" dump badging "$f" | grep "native-code" || echo "native-code: (none)")
+            case "$natives" in
+              *arm64-v8a*armeabi-v7a*|*armeabi-v7a*arm64-v8a*)
+                universal="$f" ;;
+              *arm64-v8a*)
+                arm64="$f" ;;
+              *armeabi-v7a*)
+                armv7="$f" ;;
+              *)
+                echo "::warning::$f has unexpected native-code line: $natives (ignored)" ;;
+            esac
+          done
+
+          test -n "$universal" || { echo "::error::No universal APK found among the outputs -- splits.abi may have changed"; exit 1; }
+
+          cp "$universal" "RethinkDnsFork-${ver}.apk"
+          sha256sum "RethinkDnsFork-${ver}.apk" > "RethinkDnsFork-${ver}.apk.sha256"
+          files="RethinkDnsFork-${ver}.apk"
+          files="$files
+          RethinkDnsFork-${ver}.apk.sha256"
+
+          if [ -n "$arm64" ]; then
+            cp "$arm64" "RethinkDnsFork-${ver}-arm64-v8a.apk"
+            files="$files
+          RethinkDnsFork-${ver}-arm64-v8a.apk"
+          fi
+          if [ -n "$armv7" ]; then
+            cp "$armv7" "RethinkDnsFork-${ver}-armeabi-v7a.apk"
+            files="$files
+          RethinkDnsFork-${ver}-armeabi-v7a.apk"
           fi
 
-          ver="${{ inputs.tag || github.ref_name }}"
-          out="RethinkDnsFork-${ver}-fdroid.apk"
-          cp "$src" "$out"
-          sha256sum "$out" > "${out}.sha256"
-          echo "apk_path=${out}" >> "$GITHUB_OUTPUT"
-          echo "sha_path=${out}.sha256" >> "$GITHUB_OUTPUT"
-          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          versionName=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionName='\K[^']+")
+          versionCode=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionCode='\K[^']+")
+          echo "Universal APK: versionName=$versionName versionCode=$versionCode"
+
+          {
+            echo "files<<APKEOF"
+            echo "$files"
+            echo "APKEOF"
+            echo "version=${ver}"
+            echo "version_name=${versionName}"
+            echo "version_code=${versionCode}"
+            echo "has_arm64=$([ -n "$arm64" ] && echo true || echo false)"
+            echo "has_armv7=$([ -n "$armv7" ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
         shell: bash
 
-      - name: 🚀 Subir como artefacto (respaldo, independiente del release)
+      - name: 📝 Build changelog since the previous tag
+        id: changelog
+        run: |
+          set -eu
+          ver="${{ inputs.tag || github.ref_name }}"
+          prev=$(git describe --tags --abbrev=0 "${ver}^" 2>/dev/null || echo "")
+          {
+            echo "changelog<<CHANGELOGEOF"
+            if [ -n "$prev" ]; then
+              echo "Changes since $prev:"
+              echo ""
+              git log --oneline "${prev}..${ver}" -- ':!fdroid' ':!.github' | sed 's/^/- /'
+            else
+              echo "First tagged release."
+            fi
+            echo "CHANGELOGEOF"
+          } >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: 🚀 Upload as artifact (backup, independent of the Release)
         uses: actions/upload-artifact@v6
         with:
-          name: apk-${{ steps.apk.outputs.version }}
-          path: |
-            ${{ steps.apk.outputs.apk_path }}
-            ${{ steps.apk.outputs.sha_path }}
+          name: apk-${{ steps.apks.outputs.version }}
+          path: ${{ steps.apks.outputs.files }}
           if-no-files-found: error
 
-      - name: 📦 Publicar GitHub Release
+      - name: 📦 Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.apk.outputs.version }}
-          name: Rethink Dns Fork ${{ steps.apk.outputs.version }}
+          tag_name: ${{ steps.apks.outputs.version }}
+          name: Rethink Dns Fork ${{ steps.apks.outputs.version }}
+          # A tag ending in -alpha/-beta/-rc marks the release as a
+          # pre-release automatically -- Obtainium and GitHub both respect
+          # this and won't offer it as a regular update by default.
+          prerelease: ${{ contains(steps.apks.outputs.version, '-alpha') || contains(steps.apks.outputs.version, '-beta') || contains(steps.apks.outputs.version, '-rc') }}
           generate_release_notes: true
           body: |
-            APK firmado, compilado desde este commit por GitHub Actions.
+            Signed APK, built from this commit by GitHub Actions.
+            versionName `${{ steps.apks.outputs.version_name }}`, versionCode `${{ steps.apks.outputs.version_code }}`.
 
-            **Instalación con [Obtainium](https://github.com/ImranR98/Obtainium):**
-            añade este repositorio (`paulvers-ui/rethink-app-masque`) como fuente
-            "GitHub" -- Obtainium detecta este Release automáticamente.
+            **Which file to grab:**
+            - `RethinkDnsFork-*.apk` -- universal, works on any supported device. Use this one if unsure.
+            ${{ steps.apks.outputs.has_arm64 == 'true' && '- `RethinkDnsFork-*-arm64-v8a.apk` -- smaller download, 64-bit ARM only (most phones from the last several years).' || '' }}
+            ${{ steps.apks.outputs.has_armv7 == 'true' && '- `RethinkDnsFork-*-armeabi-v7a.apk` -- smaller download, 32-bit ARM only (older devices).' || '' }}
 
-            firestack compilado desde `paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }}`
-            (rama `n2`). Variante `fdroidFull` -- sin Firebase ni Google Play Services.
+            **Install with [Obtainium](https://github.com/ImranR98/Obtainium):**
+            add this repository (`paulvers-ui/rethink-app-masque`) as a "GitHub" source --
+            Obtainium detects this Release automatically.
 
-            SHA256 del APK en el archivo `.sha256` adjunto.
-          files: |
-            ${{ steps.apk.outputs.apk_path }}
-            ${{ steps.apk.outputs.sha_path }}
+            firestack built from `paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }}`
+            (branch `n2`). `fdroidFull` variant -- no Firebase, no Google Play Services.
+
+            SHA256 of the universal APK is in the attached `.sha256` file.
+
+            ---
+
+            ${{ steps.changelog.outputs.changelog }}
+          files: ${{ steps.apks.outputs.files }}
