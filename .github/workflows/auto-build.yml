@@ -38,6 +38,9 @@
 # token never has.
 name: 🔁 Auto-build (unsigned, every release + PR)
 
+permissions:
+  contents: write
+
 on:
   release:
     types: [published]
