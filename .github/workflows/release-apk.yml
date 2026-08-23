@@ -1,15 +1,44 @@
+# Auto-tags every push to main, builds a signed APK, and publishes it as a
+# GitHub Release. Fully automated -- no manual `git tag` needed.
+#
+# Fixed after a real failure: this file previously also triggered on bare
+# `pull_request:` (no branch/fork filter) and on push to `tests`/
+# `tests-lightver`. That caused two concrete problems:
+#
+#   1. GitHub withholds ALL repository secrets from a workflow run
+#      triggered by a pull_request from a fork -- by design, so an
+#      outside contributor's PR can't read the signing key. Every PR
+#      opened from a fork (including the ones used to propose changes to
+#      this very repo) failed at the secrets check with all four
+#      RELEASE_* secrets reported missing, even though they were
+#      correctly saved in Settings -> Secrets.
+#   2. Auto-tagging on push to tests/tests-lightver meant unfinished work
+#      on those branches could auto-publish a signed "release" and ping
+#      every Obtainium user with an update -- those branches are for
+#      active development, not for shipping.
+#
+# Fix: dropped pull_request entirely (android.yml already builds+lints
+# every PR without needing secrets, so nothing is lost) and restricted
+# auto-tagging to push on `main` only. See the two job-level `if:` guards
+# below for the rest of the safety net.
 name: 📦 Release APK
 
 on:
   push:
-    branches: [main, tests, tests-lightver]
-  pull_request:
+    branches: [main]
+    # Doc/CI-only changes don't need a new signed release; skips the
+    # ~30-40 min build+sign pipeline (and the Obtainium notification
+    # that would follow) for commits that touch none of the app itself.
+    paths-ignore:
+      - '**.md'
+      - 'fdroid/**'
+      - '.github/**'
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g. v1.0.0)'
+        description: 'Tag to build (optional; e.g. v1.0.0). Leave empty to auto-tag from the current commit.'
         required: false
         type: string
 
@@ -22,16 +51,26 @@ concurrency:
 
 jobs:
   auto-tag:
-    name: Auto tag
+    name: 🏷️ Auto tag
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    # Only on a real push to main in this repo -- never on a fork (a fork
+    # pushing to its own main would otherwise try to tag/release using
+    # secrets it doesn't have, and fail loudly for no reason) and never
+    # when workflow_dispatch/release already supplies or implies a tag.
+    if: github.event_name == 'push' && github.repository == 'paulvers-ui/rethink-app-masque'
     outputs:
       new_tag: ${{ steps.tag.outputs.new_tag }}
       new_version: ${{ steps.tag.outputs.new_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      # Parses commits since the last tag using Angular commit-message
+      # conventions (feat:/fix:/BREAKING CHANGE:) to pick patch/minor/
+      # major automatically, falling back to default_bump (patch) for
+      # commits that don't follow that convention -- verified behavior,
+      # not assumed.
       - id: tag
         uses: mathieudutour/github-tag-action@v6.2
         with:
@@ -43,114 +82,245 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [auto-tag]
-    if: always()
+    # Runs when: triggered directly (workflow_dispatch / a published
+    # Release), OR auto-tag actually produced a new tag. Deliberately
+    # NOT `always()` alone -- if auto-tag genuinely failed (as opposed to
+    # being skipped because this run isn't a push-to-main), this must
+    # not proceed and attempt a release anyway.
+    if: |
+      always() &&
+      github.repository == 'paulvers-ui/rethink-app-masque' &&
+      (needs.auto-tag.result == 'success' || needs.auto-tag.result == 'skipped') &&
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'release' || needs.auto-tag.outputs.new_tag != '')
+
     env:
       NDKVER: "28.2.13676358"
       SDKVER: "36"
+      # Verified commit on paulvers-ui/firestack, branch n2 -- the only
+      # one with the API this Kotlin expects (3-arg OnQuery, Gostr/
+      # Gobyte). Confirmed both facts before relying on them: this exact
+      # commit exists, is an ancestor of the current n2 HEAD, and its
+      # dnsx_listener.go/core_boxes.go still have the right shapes.
+      # Reconfirm with:
+      #   git ls-remote https://github.com/paulvers-ui/firestack.git n2
       FIRESTACK_COMMIT: "05a664580caca8e30a912b75f2ffe480560e70ae"
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.tag || needs.auto-tag.outputs.new_tag || github.ref }}
           fetch-depth: 0
-      - name: Check secrets
+
+      - name: 🔎 Check signing secrets are present
         run: |
           missing=""
           [ -z "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ] && missing="$missing RELEASE_KEYSTORE_BASE64"
           [ -z "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" ] && missing="$missing RELEASE_KEYSTORE_PASSWORD"
           [ -z "${{ secrets.RELEASE_KEY_ALIAS }}" ] && missing="$missing RELEASE_KEY_ALIAS"
           [ -z "${{ secrets.RELEASE_KEY_PASSWORD }}" ] && missing="$missing RELEASE_KEY_PASSWORD"
-          [ -n "$missing" ] && echo "::error::Missing:$missing" && exit 1 || true
-      - uses: actions/setup-java@v4
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets:$missing"
+            echo "::error::Run '🔑 Generate release keystore' once and save what it gives you (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+        shell: bash
+
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
+
       - uses: gradle/actions/setup-gradle@v4
-      - uses: actions/setup-go@v5
+
+      - uses: actions/setup-go@v6
         with:
           go-version: '>=1.26'
           cache: false
+
       - uses: android-actions/setup-android@v3
         with:
           packages: ''
-      - uses: nick-fields/retry@v3
+
+      - name: 🤖 Install SDK ${{ env.SDKVER }} + NDK ${{ env.NDKVER }}
+        uses: nick-fields/retry@v3
         with:
           timeout_minutes: 10
           max_attempts: 3
           command: |
             sdkmanager --install "platforms;android-${SDKVER}" "build-tools;${SDKVER}.0.0"
             sdkmanager --install "ndk;${NDKVER}" || echo "NDKVER=0" >> "$GITHUB_ENV"
+
       - id: firestack-cache
         uses: actions/cache@v4
         with:
           path: /tmp/firestack-aar-cache/firestack.aar
           key: firestack-aar-${{ env.FIRESTACK_COMMIT }}-ndk${{ env.NDKVER }}
-      - if: steps.firestack-cache.outputs.cache-hit != 'true'
+
+      - name: 🏗️ Build firestack.aar (paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }})
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 20
           max_attempts: 2
           command: |
-            git clone -q https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/paulvers-ui/firestack.git /tmp/firestack
-            cd /tmp/firestack && git checkout -q "${FIRESTACK_COMMIT}"
-            chmod +x make-aar && ./make-aar nogo nodebug
-            mkdir -p /tmp/firestack-aar-cache && cp firestack.aar /tmp/firestack-aar-cache/
-      - run: mkdir -p app/libs && cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack-local.aar
-      - run: |
+            set -eu
+            # No auth needed -- firestack is a public repo. An earlier
+            # version of this step authenticated the clone with
+            # secrets.GITHUB_TOKEN, which had no effect here besides
+            # putting a token in a URL unnecessarily.
+            git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
+            cd /tmp/firestack
+            git checkout -q "${FIRESTACK_COMMIT}"
+            chmod +x make-aar
+            ./make-aar nogo nodebug
+            mkdir -p /tmp/firestack-aar-cache
+            cp firestack.aar /tmp/firestack-aar-cache/firestack.aar
+
+      - name: 📋 Place firestack-local.aar
+        run: |
+          set -eu
+          test -s /tmp/firestack-aar-cache/firestack.aar || {
+            echo "::error::firestack.aar missing after build/cache-restore step"
+            exit 1
+          }
+          mkdir -p app/libs
+          # app/build.gradle's "local" case resolves com.celzero:firestack:local@aar
+          # via the flatDir repo declared in the root build.gradle, which maps
+          # that coordinate to this exact filename by Gradle's flatDir naming
+          # convention (name-version.ext). Renaming this without updating both
+          # build.gradle files will silently break dependency resolution.
+          cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack-local.aar
+        shell: bash
+
+      - name: 🔑 Decode the keystore
+        run: |
+          set -eu
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "${GITHUB_WORKSPACE}/release.keystore"
           echo "RELEASE_KEYSTORE_PATH=${GITHUB_WORKSPACE}/release.keystore" >> "$GITHUB_ENV"
-      - run: chmod +x gradlew
-      - name: Build release APKs
+        shell: bash
+
+      - name: ⚙️ gradlew permissions
+        run: chmod +x gradlew
+
+      - name: 🚂 Build release APKs (fdroidFull)
         env:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          ./gradlew assembleFdroidFullRelease -PfirestackRepo=local --no-configuration-cache --info --warning-mode all
-      - id: apks
+          ./gradlew assembleFdroidFullRelease \
+            -PfirestackRepo=local \
+            --no-configuration-cache --info --warning-mode all
+        shell: bash
+
+      # splits.abi + universalApk true in app/build.gradle means this ONE
+      # invocation produces THREE apks (universal + per-ABI). Every apk
+      # found is inspected directly with aapt and classified by its real
+      # native-code line rather than trusting a filename pattern -- AGP's
+      # split-apk naming convention has changed across versions
+      # historically, and the old approach of `find ... | head -1` could
+      # silently publish an arm64-only build as if it were universal.
+      - name: 🔎 Discover, verify, and classify the built APKs
+        id: apks
         run: |
           set -eu
           AAPT="$ANDROID_HOME/build-tools/${SDKVER}.0.0/aapt"
           APKSIGNER="$ANDROID_HOME/build-tools/${SDKVER}.0.0/apksigner"
+
           mapfile -t found < <(find app/build/outputs/apk/fdroidFull/release -name "*.apk")
+          test "${#found[@]}" -gt 0 || { echo "::error::No APK was produced"; exit 1; }
+          echo "Found ${#found[@]} APK(s):"
+          printf '  %s\n' "${found[@]}"
+
           declare universal="" arm64="" armv7=""
           ver="${{ inputs.tag || needs.auto-tag.outputs.new_tag || github.ref_name }}"
+
           for f in "${found[@]}"; do
-            "$APKSIGNER" verify "$f" >/dev/null 2>&1 || { echo "::error::$f failed verification"; exit 1; }
-            natives=$("$AAPT" dump badging "$f" | grep "native-code" || echo "none")
+            if ! "$APKSIGNER" verify "$f" > /dev/null 2>&1; then
+              echo "::error::$f failed signature verification -- check the RELEASE_KEY* secrets"
+              exit 1
+            fi
+
+            appid=$("$AAPT" dump badging "$f" | grep -oP "package: name='\K[^']+")
+            if [ "$appid" != "com.creatore.rethinkfork" ]; then
+              echo "::error::$f has applicationId '$appid', expected com.creatore.rethinkfork -- wrong variant got built"
+              exit 1
+            fi
+
+            natives=$("$AAPT" dump badging "$f" | grep "native-code" || echo "native-code: (none)")
             case "$natives" in
-              *arm64*armeabi*|*armeabi*arm64*) universal="$f" ;;
-              *arm64*) arm64="$f" ;;
-              *armeabi*) armv7="$f" ;;
+              *arm64-v8a*armeabi-v7a*|*armeabi-v7a*arm64-v8a*)
+                universal="$f" ;;
+              *arm64-v8a*)
+                arm64="$f" ;;
+              *armeabi-v7a*)
+                armv7="$f" ;;
+              *)
+                echo "::warning::$f has unexpected native-code line: $natives (ignored)" ;;
             esac
           done
-          test -n "$universal" || { echo "::error::No universal APK"; exit 1; }
+
+          test -n "$universal" || { echo "::error::No universal APK found among the outputs -- splits.abi may have changed"; exit 1; }
+
           cp "$universal" "RethinkDnsFork-${ver}.apk"
           sha256sum "RethinkDnsFork-${ver}.apk" > "RethinkDnsFork-${ver}.apk.sha256"
-          files="RethinkDnsFork-${ver}.apk"$'\n'"RethinkDnsFork-${ver}.apk.sha256"
-          [ -n "$arm64" ] && cp "$arm64" "RethinkDnsFork-${ver}-arm64.apk" && files+=$'\n'"RethinkDnsFork-${ver}-arm64.apk"
-          [ -n "$armv7" ] && cp "$armv7" "RethinkDnsFork-${ver}-armv7.apk" && files+=$'\n'"RethinkDnsFork-${ver}-armv7.apk"
-          vN=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionName='\K[^']+"  )
-          vC=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionCode='\K[^']+")
-          { echo "files<<EOF"; echo "$files"; echo "EOF"
-            echo "version=${ver}"; echo "version_name=${vN}"; echo "version_code=${vC}"
+          files="RethinkDnsFork-${ver}.apk"
+          files="$files
+          RethinkDnsFork-${ver}.apk.sha256"
+
+          if [ -n "$arm64" ]; then
+            cp "$arm64" "RethinkDnsFork-${ver}-arm64-v8a.apk"
+            files="$files
+          RethinkDnsFork-${ver}-arm64-v8a.apk"
+          fi
+          if [ -n "$armv7" ]; then
+            cp "$armv7" "RethinkDnsFork-${ver}-armeabi-v7a.apk"
+            files="$files
+          RethinkDnsFork-${ver}-armeabi-v7a.apk"
+          fi
+
+          versionName=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionName='\K[^']+")
+          versionCode=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionCode='\K[^']+")
+          echo "Universal APK: versionName=$versionName versionCode=$versionCode"
+
+          {
+            echo "files<<APKEOF"
+            echo "$files"
+            echo "APKEOF"
+            echo "version=${ver}"
+            echo "version_name=${versionName}"
+            echo "version_code=${versionCode}"
+            echo "has_arm64=$([ -n "$arm64" ] && echo true || echo false)"
+            echo "has_armv7=$([ -n "$armv7" ] && echo true || echo false)"
           } >> "$GITHUB_OUTPUT"
         shell: bash
-      - id: changelog
+
+      - name: 📝 Build changelog since the previous tag
+        id: changelog
         run: |
+          set -eu
           ver="${{ inputs.tag || needs.auto-tag.outputs.new_tag || github.ref_name }}"
           prev=$(git describe --tags --abbrev=0 "${ver}^" 2>/dev/null || echo "")
-          { echo "changelog<<EOF"
-            [ -n "$prev" ] && git log --oneline "${prev}..${ver}" | sed 's/^/- /' || echo "First release."
-            echo "EOF"
+          {
+            echo "changelog<<CHANGELOGEOF"
+            if [ -n "$prev" ]; then
+              echo "Changes since $prev:"
+              echo ""
+              git log --oneline "${prev}..${ver}" -- ':!fdroid' ':!.github' | sed 's/^/- /'
+            else
+              echo "First tagged release."
+            fi
+            echo "CHANGELOGEOF"
           } >> "$GITHUB_OUTPUT"
         shell: bash
-      - uses: actions/upload-artifact@v4
+
+      - uses: actions/upload-artifact@v6
         with:
           name: apk-${{ steps.apks.outputs.version }}
           path: ${{ steps.apks.outputs.files }}
           if-no-files-found: error
-      - if: needs.auto-tag.outputs.new_tag != '' || github.ref_type == 'tag' || github.event_name == 'release'
+
+      - name: 📦 Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.apks.outputs.version }}
@@ -158,9 +328,24 @@ jobs:
           prerelease: ${{ contains(steps.apks.outputs.version, '-alpha') || contains(steps.apks.outputs.version, '-beta') || contains(steps.apks.outputs.version, '-rc') }}
           generate_release_notes: true
           body: |
+            Signed APK, built and released automatically from this commit.
             versionName `${{ steps.apks.outputs.version_name }}`, versionCode `${{ steps.apks.outputs.version_code }}`.
-            firestack @ `${{ env.FIRESTACK_COMMIT }}` · fdroidFull (no Firebase).
-            SHA256 in the `.sha256` file.
+
+            **Which file to grab:**
+            - `RethinkDnsFork-*.apk` -- universal, works on any supported device. Use this one if unsure.
+            ${{ steps.apks.outputs.has_arm64 == 'true' && '- `RethinkDnsFork-*-arm64-v8a.apk` -- smaller download, 64-bit ARM only.' || '' }}
+            ${{ steps.apks.outputs.has_armv7 == 'true' && '- `RethinkDnsFork-*-armeabi-v7a.apk` -- smaller download, 32-bit ARM only.' || '' }}
+
+            **Install with [Obtainium](https://github.com/ImranR98/Obtainium):**
+            add this repository (`paulvers-ui/rethink-app-masque`) as a "GitHub" source --
+            Obtainium detects this Release automatically.
+
+            firestack built from `paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }}`
+            (branch `n2`). `fdroidFull` variant -- no Firebase, no Google Play Services.
+
+            SHA256 of the universal APK is in the attached `.sha256` file.
+
             ---
+
             ${{ steps.changelog.outputs.changelog }}
           files: ${{ steps.apks.outputs.files }}
