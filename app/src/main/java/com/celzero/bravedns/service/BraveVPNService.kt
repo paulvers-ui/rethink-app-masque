@@ -705,6 +705,39 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         this.protect(fd.toInt())
     }
 
+    // Bridge requires these two (added upstream to intra/backend/protect.go as
+    // LogFD/CrashFD; gomobile renders them as logFD/crashFD here). This class
+    // never implemented them -- the compile error naming them was the first
+    // sign, not a regression from a version bump: the older firestack commit
+    // this app was already pinned to also required them, so this gap predates
+    // any recent change here, most likely dropped in whichever backup restore
+    // this Kotlin tree came from.
+    //
+    // Returning false is a real, designed fallback on the Go side, not a
+    // silent no-op: tunnel.go closes the fd pair and calls
+    // log.SetConsole(ctx, &clogAdapter{bdg}) instead when logFD returns false,
+    // and tun2socks.go's pipeCrashOutput() closes both pipe ends and moves on
+    // when crashFD returns false. Neither path destabilizes the tunnel --
+    // it only means Go-side crash/log output isn't captured to a file via
+    // this mechanism, which is a bug-reporting convenience, not core
+    // VPN/DNS/firewall functionality.
+    //
+    // Upstream (celzero/rethink-app) implements the real version of this --
+    // GoReportingHandler.kt, backed by GoLogFileDescriptorReader /
+    // GoCrashFileDescriptorReader / GoMemLogConsumer -- none of which exist
+    // in this tree. Porting that whole subsystem is real, separate work;
+    // this stub exists to make the build correct and honest in the meantime,
+    // not to quietly claim the feature is there.
+    override fun logFD(p0: Long): Boolean {
+        Logger.i(LOG_TAG_VPN, "logFD: fd=$p0 -- not implemented in this fork, declining")
+        return false
+    }
+
+    override fun crashFD(p0: Long): Boolean {
+        Logger.i(LOG_TAG_VPN, "crashFD: fd=$p0 -- not implemented in this fork, declining")
+        return false
+    }
+
     private suspend fun getUid(
         recdUid: Int,
         protocol: Int,
