@@ -1,6 +1,8 @@
-# Punto de partida para fdroiddata. NO es un fichero terminado:
-# hay que rellenar los <PLACEHOLDER> y probarlo con `fdroid build` antes
-# de mandarlo. Ver fdroid/GUIA-FDROID.md.
+# Placeholders rellenados con valores reales y verificados (commit v1.0.0,
+# SHAs de srclibs, NDK). Lo que NO se ha hecho todavía: correr `fdroid build`
+# en el buildserver -- ver el paso 4 de fdroid/GUIA-FDROID.md. Sin eso, no
+# hay garantía de que prebuild: compile de verdad; es el paso que suele
+# necesitar ajustes con gomobile. Probarlo antes de abrir el MR.
 #
 # Destino final: metadata/com.creatore.rethinkfork.yml dentro de tu fork
 # de gitlab.com/fdroid/fdroiddata
@@ -9,7 +11,7 @@ Categories:
   - Security
   - Internet
 License: Apache-2.0
-AuthorName: <TU NOMBRE>
+AuthorName: paulvers-ui
 SourceCode: https://github.com/paulvers-ui/rethink-app-masque
 IssueTracker: https://github.com/paulvers-ui/rethink-app-masque/issues
 
@@ -17,18 +19,28 @@ AutoName: Rethink Dns Fork
 Summary: Cliente DNS cifrado, cortafuegos y proxy WireGuard
 
 Description: |-
-    Fork de Rethink DNS + Firewall + VPN.
+    Fork de Rethink DNS + Firewall + VPN con estos cambios respecto al original:
 
-    <Describe QUÉ CAMBIA respecto al original. F-Droid rechaza forks que no
-    explican en qué se diferencian: ya tienen el original publicado.>
+    * Package ID propio (com.creatore.rethinkfork), coexiste con el original.
+    * Un único tema, Dark Plus -- el resto de temas se quitaron del selector.
+    * Alertas de sonido cuando cambia el estado de la red (túnel caído,
+      proxy sin salud, cambio de interfaz), silenciadas para no repetirse
+      en ráfaga; el sonido se elige desde el selector de notificaciones
+      del propio sistema.
+    * El proxy WARP se sirve sobre MASQUE vía usque
+      (github.com/paulvers-ui/usque, fork de Diniboy1123/usque) en vez del
+      cliente WireGuard oficial de Cloudflare.
+    * Enlace de patrocinio propio (ko-fi) en vez del de RethinkDNS.
+    * DNS de respaldo: se quitó RethinkDNS de la lista, Cloudflare por
+      defecto.
 
 RepoType: git
 Repo: https://github.com/paulvers-ui/rethink-app-masque.git
 
 Builds:
-  - versionName: <p.ej. 1.0.0>
+  - versionName: 1.0.0
     versionCode: 54
-    commit: <TAG del release, no una rama>
+    commit: v1.0.0
     subdir: app
     gradle:
       - fdroidFull
@@ -42,8 +54,8 @@ Builds:
     #   git ls-remote https://github.com/paulvers-ui/usque.git main
     #   git ls-remote https://github.com/paulvers-ui/firestack.git n2
     srclibs:
-      - usque@<COMMIT de paulvers-ui/usque, rama main>
-      - firestack@<COMMIT de paulvers-ui/firestack, rama n2>
+      - usque@f1dab654cc5882572900f74196e11aa2aac0f413
+      - firestack@0159488a03e052fed4d62cd62f3ddc8142f8f70f
 
     rm:
       - app/src/main/jniLibs/arm64-v8a/libusque.so
@@ -80,9 +92,9 @@ Builds:
 
     # gomobile necesita el NDK; la versión debe coincidir con la de BUILD.md
     # del repo de firestack.
-    ndk: <p.ej. 28.2.13676358>
+    ndk: "28.2.13676358"
 
 AutoUpdateMode: None
 UpdateCheckMode: Tags
-CurrentVersion: <igual que versionName>
+CurrentVersion: "1.0.0"
 CurrentVersionCode: 54
