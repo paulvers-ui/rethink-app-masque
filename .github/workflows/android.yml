@@ -2,99 +2,56 @@ name: 🫣 Android CI
 
 on:
   push:
-    branches: ["main", "tests", "tests-lightver"]
   pull_request:
-    branches: ["main", "tests", "tests-lightver"]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: 🥏 Checkout
-        uses: actions/checkout@v4
-
-      - name: ☕️ Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: temurin
           cache: gradle
-
-      - name: ⚡️ Make Gradle Executable
-        run: chmod +x gradlew
-
-      - name: 🔧 Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: 🎪 Configure Firebase & Build Variant
-        id: config
+      - run: chmod +x gradlew
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Configure variant
         run: |
           if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            echo "GOOGLE_SERVICES_JSON found. Enabling Crashlytics via Website variant."
             echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
             echo "VARIANT=assembleWebsiteFullDebug" >> $GITHUB_ENV
-            echo "IS_RELEASE=false" >> $GITHUB_ENV
           else
-            echo "Secret missing. Falling back to De-Googled F-Droid build."
             echo "VARIANT=assembleFdroidFullDebug" >> $GITHUB_ENV
-            echo "IS_RELEASE=false" >> $GITHUB_ENV
           fi
-
-      - name: 🚂 Build with Gradle
-        uses: nick-fields/retry@v3
+      - uses: nick-fields/retry@v3
         with:
           timeout_minutes: 15
           max_attempts: 1
           command: ./gradlew ${{ env.VARIANT }} --info --warning-mode all --no-configuration-cache
-
-      - name: 🧪 Run Unit Tests
-        # Run against the F-Droid debug variant so we don't need Firebase credentials.
-        # --continue means all test classes run even if one fails, giving a full report.
-        run: ./gradlew testFdroidFullDebugUnitTest --no-configuration-cache --continue
-
-      - name: 📊 Upload Unit Test Report
-        if: always()
+      - run: ./gradlew testFdroidFullDebugUnitTest --no-configuration-cache --continue
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-report
           path: app/build/reports/tests/
           retention-days: 30
           if-no-files-found: warn
-
-      - name: 🔧 Run Android Lint
-        run: ./gradlew lintFdroidFullDebug --no-configuration-cache
+      - run: ./gradlew lintFdroidFullDebug --no-configuration-cache
         continue-on-error: true
-
-      - name: 📊 Upload Lint Report
-        if: always()
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lint-report
           path: app/build/reports/lint-results-*.html
           retention-days: 30
           if-no-files-found: warn
-
-      - name: 🔍 Find Universal APK
-        run: |
-          echo "All APKs found:"
-          find app/build/outputs/apk/ -name "*.apk"
-          echo ""
-          echo "Universal APK:"
-          find app/build/outputs/apk/ -name "*universal*.apk"
+      - run: |
           UNIVERSAL_APK=$(find app/build/outputs/apk/ -name "*universal*.apk" | head -1)
           echo "UNIVERSAL_APK=$UNIVERSAL_APK" >> $GITHUB_ENV
-
-      - name: 📦 Upload APK
-        if: success() && env.UNIVERSAL_APK != ''
+      - if: success() && env.UNIVERSAL_APK != ''
         uses: actions/upload-artifact@v4
         with:
           name: rethink-dns-apk
           path: ${{ env.UNIVERSAL_APK }}
-
-      - name: 📜 Upload Crashlytics Mapping File
-        if: success() && env.IS_RELEASE == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: mapping-file
-          path: app/build/outputs/mapping/websiteFullRelease/mapping.txt
