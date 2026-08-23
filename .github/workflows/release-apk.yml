@@ -93,6 +93,7 @@ jobs:
           command: |
             git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
             cd /tmp/firestack && git checkout -q "${FIRESTACK_COMMIT}"
+            chmod +x make-aar
             chmod +x make-aar && ./make-aar nogo nodebug
             mkdir -p /tmp/firestack-aar-cache && cp firestack.aar /tmp/firestack-aar-cache/
       - run: mkdir -p app/libs && cp /tmp/firestack-aar-cache/firestack.aar app/libs/
