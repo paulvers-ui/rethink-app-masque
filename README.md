@@ -3,30 +3,30 @@
 
   # Rethink Dns Fork
 
-  Cliente DNS cifrado, cortafuegos y proxy WireGuard/WARP para Android.
+  Encrypted DNS client, firewall, and WireGuard/WARP proxy for Android.
 
-  [![Descargar APK](https://img.shields.io/github/v/release/paulvers-ui/rethink-app-masque?label=descargar&style=for-the-badge)](https://github.com/paulvers-ui/rethink-app-masque/releases/latest)
-  [![Sitio](https://img.shields.io/badge/sitio-paulvers--ui.github.io%2Frethink-1f6f5c?style=for-the-badge)](https://paulvers-ui.github.io/rethink/)
+  [![Download APK](https://img.shields.io/github/v/release/paulvers-ui/rethink-app-masque?label=download&style=for-the-badge)](https://github.com/paulvers-ui/rethink-app-masque/releases/latest)
+  [![Website](https://img.shields.io/badge/website-paulvers--ui.github.io%2Frethink-1f6f5c?style=for-the-badge)](https://paulvers-ui.github.io/rethink/)
 </div>
 
 ---
 
-Este es un fork de [Rethink DNS + Firewall + VPN](https://github.com/celzero/rethink-app), con estos cambios sobre el original:
+This is a fork of [Rethink DNS + Firewall + VPN](https://github.com/celzero/rethink-app), with these changes from the original:
 
-- **Package ID propio** (`com.creatore.rethinkfork`) — se instala junto al Rethink original en el mismo teléfono, sin conflicto.
-- **WARP vía MASQUE**, usando [usque](https://github.com/paulvers-ui/usque) en vez del cliente WireGuard oficial de Cloudflare.
-- **Un único tema** (Dark Plus) — se quitaron los demás del selector.
-- **Alertas de sonido** cuando cambia el estado de la red: túnel caído, proxy sin salud, cambio de interfaz — silenciadas para no repetirse en ráfaga.
-- **Sin Firebase ni Google Play Services** en la variante `fdroid`.
-- **Backend de red propio**: el firestack que usa este fork viene de [paulvers-ui/firestack](https://github.com/paulvers-ui/firestack), con más de 600 commits sobre el último punto de la API compatible con esta app — la rama `n2` de upstream cambió esa API y dejó de funcionar aquí.
-- Enlace de patrocinio propio y DNS de respaldo por defecto a Cloudflare en vez de Rethink.
+- **Own package ID** (`com.creatore.rethinkfork`) — installs alongside the original Rethink on the same phone, no conflict.
+- **WARP over MASQUE**, using [usque](https://github.com/paulvers-ui/usque) instead of Cloudflare's official WireGuard client.
+- **Single theme** (Dark Plus) — every other option was removed from the picker.
+- **Network status sound alerts**: tunnel down, unhealthy proxy, interface switch — debounced so a burst of related events doesn't fire repeatedly.
+- **No Firebase or Google Play Services** in the `fdroid` build variant.
+- **Own network backend**: the firestack this fork uses comes from [paulvers-ui/firestack](https://github.com/paulvers-ui/firestack), with 600+ commits on top of the last point where its API still matched this app — upstream's `n2` branch changed that API and broke compatibility here.
+- Own sponsor link, and Cloudflare instead of Rethink as the default fallback DNS.
 
-## Instalar
+## Install
 
-- **[Obtainium](https://github.com/ImranR98/Obtainium)** (recomendado): añade este repositorio como fuente y recibe actualizaciones automáticas.
-- **[Página de descarga](https://paulvers-ui.github.io/rethink/)**: APK directo, con QR para el teléfono.
-- **[GitHub Releases](https://github.com/paulvers-ui/rethink-app-masque/releases)**: descarga manual.
+- **[Obtainium](https://github.com/ImranR98/Obtainium)** (recommended): add this repository as a source and get automatic updates.
+- **[Download page](https://paulvers-ui.github.io/rethink/)**: direct APK, with a QR code for your phone.
+- **[GitHub Releases](https://github.com/paulvers-ui/rethink-app-masque/releases)**: manual download.
 
-## Licencia
+## License
 
-Igual que el proyecto original — ver [LICENSE](LICENSE).
+Same as the original project — see [LICENSE](LICENSE).
