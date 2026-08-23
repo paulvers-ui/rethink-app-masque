@@ -47,7 +47,7 @@ jobs:
     env:
       NDKVER: "28.2.13676358"
       SDKVER: "36"
-      FIRESTACK_COMMIT: "0159488a03e052fed4d62cd62f3ddc8142f8f70f"
+      FIRESTACK_COMMIT: "05a664580caca8e30a912b75f2ffe480560e70ae"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,11 +91,11 @@ jobs:
           timeout_minutes: 20
           max_attempts: 2
           command: |
-            git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
+            git clone -q https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/paulvers-ui/firestack.git /tmp/firestack
             cd /tmp/firestack && git checkout -q "${FIRESTACK_COMMIT}"
             chmod +x make-aar && ./make-aar nogo nodebug
             mkdir -p /tmp/firestack-aar-cache && cp firestack.aar /tmp/firestack-aar-cache/
-      - run: mkdir -p app/libs && cp /tmp/firestack-aar-cache/firestack.aar app/libs/
+      - run: mkdir -p app/libs && cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack-local.aar
       - run: |
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "${GITHUB_WORKSPACE}/release.keystore"
           echo "RELEASE_KEYSTORE_PATH=${GITHUB_WORKSPACE}/release.keystore" >> "$GITHUB_ENV"
