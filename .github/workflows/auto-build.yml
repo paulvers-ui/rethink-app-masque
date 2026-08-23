@@ -1,0 +1,219 @@
+# Publishes an UNSIGNED (debug-keystore-signed) APK to GitHub Releases
+# whenever release-apk.yml publishes a real release, and on every same-repo
+# pull request -- separate from release-apk.yml itself, which is the
+# signed, deliberate release channel for real distribution via Obtainium.
+#
+# This exists so automation can grab a fresh APK from Releases after every
+# commit without needing any secrets at all. Debug-signed APKs install fine
+# on a device for testing, but Android will refuse to install a debug-signed
+# update over a release-signed install (or vice-versa) -- these are NOT a
+# substitute for release-apk.yml's signed builds for anyone actually using
+# the app day to day.
+#
+# Tag scheme, so the channels never collide:
+#   push to main (via release-apk.yml's tag)  -> v1.0.0, v1.0.1, ... (real semver)
+#   same-repo PR                              -> pr-<number>-b<run_number>, prerelease
+#   workflow_dispatch                         -> manual-<run_number>, prerelease
+#
+# Deliberately does NOT run its own auto-tag job for push-to-main. Both
+# this workflow and release-apk.yml trigger on the identical `push` event;
+# two independent mathieudutour/github-tag-action runs racing on the same
+# push could each see a different "latest tag" and increment past each
+# other -- one real commit ending up consuming two version numbers (v1.0.5
+# from one workflow, v1.0.6 from the other, for a single push). Instead,
+# this workflow reacts to `release: types: [published]`, which fires only
+# after release-apk.yml has already tagged and published -- so it always
+# builds for the exact tag that already exists, and its unsigned APK is
+# uploaded as an extra asset on that SAME release (softprops/action-gh-release
+# adds to an existing release matching tag_name rather than erroring),
+# not a second, competing one.
+#
+# Fork PRs are handled, not ignored: they build and upload as a workflow
+# artifact same as anything else, but the publish-to-Releases step is
+# skipped with a clear log message rather than failing. This is a GitHub
+# platform restriction, not something this workflow can configure around:
+# GITHUB_TOKEN is always downgraded to read-only for a pull_request run
+# triggered from a fork, regardless of any `permissions:` set here --
+# creating or updating a Release needs contents:write, which a fork PR
+# token never has.
+name: 🔁 Auto-build (unsigned, every release + PR)
+
+on:
+  release:
+    types: [published]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: auto-build-${{ github.event.pull_request.number || github.event.release.tag_name || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      NDKVER: "28.2.13676358"
+      SDKVER: "36"
+      # Same commit release-apk.yml and android.yml pin -- and, more
+      # importantly, the SAME cache key below, so this workflow normally
+      # reuses whichever of the three already built firestack.aar today
+      # instead of paying for gomobile again.
+      FIRESTACK_COMMIT: "05a664580caca8e30a912b75f2ffe480560e70ae"
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - id: firestack-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/firestack-aar-cache/firestack.aar
+          key: firestack-aar-${{ env.FIRESTACK_COMMIT }}-ndk${{ env.NDKVER }}
+
+      - name: 🐼 Go 1.26+ (only on a cache miss)
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version: '>=1.26'
+          cache: false
+
+      - name: 🤖 Setup Android SDK (only on a cache miss)
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: 🤖 Install NDK ${{ env.NDKVER }} (only on a cache miss)
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        run: sdkmanager --install "ndk;${NDKVER}" || echo "NDKVER=0" >> "$GITHUB_ENV"
+
+      - name: 🏗️ Build firestack.aar -- cache miss fallback
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        run: |
+          set -eu
+          git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
+          cd /tmp/firestack
+          git checkout -q "${FIRESTACK_COMMIT}"
+          chmod +x make-aar
+          ./make-aar nogo nodebug
+          mkdir -p /tmp/firestack-aar-cache
+          cp firestack.aar /tmp/firestack-aar-cache/firestack.aar
+
+      - name: 📋 Place firestack-local.aar
+        run: |
+          set -eu
+          test -s /tmp/firestack-aar-cache/firestack.aar || {
+            echo "::error::firestack.aar missing after cache-restore/build step"
+            exit 1
+          }
+          mkdir -p app/libs
+          cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack-local.aar
+        shell: bash
+
+      - run: chmod +x gradlew
+
+      - name: 🚂 Build debug APK (fdroidFull, unsigned/debug-keystore)
+        run: ./gradlew assembleFdroidFullDebug -PfirestackRepo=local --no-configuration-cache --warning-mode all
+        shell: bash
+
+      - name: 🏷️ Work out the tag for this build
+        id: ver
+        run: |
+          set -eu
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "tag=pr-${{ github.event.pull_request.number }}-b${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=manual-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+        shell: bash
+
+      - name: 🔎 Locate the built APK
+        id: apk
+        run: |
+          set -eu
+          src=$(find app/build/outputs/apk/fdroidFull/debug -name "*universal*.apk" | head -1)
+          test -n "$src" || src=$(find app/build/outputs/apk/fdroidFull/debug -name "*.apk" | head -1)
+          test -n "$src" || { echo "::error::No debug APK was produced"; exit 1; }
+          ver="${{ steps.ver.outputs.tag }}"
+          out="RethinkDnsFork-${ver}-debug.apk"
+          cp "$src" "$out"
+          sha256sum "$out" > "${out}.sha256"
+          echo "apk_path=${out}" >> "$GITHUB_OUTPUT"
+          echo "sha_path=${out}.sha256" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: debug-apk-${{ steps.ver.outputs.tag }}
+          path: |
+            ${{ steps.apk.outputs.apk_path }}
+            ${{ steps.apk.outputs.sha_path }}
+          if-no-files-found: error
+
+      - name: 🔎 Can this run publish a Release?
+        id: can-publish
+        run: |
+          # true for: push to main, workflow_dispatch, and a pull_request
+          # whose head repo IS this repo (a same-repo branch PR, not a fork).
+          # A fork PR's GITHUB_TOKEN is always read-only -- contents:write
+          # is never available there, no matter what `permissions:` says.
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::This PR is from a fork, so its GITHUB_TOKEN is read-only by GitHub's own design -- publishing a Release here isn't possible from this workflow, on this PR, no matter how it's configured. The debug APK is still attached above as a workflow artifact (Actions tab -> this run -> Artifacts) -- that part isn't restricted."
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+        shell: bash
+
+      # Two separate steps, not one with a conditional body, on purpose.
+      # For the `release` event, a Release for this tag already exists --
+      # release-apk.yml just published it, with its own real changelog.
+      # Whether softprops/action-gh-release treats an omitted field as
+      # "leave unchanged" or as "set to empty" on update isn't something
+      # this comment should guess at; the safe choice is to never pass
+      # name/body/generate_release_notes on that path at all, so there is
+      # nothing for either interpretation to clobber. tag_name + files is
+      # enough to attach the unsigned APK as an extra asset on the release
+      # that's already there.
+      - name: 📦 Attach unsigned APK to the existing Release
+        if: steps.can-publish.outputs.ok == 'true' && github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          files: |
+            ${{ steps.apk.outputs.apk_path }}
+            ${{ steps.apk.outputs.sha_path }}
+
+      # PR and workflow_dispatch builds have no pre-existing release to
+      # protect -- this creates a fresh one, so setting name/body here is
+      # safe and useful.
+      - name: 📦 Publish new prerelease (PR / manual build)
+        if: steps.can-publish.outputs.ok == 'true' && github.event_name != 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          prerelease: true
+          body: |
+            Unsigned debug build (`fdroidFull`, debug-keystore-signed) -- NOT
+            the signed release channel. For a real, signed release see the
+            `📦 Release APK` workflow / tags without a `pr-`/`manual-` prefix.
+
+            Built from ${{ github.sha }}.
+          files: |
+            ${{ steps.apk.outputs.apk_path }}
+            ${{ steps.apk.outputs.sha_path }}
