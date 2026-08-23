@@ -184,6 +184,10 @@ def firestackCommit = project.findProperty("firestackCommit") ?: "0.5.5"
 
 def firestackDependency = { suffix = ":debug" ->
     switch (firestackRepo) {
+        case "local":
+            // Use the pre-built firestack.aar placed in app/libs/ by the CI workflow.
+            // The flatDir repo for this path is declared in the root build.gradle.
+            return "com.celzero:firestack:local@aar"
         case "ossrh":
             return "com.celzero:firestack:${firestackCommit}${suffix}@aar"
         case "jitpack":

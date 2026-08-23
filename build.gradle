@@ -45,7 +45,10 @@ allprojects {
 
         def firestackRepo = project.findProperty("firestackRepo") ?: "github"
 
-        if (firestackRepo == "jitpack") {
+        if (firestackRepo == "local") {
+            // Use pre-built firestack.aar from app/libs/ (CI puts it there before Gradle runs).
+            flatDir { dirs project(":app").file("libs") }
+        } else if (firestackRepo == "jitpack") {
             // jitpack.io/#celzero/firestack
             maven { url 'https://jitpack.io' }
         } else if (firestackRepo == "github") {
