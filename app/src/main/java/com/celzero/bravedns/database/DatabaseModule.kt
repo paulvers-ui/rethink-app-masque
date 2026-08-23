@@ -42,7 +42,6 @@ object DatabaseModule {
         single { get<AppDatabase>().dotEndpointDao() }
         single { get<AppDatabase>().odohEndpointDao() }
         single { get<AppDatabase>().rpnProxyDao() }
-        single { get<AppDatabase>().wgHopMapDao() }
         single { get<AppDatabase>().subscriptionStatusDao() }
         single { get<AppDatabase>().subscriptionStateHistoryDao()}
 
@@ -75,7 +74,6 @@ object DatabaseModule {
         single { get<AppDatabase>().dotEndpointRepository() }
         single { get<AppDatabase>().odohEndpointRepository() }
         single { get<AppDatabase>().rpnProxyRepository() }
-        single { get<AppDatabase>().wgHopMapRepository() }
         single { get<AppDatabase>().subscriptionStatusRepository() }
         single { get<AppDatabase>().subscriptionStateHistoryDao() }
 
