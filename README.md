@@ -1,7 +1,7 @@
 <div align="center">
   <img src=".github/assets/logo.png" alt="Rethink Dns Fork" width="120">
 
-  # Rethink Dns Fork
+  # Rethink Dns Firewall Free Vpn Fork
 
   Encrypted DNS client, firewall, and WireGuard/WARP proxy for Android.
 
