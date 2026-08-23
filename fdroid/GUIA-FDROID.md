@@ -191,3 +191,76 @@ puñetero — estas no exigen compilar desde fuente:
 
 Ninguna te da la visibilidad del repositorio principal, pero las tres funcionan
 hoy y sin reescribir el build.
+
+## Distribución sin F-Droid oficial: GitHub Releases + Obtainium + IzzyOnDroid
+
+Si el buildserver de F-Droid (200 GB, 8 GB RAM) no es viable, esto cubre casi
+todo el mismo alcance sin necesitar esa máquina.
+
+### Lo que SÍ se automatiza: compilar, firmar y publicar
+
+Dos workflows nuevos en `.github/workflows/`:
+
+**`generate-keystore.yml`** — se corre UNA sola vez, a mano (`Actions` →
+`🔑 Generar keystore de release` → `Run workflow`, escribiendo `GENERAR`).
+Crea una clave de firma y la entrega como artefacto descargable (retención de
+1 día a propósito). Hay que:
+
+1. Descargar el artefacto del run.
+2. Copiar el contenido de `release.keystore.b64` al secret
+   `RELEASE_KEYSTORE_BASE64` (Settings → Secrets and variables → Actions).
+3. Copiar los otros tres valores de `secrets-para-guardar.txt` a
+   `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`.
+4. Borrar el artefacto del run una vez guardados los secrets.
+5. **No volver a correr este workflow** salvo que se quiera una clave nueva
+   -- eso rompe la actualización in-place para quien ya tenga la app
+   instalada, porque Android exige que el firmante coincida entre versiones.
+
+**`release-apk.yml`** — se dispara solo, al empujar un tag `v*`:
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+Compila `firestack.aar` desde `paulvers-ui/firestack@n2` (sin JitPack, sin
+riesgo de 429), arma el APK `fdroidFull` (sin Firebase ni Play Services),
+lo firma con el keystore de los secrets, verifica la firma con `apksigner`
+antes de publicar nada, y sube el resultado como GitHub Release con el
+`.sha256` adjunto.
+
+### Lo que NO se automatiza, y por qué
+
+**Obtainium no tiene "publicar" de mi lado.** Es una app que cada usuario
+instala en su propio teléfono; ellos la apuntan a
+`paulvers-ui/rethink-app-masque` como fuente "GitHub". Lo único que
+Obtainium necesita de este repo son Releases bien etiquetadas con el APK
+adjunto -- que es exactamente lo que `release-apk.yml` ya produce. No hay
+ningún paso adicional de mi lado.
+
+**IzzyOnDroid es una solicitud manual, una sola vez.** No es un push desde
+este repo -- es un *Request for Packaging* (o un merge request directo)
+contra `gitlab.com/IzzySoft/fdroiddata`, revisado por una persona. Una vez
+aceptada, su propia infraestructura vigila los Releases de GitHub de este
+repo -- otra vez, lo que `release-apk.yml` ya produce. Pasos:
+
+1. Tener al menos un par de Releases publicados con `release-apk.yml` (así
+   hay algo real que enseñar).
+2. Abrir un issue en `gitlab.com/fdroid/rfp` (Request for Packaging) o
+   directamente un MR contra `gitlab.com/IzzySoft/fdroiddata`, con:
+   - link al repo (`https://github.com/paulvers-ui/rethink-app-masque`)
+   - qué cambia respecto al Rethink original (igual que en `Description:`
+     del `.yml` de F-Droid)
+   - confirmación de que se avisó a los autores de Rethink
+3. Esperar revisión humana -- no hay SLA fijo.
+
+### Otras opciones sin PC ni VPS, para más alcance
+
+- **Repo F-Droid propio (estático)**: `fdroidserver` genera un `index.xml` a
+  partir de los APKs ya compilados por `release-apk.yml`; se aloja gratis en
+  GitHub Pages. Los usuarios añaden la URL del repo en la app de F-Droid.
+  Esto también puede correr como GitHub Action, sin PC.
+- **Aptoide / APKPure**: tiendas de terceros, aceptan subida directa del APK
+  ya firmado. Revisar sus términos antes de subir algo con licencia FOSS.
+- **Accrescent**: repo curado con requisitos de seguridad más estrictos que
+  IzzyOnDroid -- vale la pena mirar sus criterios antes de intentarlo.

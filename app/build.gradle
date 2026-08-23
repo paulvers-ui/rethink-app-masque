@@ -99,6 +99,26 @@ android {
         universalApk true
     }
 
+    // Release signing: read entirely from environment, never from a file in the
+    // repo. The release workflow decodes a keystore secret to RELEASE_KEYSTORE_PATH
+    // and exports the three companion secrets before invoking Gradle. Locally, this
+    // stays inert -- signingConfig only attaches below when the keystore path is
+    // both set and points at a file that actually exists, so a normal debug build on
+    // a machine with none of these vars set behaves exactly as before.
+    def releaseKeystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+    def hasReleaseSigning = releaseKeystorePath != null && file(releaseKeystorePath).exists()
+
+    if (hasReleaseSigning) {
+        signingConfigs {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
@@ -110,6 +130,9 @@ android {
             }
             if (!deGoogled) {
                 firebaseCrashlytics { nativeSymbolUploadEnabled true }
+            }
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
             }
         }
     }
