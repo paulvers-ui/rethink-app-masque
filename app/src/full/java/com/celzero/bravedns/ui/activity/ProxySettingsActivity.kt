@@ -263,24 +263,6 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
         // ===== WARP TUNNEL SECTION =====
         b.settingsActivityWarpRegisterBtn.setOnClickListener { showWarpRegistrationDialog() }
 
-        // ===== WireGuard -> WARP(SOCKS5) double hop =====
-        b.settingsActivityWgS5HopSwitch.isChecked = persistentState.autoHopWgIntoWarp
-        b.settingsActivityWgS5HopSwitch.setOnCheckedChangeListener { _, enabled ->
-            persistentState.autoHopWgIntoWarp = enabled
-            WgHopManager.hlog("ui: double-hop switch -> $enabled")
-            logEvent("wg-socks5 double hop", "enabled=$enabled")
-            io {
-                val report = WgHopManager.setDoubleHopForAllConfigs(enabled)
-                uiCtx {
-                    showToastUiCentered(
-                        this@ProxySettingsActivity,
-                        if (enabled) "double hop: $report" else "double hop off: $report",
-                        Toast.LENGTH_LONG
-                    )
-                }
-            }
-        }
-
         // SNI editor: prefill, save, reset, and live-restart WARP if it's running.
         b.settingsActivityWarpSniEdit.setText(persistentState.warpSpoofedSni)
 
