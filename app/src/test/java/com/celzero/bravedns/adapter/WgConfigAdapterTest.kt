@@ -23,13 +23,11 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import com.celzero.bravedns.adapter.OneWgConfigAdapter.DnsStatusListener
 import com.celzero.bravedns.database.WgConfigFiles
-import com.celzero.bravedns.database.WgHopMap
 import com.celzero.bravedns.service.EventLogger
 import com.celzero.bravedns.service.ProxyManager
 import com.celzero.bravedns.service.ProxyManager.ID_WG_BASE
 import com.celzero.bravedns.service.VpnController
 import com.celzero.bravedns.service.WireguardManager
-import com.celzero.bravedns.wireguard.WgHopManager
 import com.celzero.bravedns.wireguard.WgInterface
 import com.celzero.bravedns.util.UIUtils
 import com.celzero.bravedns.net.doh.Transaction
@@ -106,14 +104,11 @@ class WgConfigAdapterTest : KoinTest {
         mockkObject(ProxyManager)
         mockkObject(VpnController)
         mockkObject(WireguardManager)
-        mockkObject(WgHopManager)
         mockkObject(UIUtils)
 
         // Setup basic mocks with CORRECT parameter types based on actual implementation
         every { ProxyManager.getAppCountForProxy(any<String>()) } returns 0
         every { WireguardManager.getConfigById(any<Int>()) } returns null
-        every { WgHopManager.getMapBySrc(any<String>()) } returns emptyList()
-        every { WgHopManager.getMapByHop(any<String>()) } returns emptyList()
         every { VpnController.hasTunnel() } returns true
         coEvery { VpnController.getProxyStatusById(any<String>()) } returns Pair(1L, "OK")
         coEvery { VpnController.getSupportedIpVersion(any<String>()) } returns Pair(true, false)
@@ -178,7 +173,6 @@ class WgConfigAdapterTest : KoinTest {
                 module {
                     // Add specific repository mocks that the managers need
                     single { mockk<com.celzero.bravedns.database.WgConfigFilesRepository>(relaxed = true) }
-                    single { mockk<com.celzero.bravedns.database.WgHopMapRepository>(relaxed = true) }
 
                     // Add other potential dependencies
                     single<Any> { mockk<Any>(relaxed = true) } // Generic fallback
@@ -282,21 +276,6 @@ class WgConfigAdapterTest : KoinTest {
         every { WireguardManager.getConfigById(2) } returns mockConfig
         val config2 = WireguardManager.getConfigById(2)
         assertNotNull("Expected non-null config", config2)
-    }
-
-    @Test
-    fun `test WgHopManager methods with String parameters`() {
-        val mapBySrc = WgHopManager.getMapBySrc("1001")
-        assertTrue("Expected empty list", mapBySrc.isEmpty())
-
-        val mapByHop = WgHopManager.getMapByHop("1001")
-        assertTrue("Expected empty list", mapByHop.isEmpty())
-
-        // Test with mock data - use correct WgHopMap type
-        val mockHopList = listOf(mockk<WgHopMap>(relaxed = true))
-        every { WgHopManager.getMapBySrc("1002") } returns mockHopList
-        val mapBySrc2 = WgHopManager.getMapBySrc("1002")
-        assertEquals("Expected mock list", mockHopList, mapBySrc2)
     }
 
     @Test

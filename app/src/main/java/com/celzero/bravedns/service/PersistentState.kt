@@ -85,7 +85,6 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
         const val CUSTOM_LAN_MODE_IPS_CHANGED = "custom_lan_mode_ip_changed"
 
         const val FIREWALL_BUBBLE = "pref_firewall_bubble_enabled"
-        const val AUTO_HOP_WG_WARP = "auto_hop_wg_warp"
     
     }
 
@@ -354,10 +353,6 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     // restart of tunnel when wireguard is enabled is required to randomize the port to work properly
     // this is not a user facing option, but a developer option
     var randomizeListenPort by booleanPref("randomize_listen_port").withDefault<Boolean>(true)
-
-    // When true, each WireGuard config will automatically hop its own traffic through the
-    // running WARP/usque SOCKS5 proxy (127.0.0.1:40000). Default false — opt-in only.
-    var autoHopWgIntoWarp by booleanPref(AUTO_HOP_WG_WARP).withDefault<Boolean>(false)
 
     // endpoint independent mapping/filtering
     var endpointIndependence by booleanPref("endpoint_independence").withDefault<Boolean>(false)

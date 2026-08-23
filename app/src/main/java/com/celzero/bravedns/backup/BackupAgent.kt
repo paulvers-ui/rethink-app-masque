@@ -107,7 +107,7 @@ class BackupAgent(val context: Context, workerParams: WorkerParameters) :
          * are emptied in the temporary database copy before it is zipped.
          */
         val WG_TABLES: List<String> =
-            listOf("WgConfigFiles", "WgHopMap", "ProxyApplicationMapping")
+            listOf("WgConfigFiles", "ProxyApplicationMapping")
     }
 
     override fun doWork(): Result {

@@ -58,7 +58,6 @@ import com.celzero.bravedns.util.Utilities.getActivityPendingIntent
 import com.celzero.bravedns.util.Utilities.isAtleastO
 import com.celzero.bravedns.util.Utilities.isAtleastT
 import com.celzero.bravedns.util.Utilities.isNonApp
-import com.celzero.bravedns.wireguard.WgHopManager
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -151,13 +150,12 @@ internal constructor(
             val dm = DomainRulesManager.load()
             val pxm = ProxyManager.load()
             val wgm = WireguardManager.load(forceRefresh = false)
-            val hm = WgHopManager.load(forceRefresh = false)
             // val tm = TcpProxyHelper.load() // no need to load tcp-proxy mapping now (055v)
             //val rm = RpnProxyManager.load()
 
             Logger.i(
                 LOG_TAG_APP_DB,
-                "reload: fm: $fm; ip: $ipm; dom: $dm; px: $pxm; wg: $wgm; hm: $hm"
+                "reload: fm: $fm; ip: $ipm; dom: $dm; px: $pxm; wg: $wgm"
             )
 
             val canTombstone = persistentState.tombstoneApps

@@ -442,18 +442,6 @@ object VpnController : KoinComponent {
         return braveVpnService?.testRpnProxy(proxyId) == true
     }
 
-    suspend fun testHop(src: String, hop: String): Pair<Boolean, String?> {
-        return braveVpnService?.testHop(src, hop) ?: Pair(false, "vpn service not available")
-    }
-
-    suspend fun hopStatus(src: String, hop: String): Pair<Long?, String> {
-        return braveVpnService?.hopStatus(src, hop) ?: Pair(null, "vpn service not available")
-    }
-
-    suspend fun removeHop(src: String): Pair<Boolean, String> {
-        return braveVpnService?.removeHop(src) ?: Pair(false, "vpn service not available")
-    }
-
     /*suspend fun getRpnProps(type: RpnProxyManager.RpnType): Pair<RpnProxyManager.RpnProps?, String?> {
         return braveVpnService?.getRpnProps(type) ?: Pair(null, null)
     }

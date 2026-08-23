@@ -75,7 +75,6 @@ import com.celzero.bravedns.util.Utilities.togb
 import com.celzero.bravedns.util.Utilities.togs
 import com.celzero.bravedns.util.Utilities.tos
 import com.celzero.bravedns.wireguard.Config
-import com.celzero.bravedns.wireguard.WgHopManager
 import com.celzero.firestack.backend.Backend
 import com.celzero.firestack.backend.DNSResolver
 import com.celzero.firestack.backend.DNSTransport
@@ -985,117 +984,11 @@ class GoVpnAdapter : KoinComponent {
             Logger.i(LOG_TAG_VPN, "$TAG no active wg-configs found")
             return
         }
-        // re-order the configs so that hops are added first
-        val hops = WgHopManager.getAllHop()
         Logger.d(LOG_TAG_VPN, "$TAG total active proxies: ${wgConfigs.size}")
-        // separate the id, hop has WG1 where id is 1
-        val hopIds = hops.map { it.substring(ID_WG_BASE.length).toIntOrNull() }
-        val hopConfigs = wgConfigs.filter { it.getId() in hopIds }
-        val nonHopConfigs = wgConfigs.filter { it.getId() !in hopIds }
-        Logger.i(LOG_TAG_VPN, "$TAG added wireguards with hops: ${hopConfigs.size}")
-        // add hop wireguard first
-        hopConfigs.forEach {
+        Logger.i(LOG_TAG_VPN, "$TAG added wireguards: ${wgConfigs.size}")
+        wgConfigs.forEach {
             val id = ID_WG_BASE + it.getId()
             addWgProxy(id)
-        }
-        Logger.i(LOG_TAG_VPN, "$TAG added wireguards without hops: ${nonHopConfigs.size}")
-        nonHopConfigs.forEach {
-            val id = ID_WG_BASE + it.getId()
-            addWgProxy(id)
-        }
-    }
-
-    private suspend fun addHopIfAny(origin: String) {
-        // assumption: by this time the add call should have happened
-        val hop = WgHopManager.getHop(origin)
-        if (hop.isEmpty()) {
-            Logger.i(LOG_TAG_VPN, "$TAG no hop found for $origin")
-            return
-        }
-        try {
-            tunnel.proxies.hop(hop.togs(), origin.togs())
-            logEvent(Severity.LOW, "set hop", "set hop for $origin -> $hop")
-            Logger.i(LOG_TAG_VPN, "$TAG new hop for $origin -> $hop")
-        } catch (e: Exception) {
-            Logger.e(LOG_TAG_VPN, "$TAG err setting hop for $origin -> $hop; ${e.message}")
-            showHopFailureNotification(origin, hop, err = e.message)
-            logEvent(Severity.HIGH, "set hop error", "error setting hop for $origin -> $hop, reason: ${e.message}")
-        }
-    }
-
-    suspend fun hopStatus(src: String, hop: String): Pair<Long?, String> {
-        return try {
-            val status = tunnel.proxies.getProxy(src.togs()).router().via().status()
-            Logger.v(LOG_TAG_VPN, "$TAG hop $src -> $hop; status: $status")
-            Pair(status, "")
-        } catch (e: Exception) {
-            Logger.w(LOG_TAG_VPN, "$TAG hop failing for $src -> $hop; ${e.message}")
-            Pair(null, e.message ?: "failure")
-        }
-    }
-
-    suspend fun removeHop(src: String): Pair<Boolean, String> {
-        var err = ""
-        try {
-            tunnel.proxies.hop("".togs(), src.togs())
-            Logger.i(LOG_TAG_VPN, "$TAG removed hop for $src -> empty")
-            logEvent(Severity.LOW, "remove hop", "removed hop for $src")
-            return Pair(true, context.getString(R.string.config_add_success_toast))
-        } catch (e: Exception) {
-            Logger.e(LOG_TAG_VPN, "$TAG err removing hop: $src -> empty; ${e.message}")
-            err = e.message ?: "err removing hop"
-            logEvent(Severity.HIGH, "remove hop error", "error removing hop for $src, reason: $err")
-        }
-        return Pair(false, err)
-    }
-
-    suspend fun testHop(src: String, hop: String): Pair<Boolean, String?> {
-        // returns empty on success, err msg on failure
-        val s = tunnel.proxies.testHop(hop.togs(), src.togs()).tos()
-        val res = s.isNullOrEmpty()
-        val err = s
-        if (!res) {
-            Logger.w(LOG_TAG_VPN, "$TAG err testing hop: $src -> $hop; $s")
-        } else {
-            Logger.i(LOG_TAG_VPN, "$TAG test hop success: $src -> $hop")
-        }
-        return Pair(res, err)
-    }
-
-    private fun showHopFailureNotification(src: String, hop: String, err: String? = "") {
-        val notifChannelId = "hop_failure_channel"
-        ui {
-            val notificationManager =
-                context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-
-            if (isAtleastO()) {
-                val channelName = context.getString(R.string.hop_failure_notification_title)
-                val importance = NotificationManager.IMPORTANCE_DEFAULT
-                val channel = NotificationChannel(notifChannelId, channelName, importance)
-                notificationManager.createNotificationChannel(channel)
-            }
-            val msg = context.getString(
-                R.string.hop_failure_toast,
-                src,
-                hop
-            ) + if (!err.isNullOrEmpty()) " ($err)" else ""
-            showToastUiCentered(context.applicationContext, msg, Toast.LENGTH_LONG)
-            val pendingIntent =
-                Utilities.getActivityPendingIntent(
-                    context,
-                    Intent(context, AppLockActivity::class.java),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                    mutable = false
-                )
-            val builder =
-                NotificationCompat.Builder(context, notifChannelId)
-                    .setSmallIcon(R.drawable.ic_notification_icon)
-                    .setContentTitle(msg)
-                    .setContentIntent(pendingIntent)
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .setAutoCancel(true)
-            builder.color = ContextCompat.getColor(context, getAccentColor(persistentState.theme))
-            notificationManager.notify(NW_ENGINE_NOTIFICATION_ID, builder.build())
         }
     }
 
@@ -1219,7 +1112,6 @@ class GoVpnAdapter : KoinComponent {
 
             val wgConfig = WireguardManager.getConfigById(proxyId)
             val isOneWg = WireguardManager.getOneWireGuardProxyId() == proxyId
-            if (!isOneWg) checkAndAddProxyForHopIfNeeded(id)
             val skipListenPort = !isOneWg && persistentState.randomizeListenPort
             val wgUserSpaceString = wgConfig?.toWgUserspaceString(skipListenPort)
             val p = getProxies()?.addProxy(id.togs(), wgUserSpaceString.togs())
@@ -1229,7 +1121,6 @@ class GoVpnAdapter : KoinComponent {
             // initiate a ping request to the wg proxy
             initiateWgPing(id)
             Logger.i(LOG_TAG_VPN, "$TAG added wireguard proxy with $id; success? ${p != null}")
-            addHopIfAny(id)
         } catch (e: Exception) {
             Logger.e(LOG_TAG_VPN, "$TAG err adding wireguard proxy: ${e.message}", e)
             // do not auto remove failed wg proxy, let the user decide hop UI
@@ -1239,26 +1130,6 @@ class GoVpnAdapter : KoinComponent {
             )
             logEvent(Severity.HIGH, "add wg proxy error", "err adding wg proxy with id: $id, reason: ${e.message}" )
         }
-    }
-
-    private suspend fun checkAndAddProxyForHopIfNeeded(id: String) {
-        // see if there is hop for this proxy, start the hop-wg if not started
-        try {
-            val hop = WgHopManager.getHop(id)
-            val hopId = hop.substring(ID_WG_BASE.length).toIntOrNull()
-            if (hopId == null) { // hop can be empty, in that case, return
-                Logger.w(LOG_TAG_VPN, "$TAG no hop for $id")
-                return
-            }
-            val config = WireguardManager.getConfigFilesById(hopId)
-            if (config == null) {
-                Logger.w(LOG_TAG_VPN, "$TAG no wg config found for id: $id, but hop: $hop")
-                return
-            }
-            Logger.i(LOG_TAG_VPN, "$TAG start hop config: $hop")
-            // this will enable the config and initiate the add proxy to the tunnel
-            WireguardManager.enableConfig(config)
-        } catch (_: Exception) {}
     }
 
     suspend fun closeConnections(connIds: List<String>, isUid: Boolean = false, reason: String) {
