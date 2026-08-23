@@ -32,8 +32,6 @@ import com.celzero.bravedns.util.Constants.Companion.WIREGUARD_FOLDER_NAME
 import com.celzero.bravedns.util.Utilities
 import com.celzero.bravedns.wireguard.Config
 import com.celzero.bravedns.wireguard.Peer
-import com.celzero.bravedns.wireguard.WgHopManager
-import com.celzero.bravedns.service.UsqueManager
 import com.celzero.bravedns.wireguard.WgInterface
 import com.celzero.firestack.backend.Backend
 import com.celzero.firestack.backend.RouterStats
@@ -279,15 +277,6 @@ object WireguardManager : KoinComponent {
         val proxyProvider = AppConfig.ProxyProvider.WIREGUARD
         appConfig.addProxy(proxyType, proxyProvider)
         VpnController.addWireGuardProxy(ID_WG_BASE + map.id)
-        // No auto-trigger on WARP start: the WG -> WARP(S5) double hop is driven by
-        // the "wireguard - socks5 double hop" switch in Proxy settings. This only
-        // re-applies the hop to a config enabled while that switch is already on.
-        if (persistentState.autoHopWgIntoWarp && UsqueManager.isRunning()) {
-            io {
-                val res = WgHopManager.hopIntoWarp(map.id)
-                WgHopManager.hlog("enableConfig: re-apply double hop wg(${map.id}) -> WARP: $res")
-            }
-        }
         Logger.i(LOG_TAG_PROXY, "enable wg config: ${map.id}, ${map.name}")
         return
     }
@@ -312,7 +301,6 @@ object WireguardManager : KoinComponent {
     fun canDisableConfig(map: WgConfigFilesImmutable): Boolean {
         return when {
             map.isCatchAll -> false // cannot disable catch-all
-            WgHopManager.isWgEitherHopOrSrc(map.id) -> false // cannot disable hop/via
             else -> true // safe to disable
         }
     }
@@ -391,7 +379,6 @@ object WireguardManager : KoinComponent {
             appConfig.removeProxy(proxyType, proxyProvider)
         }
         // directly remove the proxy from the tunnel, instead of calling updateTun
-        io { WgHopManager.unhopFromWarp(newMap.id) }
         io { VpnController.removeWireGuardProxy(newMap.id) }
         Logger.i(LOG_TAG_PROXY, "disable wg config: ${newMap.id}, ${newMap.name}")
         return
@@ -846,7 +833,6 @@ object WireguardManager : KoinComponent {
             ProxyManager.removeProxyId(proxyId)
             mappings.remove(mappings.find { it.id == id })
             if (config != null) configs.remove(config)
-            WgHopManager.handleWgDelete(id)
         }
     }
 

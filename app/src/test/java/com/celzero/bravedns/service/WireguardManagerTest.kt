@@ -20,7 +20,6 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.celzero.bravedns.data.AppConfig
 import com.celzero.bravedns.database.WgConfigFilesImmutable
 import com.celzero.bravedns.database.WgConfigFilesRepository
-import com.celzero.bravedns.database.WgHopMapRepository
 import com.celzero.bravedns.service.ProxyManager.ID_WG_BASE
 import com.celzero.bravedns.wireguard.Config as WgConfig
 import com.celzero.bravedns.wireguard.Peer
@@ -93,7 +92,6 @@ class WireguardManagerTest : KoinTest {
                 single { mockDb }
                 single { mockContext }
                 single { mockAppConfig }
-                single { mockk<WgHopMapRepository>(relaxed = true) }
             })
         }
 

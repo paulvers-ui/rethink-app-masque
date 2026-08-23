@@ -47,7 +47,6 @@ import com.celzero.bravedns.util.Constants
         DoTEndpoint::class,
         ODoHEndpoint::class,
         RpnProxy::class,
-        WgHopMap::class,
         SubscriptionStatus::class,
         SubscriptionStateHistory::class
     ],
@@ -1169,8 +1168,6 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun rpnProxyDao(): RpnProxyDao
 
-    abstract fun wgHopMapDao(): WgHopMapDao
-
     abstract fun subscriptionStatusDao(): SubscriptionStatusDao
 
     abstract fun subscriptionStateHistoryDao(): SubscriptionStateHistoryDao
@@ -1210,8 +1207,6 @@ abstract class AppDatabase : RoomDatabase() {
     fun odohEndpointRepository() = ODoHEndpointRepository(odohEndpointDao())
 
     fun rpnProxyRepository() = RpnProxyRepository(rpnProxyDao())
-
-    fun wgHopMapRepository() = WgHopMapRepository(wgHopMapDao())
 
     fun subscriptionStatusRepository() = SubscriptionStatusRepository(subscriptionStatusDao())
 

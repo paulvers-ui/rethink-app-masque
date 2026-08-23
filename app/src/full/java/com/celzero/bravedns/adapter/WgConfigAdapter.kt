@@ -55,7 +55,6 @@ import com.celzero.bravedns.ui.activity.WgConfigEditorActivity.Companion.INTENT_
 import com.celzero.bravedns.util.UIUtils
 import com.celzero.bravedns.util.UIUtils.fetchColor
 import com.celzero.bravedns.util.Utilities
-import com.celzero.bravedns.wireguard.WgHopManager
 import com.celzero.bravedns.wireguard.WgInterface
 import com.celzero.firestack.backend.Backend
 import com.celzero.firestack.backend.RouterStats
@@ -129,9 +128,7 @@ class WgConfigAdapter(private val context: Context, private val listener: DnsSta
             val appsCount = ProxyManager.getAppCountForProxy(ID_WG_BASE + config.id)
             updateUi(config, appsCount)
             updateStatusJob(config)
-            updateHopSrcChip(config.id)
             updateAmneziaChip(config)
-            updateHoppingChip(config.id)
         }
 
         private fun updateStatusJob(config: WgConfigFiles) {
@@ -154,9 +151,7 @@ class WgConfigAdapter(private val context: Context, private val listener: DnsSta
                 context.getString(R.string.lbl_disabled).replaceFirstChar(Char::titlecase)
             updateProtocolChip(Pair(false, false))
             updateSplitTunnelChip(false)
-            updateHopSrcChip(config.id)
             updateAmneziaChip(config)
-            updateHoppingChip(config.id)
         }
 
         private fun updateProxyStatusContinuously(config: WgConfigFiles): Job? {
@@ -198,41 +193,6 @@ class WgConfigAdapter(private val context: Context, private val listener: DnsSta
                 b.chipSplitTunnel.visibility = View.VISIBLE
             } else {
                 b.chipSplitTunnel.visibility = View.GONE
-            }
-        }
-
-        private fun updateHopSrcChip(id: Int) {
-            val sid = ID_WG_BASE + id
-            val hop = WgHopManager.getMapBySrc(sid)
-            if (hop.isNotEmpty()) {
-                b.protocolInfoChipGroup.visibility = View.VISIBLE
-                b.chipHopSrc.visibility = View.VISIBLE
-                b.chipHopSrc.text = context.getString(
-                    R.string.two_argument_space,
-                    context.getString(R.string.symbol_bunny),
-                    context.getString(R.string.lbl_hopping)
-                )
-            } else {
-                b.chipHopSrc.visibility = View.GONE
-            }
-        }
-
-        private fun updateHoppingChip(id: Int) {
-            val sid = ID_WG_BASE + id
-            val hops = WgHopManager.getMapByHop(sid)
-            if (hops.isNotEmpty()) {
-                b.protocolInfoChipGroup.visibility = View.VISIBLE
-                b.chipHopping.visibility = View.VISIBLE
-                val hopContentTxt = context.getString(
-                    R.string.two_argument_colon, context.getString(R.string.lbl_hop),
-                    hops.joinToString { it.src })
-                b.chipHopping.text = context.getString(
-                    R.string.two_argument_space,
-                    context.getString(R.string.symbol_satellite),
-                    hopContentTxt
-                )
-            } else {
-                b.chipHopping.visibility = View.GONE
             }
         }
 

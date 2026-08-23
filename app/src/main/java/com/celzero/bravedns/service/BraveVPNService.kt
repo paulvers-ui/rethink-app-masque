@@ -126,7 +126,6 @@ import com.celzero.bravedns.util.Utilities.isPlayStoreFlavour
 import com.celzero.bravedns.util.Utilities.isUnspecifiedIp
 import com.celzero.bravedns.util.Utilities.showToastUiCentered
 import com.celzero.bravedns.util.Utilities.tos
-import com.celzero.bravedns.wireguard.WgHopManager
 import com.celzero.firestack.backend.Backend
 import com.celzero.firestack.backend.DNSOpts
 import com.celzero.firestack.backend.DNSSummary
@@ -267,10 +266,8 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
             val ok = UsqueManager.startSocksProxy(applicationContext)
             if (ok) {
                 Logger.i(LOG_TAG_VPN, "usque: retry succeeded on attempt $attempt/$maxAttempts")
-                // NOTE: auto-hop into WARP on usque start is intentionally NOT wired up
-                // yet. The WG -> S5 double hop is driven explicitly from the Proxy
-                // settings switch (WgHopManager.setDoubleHopForAllConfigs) until the
-                // Part A manual test confirms firestack sets the via-ref.
+                // NOTE: the WG -> S5 double hop feature (WgHopManager) has been
+                // removed entirely -- there is no auto-hop-into-WARP behavior here.
                 return
             }
             Logger.w(LOG_TAG_VPN, "usque: retry $attempt/$maxAttempts failed")
@@ -2206,10 +2203,8 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
                 if (ok) {
                     // Sprint 15: flush stale DoH connections so DNS resolves immediately
                     refreshResolvers()
-                    // NOTE: auto-hop into WARP on usque start is intentionally NOT wired up
-                    // yet. The WG -> S5 double hop is driven explicitly from the Proxy
-                    // settings switch (WgHopManager.setDoubleHopForAllConfigs) until the
-                    // Part A manual test confirms firestack sets the via-ref.
+                    // NOTE: the WG -> S5 double hop feature (WgHopManager) has been
+                    // removed entirely -- there is no auto-hop-into-WARP behavior here.
                 }
                 // Sprint 21 fix 3: do NOT permanently disable usqueEnabled on a single failed
                 // restart. A transient failure here (e.g. network not yet up at boot) caused
@@ -3905,16 +3900,6 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         // Sprint 21: clear death callback first so the watcher thread cannot fire a restart
         // after we have already torn down the VPN service and stopped usque intentionally.
         UsqueManager.setDeathCallback(null)
-        // Unhop all WG configs from WARP before stopping, so firestack does not hold
-        // a via-reference to a proxy that no longer exists.
-        if (persistentState.autoHopWgIntoWarp) {
-            WireguardManager.getActiveConfigs().forEach { cfg ->
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    val res = WgHopManager.unhopFromWarp(cfg.getId())
-                    Logger.i(LOG_TAG_VPN, "unhop wg(${cfg.getId()}) from WARP on service destroy: $res")
-                }
-            }
-        }
         UsqueManager.stopSocksProxy()
         usqueWatchdogJob?.cancel()
         usqueWatchdogJob = null
@@ -6401,18 +6386,6 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         return vpnAdapter?.testRpnProxy(proxyId) == true
     }
 
-    suspend fun testHop(src: String, hop: String): Pair<Boolean, String?> {
-        return vpnAdapter?.testHop(src, hop) ?: Pair(false, "vpn not active")
-    }
-
-    suspend fun hopStatus(src: String, via: String): Pair<Long?, String> {
-        return vpnAdapter?.hopStatus(src, via) ?: Pair(null, "vpn not active")
-    }
-
-    suspend fun removeHop(src: String): Pair<Boolean, String> {
-        return vpnAdapter?.removeHop(src) ?: Pair(false, "vpn not active")
-    }
-
     /*suspend fun getRpnProps(type: RpnProxyManager.RpnType): Pair<RpnProxyManager.RpnProps?, String?> {
         return vpnAdapter?.getRpnProps(type) ?: Pair(null, null)
     }*/
@@ -6510,14 +6483,13 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
                 }
             }
 
-            // initiate wireguard ping for one wg, catch-all, hop proxies
+            // initiate wireguard ping for one wg, catch-all, rpn proxies
             val proxies = WireguardManager.getActiveConfigs()
-            Logger.i(LOG_TAG_VPN, "unlock: initiate ping for one-wg/catchall/hop/rpn proxies")
+            Logger.i(LOG_TAG_VPN, "unlock: initiate ping for one-wg/catchall/rpn proxies")
             proxies.forEach { c ->
                 val isOneWg = WireguardManager.getOneWireGuardProxyId() == c.getId()
                 val isCatchAll = WireguardManager.getActiveCatchAllConfig().any { it.id == c.getId()}
-                val isPartOfHop = WgHopManager.isWgEitherHopOrSrc(c.getId())
-                if (isOneWg || isCatchAll || isPartOfHop) {
+                if (isOneWg || isCatchAll) {
                     val id = ID_WG_BASE + c.getId()
                     vpnAdapter?.initiateWgPing(id)
                 }

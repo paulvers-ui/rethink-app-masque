@@ -60,7 +60,6 @@ import com.celzero.bravedns.service.UsqueManager
 import com.celzero.bravedns.service.VpnController
 import com.celzero.bravedns.service.WireguardManager
 import com.celzero.bravedns.service.WireguardManager.WG_UPTIME_THRESHOLD
-import com.celzero.bravedns.wireguard.WgHopManager
 import com.celzero.bravedns.util.Constants
 import com.celzero.bravedns.util.Themes.Companion.getCurrentTheme
 import com.celzero.bravedns.util.UIUtils
@@ -1259,18 +1258,6 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
             modifiedDataTime = 0L,
             latency = 0
         )
-    }
-
-    private fun showHopLogDialog(title: String, body: String) {
-        MaterialAlertDialogBuilder(this, R.style.App_Dialog_NoDim)
-            .setTitle(title)
-            .setMessage(body.ifBlank { "empty" })
-            .setPositiveButton(R.string.dns_info_positive) { d, _ -> d.dismiss() }
-            .setNegativeButton("clear log") { d, _ ->
-                WgHopManager.clearHopLog()
-                d.dismiss()
-            }
-            .show()
     }
 
     private fun logEvent(msg: String, details: String) {
