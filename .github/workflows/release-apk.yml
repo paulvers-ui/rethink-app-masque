@@ -201,7 +201,7 @@ jobs:
       - name: 🔑 Decode the keystore
         run: |
           set -eu
-          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "${GITHUB_WORKSPACE}/release.keystore"
+          printf '%s' "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "${GITHUB_WORKSPACE}/release.keystore"
           echo "RELEASE_KEYSTORE_PATH=${GITHUB_WORKSPACE}/release.keystore" >> "$GITHUB_ENV"
         shell: bash
 
