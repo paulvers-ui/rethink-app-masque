@@ -152,7 +152,8 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     // default: false
     var allowBypass by booleanPref("allow_bypass").withDefault<Boolean>(false)
 
-    // user set among AppConfig.DnsType enum; RETHINK_REMOTE is default which is Rethink-DoH
+    // user set among AppConfig.DnsType enum; DOH is default (Cloudflare, via
+    // the selected row in DoHEndpoint)
     var dnsType by
         intPref("dns_type")
             .withDefault<Int>(
@@ -286,7 +287,9 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     var enableDnsAlg by booleanPref("dns_alg").withDefault<Boolean>(false)
 
     // default dns url
-    var defaultDnsUrl by stringPref("default_dns_query").withDefault<String>(Constants.DEFAULT_DNS_LIST[1].url)
+    var defaultDnsUrl by stringPref("default_dns_query").withDefault<String>(
+        Constants.DEFAULT_DNS_LIST.first { it.name == "Cloudflare" }.url
+    )
 
     // packet capture type
     var pcapMode by intPref("pcap_mode").withDefault<Int>(PcapMode.NONE.id)

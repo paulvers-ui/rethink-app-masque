@@ -361,7 +361,7 @@ class HomeScreenActivity : AppCompatActivity(R.layout.activity_home_screen) {
         // dns.google.com to dns.google. In servers.xml default ips available for dns.google
         // so changing the default dns url to dns.google
         if (persistentState.defaultDnsUrl.contains("dns.google.com")) {
-            persistentState.defaultDnsUrl = Constants.DEFAULT_DNS_LIST[2].url
+            persistentState.defaultDnsUrl = Constants.DEFAULT_DNS_LIST.first { it.name == "Google" }.url
         }
         moveRemoteBlocklistFileFromAsset()
         // if biometric auth is enabled, then set the biometric auth type to 3 (15 minutes)
