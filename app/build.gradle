@@ -63,7 +63,7 @@ android {
         // rewriting every import. applicationId is what defines the package on
         // device, which is what the fork needs to differ.
         applicationId "com.creatore.rethinkfork"
-        minSdkVersion(26)
+        minSdkVersion(23)
         targetSdkVersion 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         resConfigs "en", "ab", "ang", "ar", "az", "be", "bg", "bn", "cs", "da", "de", "el", "es", "fa", "fi", "fr", "frr", "gay", "hi", "hu", "in", "it", "iw", "ja", "ko", "lir", "lt", "lv", "ml", "nb-rNO", "nl", "or", "peo", "pl", "prg", "pt", "pt-rBR", "ro", "ru", "si", "sk", "sr", "sv", "sw", "ta", "th", "tl", "tr", "tts", "uk", "ur", "uz", "vi", "zh-rCN", "zh-rHK", "zh-rTW"
