@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    package="com.celzero.bravedns">
+    package="com.creatore.rethinkfork">
 
     <!--
         BUILD FIX: this manifest used tools:ignore on several components but never
@@ -17,7 +17,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <permission
-        android:name="com.celzero.bravedns.CONTROL_VPN"
+        android:name="com.creatore.rethinkfork.CONTROL_VPN"
         android:protectionLevel="normal" />
 
     <!-- allowBackup/dataExtractionRules/fullBackupContent explicit for SAST coverage. -->
@@ -35,24 +35,24 @@
         -->
         <provider
             android:name=".provider.ApplicationProvider"
-            android:authorities="com.celzero.bravedns.appprovider"
+            android:authorities="com.creatore.rethinkfork.appprovider"
             android:enabled="true"
             android:exported="true"
-            android:permission="com.celzero.bravedns.CONTROL_VPN"
+            android:permission="com.creatore.rethinkfork.CONTROL_VPN"
             tools:ignore="ExportedContentProvider" />
         <provider
             android:name=".provider.BlocklistProvider"
-            android:authorities="com.celzero.bravedns.blocklistprovider"
+            android:authorities="com.creatore.rethinkfork.blocklistprovider"
             android:enabled="true"
             android:exported="true"
-            android:permission="com.celzero.bravedns.CONTROL_VPN"
+            android:permission="com.creatore.rethinkfork.CONTROL_VPN"
             tools:ignore="ExportedContentProvider" />
         <provider
             android:name=".provider.DomainRuleProvider"
-            android:authorities="com.celzero.bravedns.domainrulesprovider"
+            android:authorities="com.creatore.rethinkfork.domainrulesprovider"
             android:enabled="true"
             android:exported="true"
-            android:permission="com.celzero.bravedns.CONTROL_VPN"
+            android:permission="com.creatore.rethinkfork.CONTROL_VPN"
             tools:ignore="ExportedContentProvider" />
 
         <!--
@@ -82,10 +82,10 @@
         <receiver
             android:name=".receiver.BraveStartReceiver"
             android:exported="true"
-            android:permission="com.celzero.bravedns.CONTROL_VPN"
+            android:permission="com.creatore.rethinkfork.CONTROL_VPN"
             tools:ignore="ExportedReceiver">
             <intent-filter>
-                <action android:name="com.celzero.bravedns.intent.action.START_VPN" />
+                <action android:name="com.creatore.rethinkfork.intent.action.START_VPN" />
             </intent-filter>
         </receiver>
     </application>
