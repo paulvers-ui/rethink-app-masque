@@ -9,7 +9,7 @@
 # and specify the fully qualified class name to the JavaScript interface
 # class:
 # commenting below, webview removed from version v053i
-#-keepclassmembers class com.celzero.bravedns.ui.DnsConfigureWebViewActivity$JSInterface {
+#-keepclassmembers class com.creatore.rethinkfork.ui.DnsConfigureWebViewActivity$JSInterface {
 #   public *;
 #}
 
@@ -62,7 +62,7 @@
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class com.google.gson.** { *; }
--keep class com.celzero.bravedns.data.FileTag { *; }
+-keep class com.creatore.rethinkfork.data.FileTag { *; }
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.

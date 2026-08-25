@@ -1171,7 +1171,7 @@
     <string name="most_contacted_asn" translatable="true">连接最多的服务商</string>
     <string name="most_blocked_asn" translatable="true">拦截最多的服务商</string>
     <string name="adv_tasker_dialog_msg" translatable="true">输入允许启动或停止Rethink的应用包名（多个请用英文逗号分隔）。</string>
-    <string name="adv_tasker_dialog_instructions" translatable="true">说明：\n 广播消息中必要的额外项：\n •key： sender\n • value：发起调用的应用包名\n\n 示例：key:sender value:com.termux\n\n 支持的操作：\n • 启动 VPN – com.celzero.bravedns.intent.action.VPN_START\n • 停止 VPN – com.celzero.bravedns.intent.action.VPN_STOP</string>
+    <string name="adv_tasker_dialog_instructions" translatable="true">说明：\n 广播消息中必要的额外项：\n •key： sender\n • value：发起调用的应用包名\n\n 示例：key:sender value:com.termux\n\n 支持的操作：\n • 启动 VPN – com.creatore.rethinkfork.intent.action.VPN_START\n • 停止 VPN – com.creatore.rethinkfork.intent.action.VPN_STOP</string>
     <string name="adv_tasker_dialog_edit_hint" translatable="true">输入应用包名（示例：net.dinglisch.android.taskerm）</string>
     <string name="download_ip_info_title" translatable="true">显示服务商信息</string>
     <string name="download_ip_info_desc" translatable="true">从 <i>rethinkdns.com</i> 获取服务提供商详情, 数据由 <i>%1$s</i> 提供</string>

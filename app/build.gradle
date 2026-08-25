@@ -54,14 +54,17 @@ def getVersionCode = {
 
 android {
     compileSdkVersion(35)
-    namespace 'com.celzero.bravedns'
+    namespace 'com.creatore.rethinkfork'
 
     defaultConfig {
-        // Installed package identity for this fork. `namespace` is deliberately
-        // left as com.celzero.bravedns: it only controls the generated R/BuildConfig
-        // package, and changing it would require moving ~460 source files and
-        // rewriting every import. applicationId is what defines the package on
-        // device, which is what the fork needs to differ.
+        // applicationId matches namespace now -- both are com.creatore.rethinkfork.
+        // Previously namespace stayed as com.celzero.bravedns (only controlling the
+        // generated R/BuildConfig package) to avoid a ~460-file rename; that rename
+        // has since been done, so the two are aligned. See the F-Droid RFP response
+        // (fdroid/RFP-4306-RESPONSE.md) for why this mismatch existed and why it was
+        // worth fixing: a scanner reading `namespace` instead of `applicationId`
+        // could attribute this fork's trackers/listing status to the ORIGINAL
+        // Rethink app instead of this one.
         applicationId "com.creatore.rethinkfork"
         minSdkVersion(23)
         targetSdkVersion 35
