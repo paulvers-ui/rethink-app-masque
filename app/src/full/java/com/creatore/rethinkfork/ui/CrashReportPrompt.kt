@@ -62,7 +62,18 @@ object CrashReportPrompt {
         try {
             if (shownThisProcess || activity.isFinishing || activity.isDestroyed) return
 
-            val summary = CrashReportStore.pending(activity) ?: return
+            // JVM crash (GlobalExceptionHandler) takes priority when both are
+            // somehow present, since it carries an actual stack trace rather than
+            // just "the OS says a native crash happened". Checking
+            // pendingNativeCrash() has a side effect (it persists the exit's
+            // timestamp as seen) -- only call it when there is no JVM marker, so a
+            // native crash is not marked "seen" without ever being shown to the
+            // user.
+            val jvmSummary = CrashReportStore.pending(activity)
+            val nativeSummary = if (jvmSummary == null) CrashReportStore.pendingNativeCrash(activity) else null
+            val summary = jvmSummary ?: nativeSummary ?: return
+            val isNative = jvmSummary == null
+
             shownThisProcess = true
 
             MaterialAlertDialogBuilder(activity)
@@ -70,14 +81,17 @@ object CrashReportPrompt {
                 .setMessage(activity.getString(R.string.crash_report_desc, firstLines(summary)))
                 .setCancelable(true)
                 .setPositiveButton(R.string.crash_report_send) { d, _ ->
-                    CrashReportStore.clear(activity)
+                    if (!isNative) CrashReportStore.clear(activity)
                     d.dismiss()
-                    share(activity, summary)
+                    share(activity, summary, isNative)
                 }
                 .setNegativeButton(R.string.crash_report_dismiss) { d, _ ->
                     // Clear on explicit dismiss so the user is not nagged about a
-                    // crash they have already chosen to ignore.
-                    CrashReportStore.clear(activity)
+                    // crash they have already chosen to ignore. The native-crash
+                    // "seen" marker was already persisted by pendingNativeCrash()
+                    // above regardless of this button, so nothing more to clear
+                    // there.
+                    if (!isNative) CrashReportStore.clear(activity)
                     d.dismiss()
                 }
                 .show()
@@ -91,7 +105,7 @@ object CrashReportPrompt {
         return summary.lineSequence().take(max).joinToString("\n").trim()
     }
 
-    private fun share(activity: Activity, summary: String) {
+    private fun share(activity: Activity, summary: String, isNative: Boolean = false) {
         try {
             val uris = arrayListOf<Uri>()
 
@@ -106,6 +120,15 @@ object CrashReportPrompt {
                 }
             } catch (e: Exception) {
                 Logger.w(LOG_TAG_UI, "$TAG no tombstone file: ${e.message}")
+            }
+            // The raw ApplicationExitInfo trace for a native crash (SIGABRT/SIGSEGV
+            // inside libgojni.so, for example) -- see CrashReportStore.pendingNativeCrash().
+            // Undecoded protobuf on API 31+, may be absent on API 30; attached as-is
+            // either way since it is still more useful than nothing.
+            if (isNative) {
+                CrashReportStore.nativeTraceFile(activity)?.let { trace ->
+                    attachIfPresent(activity, trace)?.let { uris.add(it) }
+                }
             }
 
             val body = buildString {
