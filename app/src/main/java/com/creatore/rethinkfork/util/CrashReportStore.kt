@@ -15,7 +15,10 @@
  */
 package com.creatore.rethinkfork.util
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
+import android.os.Build
 import java.io.File
 
 /**
@@ -45,6 +48,18 @@ import java.io.File
 object CrashReportStore {
 
     private const val CRASH_MARKER_FILE = "last_crash.txt"
+    // Persists the timestamp (ApplicationExitInfo.getTimestamp()) of the last
+    // native-crash exit we have already surfaced to the user, so
+    // getHistoricalProcessExitReasons() -- which returns HISTORICAL data, not
+    // just the most recent process death -- does not cause the same native
+    // crash to be reported again on every subsequent launch.
+    private const val NATIVE_CRASH_SEEN_FILE = "last_native_crash_seen.txt"
+    private const val NATIVE_TRACE_FILE = "last_native_crash_trace.bin"
+    // Only the single most recent exit reason is actually used (see
+    // firstOrNull() below); asking for a few more than that is just headroom
+    // in case an ANR or some other reason sits ahead of the native crash in
+    // the returned list.
+    private const val MAX_EXIT_REASONS_TO_INSPECT = 5
 
     // A stack trace is the useful part and is rarely large, but a pathological
     // cause-chain could be. Cap it so the marker can never grow unbounded on a
@@ -94,5 +109,83 @@ object CrashReportStore {
         } catch (_: Throwable) {
             // non-fatal: worst case the user sees the prompt once more
         }
+    }
+
+    /**
+     * A native crash (SIGABRT/SIGSEGV inside libgojni.so, for example) kills the
+     * process at the OS level -- it never reaches GlobalExceptionHandler, which
+     * only sees JVM Throwables. Without this, that whole class of crash is
+     * completely invisible to the crash-report flow: the process just vanishes
+     * and relaunches with no marker written at all. This is a real gap the
+     * "About button crashes" investigation exposed once, and closes here for
+     * every future native crash, not just that one.
+     *
+     * Uses ApplicationExitInfo (API 30+; this app's minSdk is 23, so this is a
+     * best-effort enhancement, not something every install gets) to ask Android
+     * directly why the process last died, rather than trying to detect this
+     * indirectly. Returns a short description if a NEW native-crash exit is
+     * found since the last time this was checked, or null otherwise --
+     * including on API < 30, where the check is skipped entirely.
+     */
+    // Four independent guard clauses (SDK check, service lookup, exit-reason
+    // lookup, dedup-against-last-seen) -- each is a precondition that ends the
+    // function early on its own. Forcing this into a single-exit shape would
+    // mean nesting all four behind one another, which reads worse, not better,
+    // than the early returns it would replace.
+    @Suppress("ReturnCount")
+    fun pendingNativeCrash(ctx: Context): String? {
+        return try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+
+            val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                ?: return null
+            val exits = am.getHistoricalProcessExitReasons(ctx.packageName, 0, MAX_EXIT_REASONS_TO_INSPECT)
+            val nativeCrash = exits.firstOrNull {
+                it.reason == ApplicationExitInfo.REASON_CRASH_NATIVE
+            } ?: return null
+
+            val seenFile = File(ctx.filesDir, NATIVE_CRASH_SEEN_FILE)
+            val lastSeen = try {
+                if (seenFile.exists()) seenFile.readText().trim().toLongOrNull() ?: 0L else 0L
+            } catch (_: Throwable) {
+                0L
+            }
+            if (nativeCrash.timestamp <= lastSeen) return null // already reported
+
+            try {
+                seenFile.writeText(nativeCrash.timestamp.toString())
+            } catch (_: Throwable) {
+                // If this fails to persist, worst case the same native crash is
+                // offered again next launch -- harmless, just a repeat prompt.
+            }
+
+            // Best effort: the raw trace is a tombstone protobuf on API 31+ (see
+            // ApplicationExitInfo.getTraceInputStream() docs) and may be absent
+            // entirely on API 30. Saved as-is, undecoded -- attaching the raw
+            // bytes is still far more useful to whoever reads the report than
+            // nothing, even without a protobuf schema to parse it with here.
+            try {
+                nativeCrash.traceInputStream?.use { input ->
+                    File(ctx.filesDir, NATIVE_TRACE_FILE).outputStream().use { out ->
+                        input.copyTo(out)
+                    }
+                }
+            } catch (_: Throwable) {
+                // No trace available -- the description text alone is still
+                // worth surfacing.
+            }
+
+            "Native crash detected (process killed by the OS, description: " +
+                "${nativeCrash.description ?: "none"}). This is almost always a " +
+                "crash inside the native VPN engine (libgojni.so), not app code."
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /** The raw native tombstone trace saved by pendingNativeCrash(), if any. */
+    fun nativeTraceFile(ctx: Context): File? {
+        val f = File(ctx.filesDir, NATIVE_TRACE_FILE)
+        return if (f.exists() && f.length() > 0L) f else null
     }
 }
