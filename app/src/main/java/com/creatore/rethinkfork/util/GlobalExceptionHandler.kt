@@ -168,6 +168,12 @@ class GlobalExceptionHandler private constructor(
 
             // Try to write logs to file with context
             writeLogsToFileWithFallback(msg)
+
+            // Record a marker so the next launch can offer to send this report.
+            // Firebase is the only other notification path here and it does not
+            // exist in the fdroid flavor, so without this a crash on a
+            // F-Droid/GitHub build is invisible to both user and maintainer.
+            contextRef?.get()?.let { ctx -> CrashReportStore.save(ctx, msg) }
         } catch (e: Exception) {
             Logger.e(LOG_TAG_APP, "err while logging exception context", e)
         }
