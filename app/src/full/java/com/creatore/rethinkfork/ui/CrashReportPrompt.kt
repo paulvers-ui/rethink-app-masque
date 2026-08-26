@@ -39,6 +39,11 @@ import java.io.File
  * them and rude, so the destination is left to the user: their own mail app, an
  * issue tracker, a messaging app, wherever.
  */
+// Broad `catch` throughout is deliberate: this runs from onResume on a path whose
+// only job is to report that something already went wrong. Letting an unexpected
+// Throwable escape would crash the activity while it is trying to hand the user a
+// crash report -- the one failure mode this feature exists to prevent.
+@Suppress("TooGenericExceptionCaught")
 object CrashReportPrompt {
 
     private const val TAG = "CrashPrompt"
@@ -55,8 +60,7 @@ object CrashReportPrompt {
      */
     fun maybeShow(activity: Activity) {
         try {
-            if (shownThisProcess) return
-            if (activity.isFinishing || activity.isDestroyed) return
+            if (shownThisProcess || activity.isFinishing || activity.isDestroyed) return
 
             val summary = CrashReportStore.pending(activity) ?: return
             shownThisProcess = true
