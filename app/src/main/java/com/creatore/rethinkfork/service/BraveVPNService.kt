@@ -93,6 +93,7 @@ import com.creatore.rethinkfork.ui.activity.AppLockActivity
 import com.creatore.rethinkfork.ui.activity.MiscSettingsActivity
 import com.creatore.rethinkfork.util.AndroidUidConfig
 import com.creatore.rethinkfork.util.BackgroundAccessibilityService
+import com.creatore.rethinkfork.util.BridgeCallTelemetry
 import com.creatore.rethinkfork.util.BubbleHelper
 import com.creatore.rethinkfork.util.CoFactory
 import com.creatore.rethinkfork.util.ConnectivityCheckHelper
@@ -279,9 +280,19 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         Logger.e(LOG_TAG_VPN, "usque: all $maxAttempts restart attempts failed — WARP tunnel down, watchdog will retry")
     }
 
-    private val flowDispatcher by lazy { Daemons.ioDispatcher("flow", Mark(),  vpnScope) }
-    private val inflowDispatcher by lazy { Daemons.ioDispatcher("inflow", Mark(), vpnScope) }
-    private val preflowDispatcher by lazy { Daemons.ioDispatcher("preflow", PreMark(), vpnScope) }
+    // flow/inflow/preflow are the three Bridge callbacks firestack wraps in a hard 5s
+    // timeout on the Go side (see the go2ktBounded doc comment below for the full
+    // mechanism). Widened from the default single thread to a small, fixed pool so a
+    // burst of new connections -- e.g. right after a tunnel restart, when many apps
+    // reconnect at once -- cannot queue a call long enough to approach that 5s budget in
+    // the first place. FLOW_DISPATCHER_THREADS is a flat, device-independent constant on
+    // purpose: predictable behavior across the whole fleet matters more here than
+    // squeezing out extra throughput on higher-core devices, and 4 is enough to absorb a
+    // realistic connection burst without spawning more threads than a phone should
+    // reasonably dedicate to this.
+    private val flowDispatcher by lazy { Daemons.ioDispatcher("flow", Mark(), vpnScope, FLOW_DISPATCHER_THREADS) }
+    private val inflowDispatcher by lazy { Daemons.ioDispatcher("inflow", Mark(), vpnScope, FLOW_DISPATCHER_THREADS) }
+    private val preflowDispatcher by lazy { Daemons.ioDispatcher("preflow", PreMark(), vpnScope, FLOW_DISPATCHER_THREADS) }
     private val dnsQueryDispatcher by lazy { Daemons.ioDispatcher("onQuery", DNSOpts(), vpnScope) }
     private val bind4Dispatcher by lazy { Daemons.ioDispatcher("bind4", Unit, vpnScope) }
     private val bind6Dispatcher by lazy { Daemons.ioDispatcher("bind6", Unit, vpnScope) }
@@ -358,6 +369,13 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         private const val RECONCILE_WITH_VPN_ROUTES = false
 
         const val FIRESTACK_MUST_DUP_TUNFD = true
+
+        // See go2ktBounded()'s doc comment for the full mechanism this defends against.
+        // Set below firestack's own onFlowTimeout (5000ms, intra/tcp.go) so our side
+        // always answers first for a call that is genuinely still in progress -- Go's
+        // own 5s branch should only ever fire for a call we have already abandoned.
+        private const val FLOW_CALL_TIMEOUT_MS = 4000L
+        private const val FLOW_DISPATCHER_THREADS = 4
 
         // Sprint 20 Bug 1: Doze-proof watchdog alarm action.
         // coroutine delay() is suspended by Android Doze; this alarm fires even in deep Doze
@@ -4553,6 +4571,49 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         return@runBlocking co.tryDispatch(f)
     }
 
+    // Used specifically for the three Bridge callbacks firestack itself wraps in a hard
+    // timeout on the Go side: flow/inflow/preflow (intra/common.go's core.Grx calls,
+    // intra/tcp.go's onFlowTimeout = 5s). Go does NOT cancel the in-flight JNI call when
+    // its own timeout fires -- it only stops waiting for it. If our dispatcher is backed
+    // up under a burst of new connections, a call can sit long enough that its eventual,
+    // "abandoned" completion crosses back into Go touching a gomobile reference-table
+    // slot that has since been reused by a newer call -- reproduced in production as
+    // `abort(): Unknown reference: N` inside cproxyintra_Bridge_Flow.
+    //
+    // FLOW_CALL_TIMEOUT_MS is set below Go's 5000ms budget on purpose, so our side gives
+    // up and returns fallback well before Go's own timeout could fire on a call that is
+    // still genuinely in progress -- if we always answer first, Go's own 5s branch never
+    // triggers for a live call, only for one we have already decided to give up on.
+    //
+    // Honest limitation, not glossed over: withTimeoutOrNull only stops US from waiting.
+    // co.tryDispatch(f) dispatches the real work onto CoFactory's own vpnScope-bound
+    // dispatcher, which is NOT a structured child of this call -- so the abandoned
+    // Kotlin-side coroutine can keep running after we return fallback, same shape of
+    // problem as the Go-side one, just relocated. The difference is severity: an orphaned
+    // Kotlin coroutine finishing late writes a stale log/state entry at worst; it cannot
+    // SIGABRT the whole process the way the Go-side race does. Given the choice between
+    // "rare stale side effect" and "carrier-wide VPN crash", failing to the former is the
+    // right tradeoff -- but it is a tradeoff, not a complete fix, and is why widening the
+    // dispatcher (reducing how often this path is needed at all) is the primary defense,
+    // with this timeout as the backstop, not the other way around.
+    // `fallback` is a lambda, not a plain value: it must only be constructed on the
+    // (rare) timeout path, not allocated unconditionally on every single flow/inflow/
+    // preflow call -- this runs on a hot path handling every new connection, so paying
+    // an allocation cost on the common, non-timeout branch is wasteful.
+    private fun <T> go2ktBounded(co: CoFactory<T>, timeoutMs: Long, fallback: () -> T, who: String, f: suspend () -> T): T = runBlocking {
+        val started = elapsedRealtime()
+        val result = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+            co.tryDispatch(f)
+        }
+        if (result == null) {
+            val waited = elapsedRealtime() - started
+            Logger.e(LOG_TAG_VPN, "$TAG $who: exceeded ${timeoutMs}ms deadline (waited ${waited}ms) -- returning fail-safe fallback")
+            BridgeCallTelemetry.recordTimeout(who)
+            return@runBlocking fallback()
+        }
+        return@runBlocking result
+    }
+
     private suspend fun ioCtx(s: String, f: suspend () -> Unit) =
         withContext(CoroutineName(s) + Dispatchers.IO) { f() }
 
@@ -5403,7 +5464,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         uid: Int,
         src: Gostr?,
         dst: Gostr?
-    ): PreMark = go2kt(preflowDispatcher) {
+    ): PreMark = go2ktBounded(preflowDispatcher, FLOW_CALL_TIMEOUT_MS, { PreMark() }, "preflow") {
         val srcIpPort = parseIpAndPort(src.tos())
         val dstIpPort = parseIpAndPort(dst.tos())
         Logger.d(LOG_TAG_VPN, "preflow - init: $uid, rcvd: $src & $dst, parsed: $srcIpPort & $dstIpPort")
@@ -5425,7 +5486,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         p.uid = newUid.toString()
         p.isUidSelf = newUid == rethinkUid
         Logger.i(LOG_TAG_VPN, "preflow: returning ${p.uid} for src: $srcIpPort, dst: $dstIpPort, isRethink? ${p.isUidSelf}")
-        return@go2kt p
+        return@go2ktBounded p
     }
 
     override fun flow(
@@ -5437,7 +5498,22 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         d: Gostr?,
         possibleDomains: Gostr?,
         blocklists: Gostr?
-    ): Mark = go2kt(flowDispatcher) {
+    ): Mark = go2ktBounded(
+        flowDispatcher,
+        FLOW_CALL_TIMEOUT_MS,
+        // Fail-closed, not a bare Mark(): an empty/default Mark carries no pidcsv, which
+        // firestack would read as "no proxy decided" rather than "blocked" -- exactly the
+        // ambiguity that must not happen for a firewall. Mirrors the existing ICMP-block
+        // construction pattern elsewhere in this file.
+        {
+            Mark().apply {
+                pidcsv = Backend.Block
+                cid = Utilities.getRandomString(8)
+                uid = _uid.toString()
+            }
+        },
+        "flow"
+    ) {
         logd("flow: $_uid, $src, $dst, $realIps, $d, $blocklists")
         handleVpnLockdownStateAsync()
 
@@ -5470,7 +5546,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
             )
             cm0.isBlocked = true
             cm0.blockedByRule = FirewallRuleset.RULE1.id
-            return@go2kt persistAndConstructFlowResponse(cm0, Backend.Block, cm0.connId, cm0.uid)
+            return@go2ktBounded persistAndConstructFlowResponse(cm0, Backend.Block, cm0.connId, cm0.uid)
         }
 
         // in case of double loopback, all traffic will be part of rinr instead of just rethink's
@@ -5550,7 +5626,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
             logd("flow: dns-over-tls, returning Ipn.Block, $uid, $domains")
             cm.isBlocked = true
             cm.blockedByRule = FirewallRuleset.RULE14.id
-            return@go2kt persistAndConstructFlowResponse(cm, Backend.Block, connId, uid)
+            return@go2ktBounded persistAndConstructFlowResponse(cm, Backend.Block, connId, uid)
         }
 
         // app is considered as spl when it is selected to forward dns proxy, socks5 or http proxy
@@ -5601,7 +5677,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
                     }
                 }
 
-            return@go2kt persistAndConstructFlowResponse(cm, proxy, connId, uid)
+            return@go2ktBounded persistAndConstructFlowResponse(cm, proxy, connId, uid)
         }
 
         if (trapVpnDns) {
@@ -5611,14 +5687,14 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
             }
             // android R+, uid will be there for dns request as well
             logd("flow: dns-request, returning ${Backend.Base}, $uid, $connId, $domains")
-            return@go2kt persistAndConstructFlowResponse(null, Backend.Base, connId, uid)
+            return@go2ktBounded persistAndConstructFlowResponse(null, Backend.Base, connId, uid)
         }
         processFirewallRequest(cm, d.tos(), anyRealIpBlocked, blocklists.tos() ?: "", isSplApp, rinr)
 
         if (cm.isBlocked) {
             // return Ipn.Block, no need to check for other rules
             logd("flow: received rule: block, returning Ipn.Block, $connId, $uid, $domains")
-            return@go2kt persistAndConstructFlowResponse(cm, Backend.Block, connId, uid)
+            return@go2ktBounded persistAndConstructFlowResponse(cm, Backend.Block, connId, uid)
         }
 
         // add to trackedCids, so that the connection can be removed from the list when the
@@ -5628,7 +5704,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
             activeCids.add(key)
         }
 
-        return@go2kt determineProxyDetails(cm, doubleLoopback, rinr)
+        return@go2ktBounded determineProxyDetails(cm, doubleLoopback, rinr)
     }
 
     // SECURITY (VULN-B): centralised ICMP detection so flow() and inflow() agree on
@@ -5638,7 +5714,18 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
     }
 
     override fun inflow(protocol: Int, recvdUid: Int, src: Gostr?, dst: Gostr?): Mark =
-        go2kt(inflowDispatcher) {
+        go2ktBounded(
+            inflowDispatcher,
+            FLOW_CALL_TIMEOUT_MS,
+            {
+                Mark().apply {
+                    pidcsv = Backend.Block
+                    cid = Utilities.getRandomString(8)
+                    uid = FirewallManager.appId(recvdUid, isPrimaryUser()).toString()
+                }
+            },
+            "inflow"
+        ) {
             // SECURITY (VULN-B): block inbound ICMP at the firewall callback when the
             // user has block_icmp set (default true). Same defense-in-depth rationale
             // as the outbound flow() check above.
@@ -5651,7 +5738,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
                 m.pidcsv = Backend.Block
                 m.cid = Utilities.getRandomString(8)
                 m.uid = FirewallManager.appId(recvdUid, isPrimaryUser()).toString()
-                return@go2kt m
+                return@go2ktBounded m
             }
 
             val srcIpPort = parseIpAndPort(src.tos())
@@ -5706,7 +5793,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
             if (cm.isBlocked) {
                 // return Ipn.Block, no need to check for other rules
                 logd("inflow: received rule: block, returning Ipn.Block, $connId, $uid")
-                return@go2kt persistAndConstructFlowResponse(cm, Backend.Block, connId, uid)
+                return@go2ktBounded persistAndConstructFlowResponse(cm, Backend.Block, connId, uid)
             }
 
             // add to trackedCids, so that the connection can be removed from the list when the
@@ -5720,7 +5807,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
 
             // the proxy id (other than block) will be ignored by the go code, so use
             // Backend.Ingress as a placeholder
-            return@go2kt persistAndConstructFlowResponse(cm, Backend.Ingress, connId, uid)
+            return@go2ktBounded persistAndConstructFlowResponse(cm, Backend.Ingress, connId, uid)
         }
 
     // no need of go2kt here as it is called from go and performs db operations with no return value
@@ -6419,6 +6506,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         stats.append("DomainRules:\n${domainRulesStats()}\n")
         stats.append("Proxy:\n${proxyStats()}\n")
         stats.append("WireGuard:\n${wireguardStats()}\n")
+        stats.append("BridgeCallTimeouts (flow/inflow/preflow fail-safe fires):\n${BridgeCallTelemetry.snapshot()}\n")
         stats.append("Memory: \n${MemoryUtils.getMemoryStats(this)}\n")
         return stats.toString()
     }

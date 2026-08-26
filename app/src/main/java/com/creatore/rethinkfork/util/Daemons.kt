@@ -36,7 +36,35 @@ import java.util.concurrent.atomic.AtomicInteger
 object Daemons {
 
     fun make(tag: String) = Executors.newSingleThreadExecutor(Factory(tag)).asCoroutineDispatcher()
-    fun <T> ioDispatcher(tag: String, default: T, s: CoroutineScope) = CoFactory(tag, default, s, make(tag))
+
+    // Bounded parallel variant of make(). Default stays single-threaded --
+    // every existing call site (serializer, netl, consl, diagExecutor, and
+    // most CoFactory dispatchers) keeps its current single-thread ordering
+    // guarantee unchanged unless it explicitly opts into more.
+    //
+    // Why this exists: firestack wraps its calls into Bridge.flow/inflow/
+    // preflow with a hard 5s timeout on the Go side (intra/tcp.go
+    // onFlowTimeout, via core.Grx in intra/common.go) that does NOT cancel
+    // the in-flight JNI call when it fires -- it just stops waiting. If a
+    // single-threaded dispatcher backs up under a burst of new connections
+    // (e.g. right after a tunnel restart, when many apps reconnect at
+    // once), a call queued behind others can sit long enough that its
+    // eventual, "abandoned" completion crosses back into Go touching a
+    // gomobile reference slot that has since been reused by a newer call --
+    // observed in production as `abort(): Unknown reference: N` inside
+    // cproxyintra_Bridge_Flow. Widening these specific dispatchers reduces
+    // how often a burst can queue a call past that 5s budget in the first
+    // place; it is the secondary defense. The primary defense is the
+    // per-call deadline in BraveVPNService's flow/inflow/preflow bodies
+    // themselves (see FLOW_CALL_TIMEOUT_MS there) -- this alone does not
+    // guarantee any single call finishes in time, since queueing delay is
+    // still possible under a threads-sized-too-small-for-load spike.
+    fun makeBounded(tag: String, threads: Int) = Executors.newFixedThreadPool(threads, Factory(tag)).asCoroutineDispatcher()
+
+    fun <T> ioDispatcher(tag: String, default: T, s: CoroutineScope, threads: Int = 1): CoFactory<T> {
+        val d = if (threads > 1) makeBounded(tag, threads) else make(tag)
+        return CoFactory(tag, default, s, d)
+    }
 }
 
 class CoFactory<T>(
