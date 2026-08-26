@@ -220,24 +220,28 @@ class AboutFragment : Fragment(R.layout.fragment_about), View.OnClickListener, K
     }
 
     private fun updateVersionInfo() {
-        try {
-            val version = getVersionName()
-            // take first 7 characters of the version name, as the version has build number
-            // appended to it, which is not required for the user to see.
-            val slicedVersion = version.slice(0..VERSION_SLICE_END_INDEX)
-            b.aboutWhatsNew.text = getString(R.string.about_whats_new, slicedVersion)
+    try {
+        val version = getVersionName()
+        val slicedVersion = version.slice(0..VERSION_SLICE_END_INDEX)
+        b.aboutWhatsNew.text = getString(R.string.about_whats_new, slicedVersion)
 
-            // complete version name along with the source of installation
-            val v = getString(R.string.about_version_install_source, version, getDownloadSource())
+        val v = getString(R.string.about_version_install_source, version, getDownloadSource())
 
-            val build = Intra.build(false)
-            val updatedTs = getLastUpdatedTs()
-            b.aboutAppVersion.text = "$v\n$build\n$updatedTs"
-
-        } catch (e: PackageManager.NameNotFoundException) {
-            Logger.w(LOG_TAG_UI, "err-version-info; pkg name not found: ${e.message}", e)
+        val build = try {
+            Intra.build(false)
+        } catch (e: Throwable) {
+            Logger.w(LOG_TAG_UI, "err-intra-build; falling back: ${e.message}", e)
+            "n/a"
         }
+        val updatedTs = getLastUpdatedTs()
+        b.aboutAppVersion.text = "$v\n$build\n$updatedTs"
+
+    } catch (e: PackageManager.NameNotFoundException) {
+        Logger.w(LOG_TAG_UI, "err-version-info; pkg name not found: ${e.message}", e)
+    } catch (e: Throwable) {
+        Logger.w(LOG_TAG_UI, "err-version-info; unexpected: ${e.message}", e)
     }
+}
 
     fun updateTokenUi(token: String) {
         if (isFdroidFlavour() || !persistentState.firebaseErrorReportingEnabled) {
