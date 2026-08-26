@@ -37,6 +37,11 @@ import java.io.File
  * Nothing here throws -- a failure to record a crash must never become a second
  * crash inside the crash handler.
  */
+// Broad `catch` is the whole point of this class, not an oversight: every method
+// here can run while the process is already dying, and a narrow catch that let an
+// unanticipated Throwable escape would turn "failed to record a crash" into a
+// second crash inside the crash handler. Suppressed deliberately, not narrowed.
+@Suppress("TooGenericExceptionCaught")
 object CrashReportStore {
 
     private const val CRASH_MARKER_FILE = "last_crash.txt"
@@ -74,7 +79,10 @@ object CrashReportStore {
         return try {
             val f = markerFile(ctx)
             if (!f.exists() || f.length() == 0L) null else f.readText()
-        } catch (t: Throwable) {
+        } catch (_: Throwable) {
+            // An unreadable/corrupt marker is indistinguishable from "no crash
+            // recorded" here -- either way there is nothing to offer the user, so
+            // there is nothing worth reporting about the failure itself.
             null
         }
     }

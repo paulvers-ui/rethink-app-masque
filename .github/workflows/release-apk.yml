@@ -219,14 +219,12 @@ jobs:
             --no-configuration-cache --info --warning-mode all
         shell: bash
 
-      # splits.abi + universalApk true in app/build.gradle means this ONE
-      # invocation produces THREE apks (universal + per-ABI). Every apk
-      # found is inspected directly with aapt and classified by its real
-      # native-code line rather than trusting a filename pattern -- AGP's
-      # split-apk naming convention has changed across versions
-      # historically, and the old approach of `find ... | head -1` could
-      # silently publish an arm64-only build as if it were universal.
-      - name: 🔎 Discover, verify, and classify the built APKs
+      # app/build.gradle disables splits.abi and pins abiFilters to 'arm64-v8a',
+      # so this produces exactly ONE apk. It is still inspected with aapt rather
+      # than trusted by filename: the checks below assert applicationId and that
+      # the native code really is arm64-only, so an abi-config regression fails
+      # the release instead of silently shipping an APK that cannot run WARP.
+      - name: 🔎 Discover and verify the built APK
         id: apks
         run: |
           set -eu
@@ -238,8 +236,8 @@ jobs:
           echo "Found ${#found[@]} APK(s):"
           printf '  %s\n' "${found[@]}"
 
-          declare universal="" arm64="" armv7=""
           ver="${{ inputs.tag || needs.auto-tag.outputs.new_tag || github.ref_name }}"
+          apk=""
 
           for f in "${found[@]}"; do
             if ! "$APKSIGNER" verify "$f" > /dev/null 2>&1; then
@@ -253,41 +251,35 @@ jobs:
               exit 1
             fi
 
+            # The project is 64-bit only (splits.abi disabled, abiFilters
+            # 'arm64-v8a'), so exactly one APK is expected and it must be arm64.
+            # Anything 32-bit reaching this point means the abi config regressed:
+            # an armeabi-v7a APK cannot work here at all, since libusque.so has no
+            # 32-bit build -- so fail loudly rather than publish a broken artifact.
             natives=$("$AAPT" dump badging "$f" | grep "native-code" || echo "native-code: (none)")
             case "$natives" in
-              *arm64-v8a*armeabi-v7a*|*armeabi-v7a*arm64-v8a*)
-                universal="$f" ;;
+              *armeabi-v7a*|*x86*)
+                echo "::error::$f contains 32-bit/x86 native code ($natives) -- this project is arm64-only; check splits.abi and abiFilters in app/build.gradle"
+                exit 1 ;;
               *arm64-v8a*)
-                arm64="$f" ;;
-              *armeabi-v7a*)
-                armv7="$f" ;;
+                apk="$f" ;;
               *)
-                echo "::warning::$f has unexpected native-code line: $natives (ignored)" ;;
+                echo "::error::$f has no arm64-v8a native code ($natives) -- refusing to publish an APK with no native libraries"
+                exit 1 ;;
             esac
           done
 
-          test -n "$universal" || { echo "::error::No universal APK found among the outputs -- splits.abi may have changed"; exit 1; }
+          test -n "$apk" || { echo "::error::No usable arm64 APK found among the outputs"; exit 1; }
 
-          cp "$universal" "RethinkDnsFork-${ver}.apk"
+          cp "$apk" "RethinkDnsFork-${ver}.apk"
           sha256sum "RethinkDnsFork-${ver}.apk" > "RethinkDnsFork-${ver}.apk.sha256"
           files="RethinkDnsFork-${ver}.apk"
           files="$files
           RethinkDnsFork-${ver}.apk.sha256"
 
-          if [ -n "$arm64" ]; then
-            cp "$arm64" "RethinkDnsFork-${ver}-arm64-v8a.apk"
-            files="$files
-          RethinkDnsFork-${ver}-arm64-v8a.apk"
-          fi
-          if [ -n "$armv7" ]; then
-            cp "$armv7" "RethinkDnsFork-${ver}-armeabi-v7a.apk"
-            files="$files
-          RethinkDnsFork-${ver}-armeabi-v7a.apk"
-          fi
-
           versionName=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionName='\K[^']+")
           versionCode=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionCode='\K[^']+")
-          echo "Universal APK: versionName=$versionName versionCode=$versionCode"
+          echo "APK (arm64-v8a): versionName=$versionName versionCode=$versionCode"
 
           {
             echo "files<<APKEOF"
@@ -296,8 +288,6 @@ jobs:
             echo "version=${ver}"
             echo "version_name=${versionName}"
             echo "version_code=${versionCode}"
-            echo "has_arm64=$([ -n "$arm64" ] && echo true || echo false)"
-            echo "has_armv7=$([ -n "$armv7" ] && echo true || echo false)"
           } >> "$GITHUB_OUTPUT"
         shell: bash
 
@@ -337,10 +327,10 @@ jobs:
             Signed APK, built and released automatically from this commit.
             versionName `${{ steps.apks.outputs.version_name }}`, versionCode `${{ steps.apks.outputs.version_code }}`.
 
-            **Which file to grab:**
-            - `RethinkDnsFork-*.apk` -- universal, works on any supported device. Use this one if unsure.
-            ${{ steps.apks.outputs.has_arm64 == 'true' && '- `RethinkDnsFork-*-arm64-v8a.apk` -- smaller download, 64-bit ARM only.' || '' }}
-            ${{ steps.apks.outputs.has_armv7 == 'true' && '- `RethinkDnsFork-*-armeabi-v7a.apk` -- smaller download, 32-bit ARM only.' || '' }}
+            **Requires a 64-bit ARM (arm64-v8a) device.** There is a single APK --
+            no per-ABI choice to make. 32-bit (armeabi-v7a) builds were dropped
+            because `libusque.so` has no 32-bit build, so those APKs shipped
+            without a usque binary and WARP could never work on them.
 
             **Install with [Obtainium](https://github.com/ImranR98/Obtainium):**
             add this repository (`paulvers-ui/rethink-app-masque`) as a "GitHub" source --
@@ -349,7 +339,7 @@ jobs:
             firestack built from `paulvers-ui/firestack@${{ env.FIRESTACK_COMMIT }}`
             (branch `n2`). `fdroidFull` variant -- no Firebase, no Google Play Services.
 
-            SHA256 of the universal APK is in the attached `.sha256` file.
+            SHA256 of the APK is in the attached `.sha256` file.
 
             ---
 
