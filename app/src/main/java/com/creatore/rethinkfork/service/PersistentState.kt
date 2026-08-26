@@ -96,17 +96,6 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     // launches the app for the very first time (after install or post clear-data)
     var firstTimeLaunch by booleanPref("is_first_time_launch").withDefault<Boolean>(true)
 
-    // Whether the battery-optimization-exemption prompt has already been shown once.
-    // Not tied to whether the user granted it -- shown once, either way, then never
-    // nagged again. See HomeScreenActivity.maybeRequestBatteryExemption() for why this
-    // matters specifically for a VPN service: without this exemption, some OEMs
-    // (Samsung's aggressive background-process/battery management chief among them)
-    // can prevent this app's own existing crash-recovery mechanisms (START_STICKY,
-    // the Doze-proof AlarmManager watchdog in BraveVPNService) from actually firing,
-    // silently turning "the tunnel restarts itself within seconds of dying" into
-    // "the tunnel stays dead until the user manually reopens the app".
-    var askedBatteryOptimizationExemption by booleanPref("asked_battery_opt_exemption").withDefault<Boolean>(false)
-
     // One among AppConfig.BraveMode enum; 2's default, which is BraveMode.DNS_FIREWAL
     var braveMode by intPref("brave_mode").withDefault<Int>(AppConfig.BraveMode.DNS_FIREWALL.mode)
 

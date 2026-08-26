@@ -1996,10 +1996,4 @@
     <string name="crash_report_dismiss" translatable="true">Not now</string>
     <string name="crash_report_share_subject" translatable="true">[Rethink Dns Fork]: Crash report</string>
     <string name="crash_report_share_intro" translatable="true">Crash report from Rethink Dns Fork. Details below.</string>
-
-    <!-- Battery optimization exemption prompt, shown once on first real launch -->
-    <string name="battery_exemption_title" translatable="true">Keep the VPN reliable</string>
-    <string name="battery_exemption_desc" translatable="true">Some phones (Samsung especially) can stop this app from restarting itself automatically if it ever needs to. Exempting it from battery optimization lets the VPN recover on its own instead of needing you to reopen the app.</string>
-    <string name="battery_exemption_positive" translatable="true">Allow</string>
-    <string name="battery_exemption_negative" translatable="true">Not now</string>
 </resources>
