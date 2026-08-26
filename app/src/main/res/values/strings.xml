@@ -1988,4 +1988,12 @@
     <string name="network_alert_sound_title" translatable="true">Alert sound</string>
     <string name="network_alert_sound_desc" translatable="true">Tap to choose the alert sound</string>
     <string name="network_alert_sound_picker_unavailable" translatable="true">No sound picker available on this device</string>
+
+    <!-- Crash report prompt, shown on the launch AFTER an uncaught crash -->
+    <string name="crash_report_title" translatable="true">The app crashed last time</string>
+    <string name="crash_report_desc" translatable="true">Sorry about that. Sending the report helps get it fixed — it contains the error details and your device model, not your browsing history or DNS queries.\n\n%1$s</string>
+    <string name="crash_report_send" translatable="true">Send report</string>
+    <string name="crash_report_dismiss" translatable="true">Not now</string>
+    <string name="crash_report_share_subject" translatable="true">[Rethink Dns Fork]: Crash report</string>
+    <string name="crash_report_share_intro" translatable="true">Crash report from Rethink Dns Fork. Details below.</string>
 </resources>

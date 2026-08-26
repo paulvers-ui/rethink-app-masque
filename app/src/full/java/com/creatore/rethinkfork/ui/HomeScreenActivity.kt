@@ -191,6 +191,9 @@ class HomeScreenActivity : AppCompatActivity(R.layout.activity_home_screen) {
 
     override fun onResume() {
         super.onResume()
+        // If the previous run died from an uncaught exception, offer to send the
+        // report now. Cheap no-op when the last run exited cleanly.
+        CrashReportPrompt.maybeShow(this)
         // if app is coming from background, don't reset the activity stack
         if (appInBackground) {
             appInBackground = false
