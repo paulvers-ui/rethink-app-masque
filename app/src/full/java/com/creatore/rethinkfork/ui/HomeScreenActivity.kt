@@ -194,10 +194,58 @@ class HomeScreenActivity : AppCompatActivity(R.layout.activity_home_screen) {
         // If the previous run died from an uncaught exception, offer to send the
         // report now. Cheap no-op when the last run exited cleanly.
         CrashReportPrompt.maybeShow(this)
+        maybeRequestBatteryExemption()
         // if app is coming from background, don't reset the activity stack
         if (appInBackground) {
             appInBackground = false
             Logger.d(LOG_TAG_UI, "app restored from background, maintaining activity stack")
+        }
+    }
+
+    // Asked once, ever, regardless of the user's answer -- see PersistentState
+    // .askedBatteryOptimizationExemption's doc comment for why this matters
+    // specifically for a VPN service. Not forced: this opens the OS's own consent
+    // dialog, which the user can decline exactly as they could without this prompt
+    // ever existing -- all this does is make sure they are actually asked once,
+    // since Android does not surface this on its own for most apps.
+    // Four independent guard clauses (already-asked, onboarding-not-finished,
+    // service-unavailable, already-exempted) -- each ends the function on its own.
+    // Forcing this into a single-exit shape would nest all four behind one another,
+    // which reads worse, not better, than the early returns it would replace.
+    @Suppress("ReturnCount", "TooGenericExceptionCaught")
+    private fun maybeRequestBatteryExemption() {
+        try {
+            if (persistentState.askedBatteryOptimizationExemption) return
+            if (persistentState.firstTimeLaunch) return // let onboarding finish first
+
+            val pm = getSystemService(POWER_SERVICE) as? android.os.PowerManager ?: return
+            if (pm.isIgnoringBatteryOptimizations(packageName)) {
+                // Already exempted some other way (OEM settings, adb, a prior
+                // install) -- nothing to ask, but still record it as handled so
+                // this check is not repeated on every resume.
+                persistentState.askedBatteryOptimizationExemption = true
+                return
+            }
+
+            persistentState.askedBatteryOptimizationExemption = true
+            MaterialAlertDialogBuilder(this, R.style.App_Dialog_NoDim)
+                .setTitle(R.string.battery_exemption_title)
+                .setMessage(R.string.battery_exemption_desc)
+                .setCancelable(true)
+                .setPositiveButton(R.string.battery_exemption_positive) { d, _ ->
+                    d.dismiss()
+                    try {
+                        val i = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                        i.data = Uri.parse("package:$packageName")
+                        startActivity(i)
+                    } catch (e: Exception) {
+                        Logger.w(LOG_TAG_UI, "battery exemption intent failed: ${e.message}")
+                    }
+                }
+                .setNegativeButton(R.string.battery_exemption_negative) { d, _ -> d.dismiss() }
+                .show()
+        } catch (e: Exception) {
+            Logger.w(LOG_TAG_UI, "maybeRequestBatteryExemption: ${e.message}")
         }
     }
 
