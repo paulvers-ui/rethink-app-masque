@@ -67,3 +67,64 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# ============================================================================
+# gomobile / firestack JNI boundary -- DO NOT REMOVE
+# ============================================================================
+# Root cause this fixes: release APKs crashed with
+#   F go/Seq  : Unknown reference: 42
+#   F libc    : Fatal signal 6 (SIGABRT)
+#   backtrace: abort() -> go_seq_from_refnum -> cproxyintra_Bridge_Flow
+# while debug APKs built from the identical commit never crashed. That
+# debug-vs-release split is the whole diagnosis: it rules out application
+# logic (identical in both) and points at the build pipeline.
+#
+# The only substantive difference between those two builds is R8.
+# `minifyEnabled true` applies to the release buildType only, and
+# gradle.properties sets `android.enableR8.fullMode=true`. R8 full mode
+# shrinks and optimizes based on statically-reachable usage -- and it CANNOT
+# see usage that originates in native code. Every call from firestack's Go
+# runtime into Kotlin (Bridge.flow/inflow/preflow, Listener, Controller,
+# Console, plus the DNSOpts/Mark/PreMark value objects those callbacks
+# construct and return) crosses gomobile's generated JNI glue, which resolves
+# classes, methods and fields dynamically at runtime. To R8's static analysis
+# they look unreferenced, so it is free to strip or optimize them -- leaving
+# Go's seq reference table pointing at something that no longer exists on the
+# Java side. That is precisely what "Unknown reference: N" reports
+# immediately before gomobile calls abort().
+#
+# Note: -dontobfuscate (above) prevents RENAMING but not SHRINKING or
+# OPTIMIZATION, which is why having obfuscation off did not already protect
+# this boundary.
+#
+# Keep the whole firestack surface (both directions of the boundary):
+-keep class com.celzero.firestack.** { *; }
+-keep interface com.celzero.firestack.** { *; }
+-dontwarn com.celzero.firestack.**
+
+# Keep every gomobile Seq internal. gomobile's reference table, proxy classes
+# and native-method declarations live here and are reached only from native
+# code.
+-keep class go.** { *; }
+-keep interface go.** { *; }
+-dontwarn go.**
+
+# Keep our own implementations of those firestack interfaces. BraveVPNService
+# implements Bridge; its callback methods are invoked exclusively from Go, so
+# nothing in Kotlin statically "calls" them and R8 would otherwise be free to
+# remove or alter them.
+-keep class com.creatore.rethinkfork.service.BraveVPNService { *; }
+-keep class com.creatore.rethinkfork.net.go.GoVpnAdapter { *; }
+
+# Any class implementing a firestack interface, wherever it lives.
+-keep class * implements com.celzero.firestack.backend.Bridge { *; }
+-keep class * implements com.celzero.firestack.backend.Listener { *; }
+-keep class * implements com.celzero.firestack.backend.Controller { *; }
+-keep class * implements com.celzero.firestack.backend.Console { *; }
+
+# Native-method declarations and their declaring classes must survive intact:
+# the JNI symbol name is derived from the class name + method name, so
+# altering either breaks the native linkage silently at runtime.
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
