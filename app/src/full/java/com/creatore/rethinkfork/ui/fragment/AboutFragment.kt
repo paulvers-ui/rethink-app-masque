@@ -218,7 +218,7 @@ class AboutFragment : Fragment(R.layout.fragment_about), View.OnClickListener, K
             }
         }
     }
-
+    @Suppress("TooGenericExceptionCaught")
     private fun updateVersionInfo() {
     try {
         val version = getVersionName()
