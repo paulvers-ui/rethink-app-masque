@@ -74,8 +74,6 @@ object CrashReportPrompt {
             val summary = jvmSummary ?: nativeSummary ?: return
             val isNative = jvmSummary == null
 
-            shownThisProcess = true
-
             MaterialAlertDialogBuilder(activity)
                 .setTitle(R.string.crash_report_title)
                 .setMessage(activity.getString(R.string.crash_report_desc, firstLines(summary)))
@@ -95,6 +93,11 @@ object CrashReportPrompt {
                     d.dismiss()
                 }
                 .show()
+
+            // A native exit is only consumed after the report prompt has been
+            // created successfully. If show() throws, the next launch can retry.
+            shownThisProcess = true
+            if (isNative) CrashReportStore.markNativeCrashSeen(activity)
         } catch (e: Exception) {
             Logger.w(LOG_TAG_UI, "$TAG could not show crash prompt: ${e.message}")
         }

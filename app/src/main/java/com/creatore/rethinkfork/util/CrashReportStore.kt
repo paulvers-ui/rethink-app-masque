@@ -49,7 +49,7 @@ object CrashReportStore {
 
     private const val CRASH_MARKER_FILE = "last_crash.txt"
     // Persists the timestamp (ApplicationExitInfo.getTimestamp()) of the last
-    // native-crash exit we have already surfaced to the user, so
+    // native-crash exit whose report prompt was successfully shown, so
     // getHistoricalProcessExitReasons() -- which returns HISTORICAL data, not
     // just the most recent process death -- does not cause the same native
     // crash to be reported again on every subsequent launch.
@@ -141,7 +141,8 @@ object CrashReportStore {
                 ?: return null
             val exits = am.getHistoricalProcessExitReasons(ctx.packageName, 0, MAX_EXIT_REASONS_TO_INSPECT)
             val nativeCrash = exits.firstOrNull {
-                it.reason == ApplicationExitInfo.REASON_CRASH_NATIVE
+                it.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
+                    it.reason == ApplicationExitInfo.REASON_SIGNALED
             } ?: return null
 
             val seenFile = File(ctx.filesDir, NATIVE_CRASH_SEEN_FILE)
@@ -152,12 +153,10 @@ object CrashReportStore {
             }
             if (nativeCrash.timestamp <= lastSeen) return null // already reported
 
-            try {
-                seenFile.writeText(nativeCrash.timestamp.toString())
-            } catch (_: Throwable) {
-                // If this fails to persist, worst case the same native crash is
-                // offered again next launch -- harmless, just a repeat prompt.
-            }
+            // Do not mark this exit as seen yet. The caller marks it only after
+            // the report dialog successfully exists; otherwise a transient window
+            // or activity failure would permanently hide the only report the user
+            // can provide for this native crash.
 
             // Best effort: the raw trace is a tombstone protobuf on API 31+ (see
             // ApplicationExitInfo.getTraceInputStream() docs) and may be absent
@@ -180,6 +179,32 @@ object CrashReportStore {
                 "crash inside the native VPN engine (libgojni.so), not app code."
         } catch (_: Throwable) {
             null
+        }
+    }
+
+    /**
+     * Marks the newest native-like process exit as surfaced to the user.
+     * Called only after CrashReportPrompt.show() succeeds. This keeps a
+     * temporary UI failure from consuming the only native crash report.
+     */
+    fun markNativeCrashSeen(ctx: Context): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+            val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                ?: return false
+            val nativeCrash = am.getHistoricalProcessExitReasons(
+                ctx.packageName,
+                0,
+                MAX_EXIT_REASONS_TO_INSPECT
+            ).firstOrNull {
+                it.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
+                    it.reason == ApplicationExitInfo.REASON_SIGNALED
+            } ?: return false
+            File(ctx.filesDir, NATIVE_CRASH_SEEN_FILE)
+                .writeText(nativeCrash.timestamp.toString())
+            true
+        } catch (_: Throwable) {
+            false
         }
     }
 
