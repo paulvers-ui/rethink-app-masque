@@ -228,19 +228,20 @@ class AboutFragment : Fragment(R.layout.fragment_about), View.OnClickListener, K
         val v = getString(R.string.about_version_install_source, version, getDownloadSource())
 
         val build = try {
-            Intra.build(false)
-        } catch (e: Throwable) {
-            Logger.w(LOG_TAG_UI, "err-intra-build; falling back: ${e.message}", e)
-            "n/a"
-        }
+    Intra.build(false)
+} catch (e: Exception) {
+    Logger.w(LOG_TAG_UI, "err-intra-build; falling back: ${e.message}", e)
+    "n/a"
+}
+        
         val updatedTs = getLastUpdatedTs()
         b.aboutAppVersion.text = "$v\n$build\n$updatedTs"
 
     } catch (e: PackageManager.NameNotFoundException) {
         Logger.w(LOG_TAG_UI, "err-version-info; pkg name not found: ${e.message}", e)
-    } catch (e: Throwable) {
-        Logger.w(LOG_TAG_UI, "err-version-info; unexpected: ${e.message}", e)
-    }
+    } catch (e: Exception) {
+    Logger.w(LOG_TAG_UI, "err-version-info; unexpected: ${e.message}", e)
+}
 }
 
     fun updateTokenUi(token: String) {
