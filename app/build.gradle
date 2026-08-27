@@ -132,8 +132,50 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled true
-            shrinkResources true
+            // MITIGATION -- R8 disabled for release builds.
+            //
+            // Established across three separate release builds (v1.6.1, v1.6.2,
+            // v1.6.3) versus debug builds compiled from the SAME commits: release
+            // crashes reliably with
+            //     F go/Seq : Unknown reference: 42
+            //     F libc   : Fatal signal 6 (SIGABRT)
+            //     abort() -> go_seq_from_refnum -> cproxyintra_Bridge_Flow
+            // while debug never reproduces it even once. Identical Kotlin compiles
+            // into both, so this is a build-pipeline difference, not app logic.
+            //
+            // The two things that differ in debug are debuggable=true and
+            // minifyEnabled=false. Two targeted fixes have already been merged
+            // against this crash and neither stopped it:
+            //   - PR #37 added -keep rules for the whole gomobile/firestack JNI
+            //     surface. Verified afterwards by unzipping the shipped v1.6.2 APK
+            //     and diffing classes*.dex against the debug APK: 112 firestack
+            //     classes in BOTH, zero missing from release, all go.Seq internals
+            //     and all Bridge callbacks present. R8 was not stripping anything.
+            //   - PR #38 pinned defaultDns, a genuinely unowned Go-backed object
+            //     handed across the boundary in GoVpnAdapter.connect(). Real bug,
+            //     real fix, still crashed in v1.6.3 (which was confirmed to contain
+            //     it) -- so it was not the only such reference.
+            //
+            // Note this used proguard-android-optimize.txt, the OPTIMIZING default
+            // config: beyond shrinking it inlines methods and narrows local live
+            // ranges, which is exactly the class of transformation that lets ART
+            // collect a Java object earlier than its last apparent use. gomobile's
+            // go.Seq$GoRefQueue decrements the Go-side refnum the moment such an
+            // object becomes unreachable -- after which any further use from Go
+            // hits an unknown refnum and calls abort(). That is consistent with
+            // every symptom seen, including the refnum being the same low number
+            // each time (gomobile reuses freed slots).
+            //
+            // Pinning each leaked reference one at a time has now cost several
+            // release cycles on a production ISP deployment. Disabling R8 removes
+            // the entire class of failure at once, at the cost of a larger APK and
+            // no dead-code stripping -- an acceptable trade for a VPN that must not
+            // crash. The pin from PR #38 and the keep rules from PR #37 both stay
+            // in place, so this can be re-enabled later behind a real
+            // reproduction, ideally after auditing every Go-backed object handed
+            // across the boundary for a Java-side owner.
+            minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             ndk {
                 debugSymbolLevel 'SYMBOL_TABLE'
