@@ -112,6 +112,33 @@ class GoVpnAdapter : KoinComponent {
     private var context: Context
     private var externalScope: CoroutineScope
 
+    // GC PIN -- do not remove, and do not "optimize" into a local.
+    //
+    // Every Java/Kotlin object handed across the gomobile JNI boundary is tracked
+    // on the Go side by a refnum in go.Seq's reference map. The Java side of that
+    // pairing is managed by go.Seq$GoRefQueue, which decrements the Go-side
+    // reference as soon as the Java object becomes unreachable and is collected.
+    // If nothing on the Java side keeps such an object alive, ART is free to
+    // collect it at any point after its last Java-side use -- even while Go is
+    // still holding, and about to dereference, its refnum. Go then fails to
+    // resolve that refnum and calls abort():
+    //
+    //   F go/Seq  : Unknown reference: 42
+    //   F libc    : Fatal signal 6 (SIGABRT)
+    //   backtrace: abort() -> go_seq_from_refnum -> cproxyintra_Bridge_Flow
+    //
+    // `tunnel` above is already field-held so it survives; `defaultDns` was not.
+    // It was created in connect() as a LOCAL, passed to Intra.connect(), and then
+    // never referenced from Kotlin again -- leaving Go holding a refnum to an
+    // object with no Java-side owner.
+    //
+    // This is also precisely why debug builds never reproduced the crash while
+    // release builds crashed reliably from the identical commit: debuggable=true
+    // keeps locals alive across their whole scope (so a debugger can inspect
+    // them) and suppresses the aggressive collection that release builds allow.
+    // The bug was always present; only release builds could observe it.
+    private var pinnedDefaultDns: DefaultDNS? = null
+
     constructor(
         context: Context,
         externalScope: CoroutineScope,
@@ -123,6 +150,9 @@ class GoVpnAdapter : KoinComponent {
         this.context = context
         this.externalScope = externalScope
         val defaultDns = newDefaultTransport(appConfig.getDefaultDns())
+        // Pin it for the lifetime of this adapter -- see pinnedDefaultDns above.
+        // Without this, Go holds a refnum to an object Java no longer owns.
+        pinnedDefaultDns = defaultDns
         val prev = Settings.dupTunFd(FIRESTACK_MUST_DUP_TUNFD)
         Logger.i(LOG_TAG_VPN, "$TAG connect tunnel with new params")
         tunnel =
@@ -1494,6 +1524,11 @@ class GoVpnAdapter : KoinComponent {
         } catch (t: Throwable) {
             Logger.crash(LOG_TAG_VPN, "$TAG AUDIT (VULN-A): unexpected throwable in closeTun: ${t.message}", t as? Exception)
         }
+        // Release the GC pin only AFTER the tunnel is disconnected -- Go must not
+        // hold a live refnum to it past this point. Dropping it any earlier would
+        // reintroduce exactly the premature-collection window this pin exists to
+        // close. See pinnedDefaultDns's declaration for the full rationale.
+        pinnedDefaultDns = null
         // intentionally do NOT reset closeTunInFlight: this adapter instance is
         // single-shot; BraveVPNService.stopVpnAdapter() drops the reference.
     }
