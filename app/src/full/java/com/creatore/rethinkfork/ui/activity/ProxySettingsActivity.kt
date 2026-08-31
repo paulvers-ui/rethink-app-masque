@@ -416,11 +416,25 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
     // ===== WARP METHODS =====
 
     private fun showWarpRegistrationDialog() {
+        // Warn on re-registration: this discards the current key and requests a
+        // new one from Cloudflare. Harmless when unregistered, destructive when
+        // already registered -- and now that the button stays visible in both
+        // states, the destructive case is reachable by a stray tap.
+        val alreadyRegistered = UsqueManager.isRegistered(this)
         MaterialAlertDialogBuilder(this, R.style.App_Dialog_NoDim)
-            .setTitle(R.string.warp_register_button)
-            .setMessage("Register device with Cloudflare WARP?")
-            .setPositiveButton("Register") { dialog, _ -> dialog.dismiss(); registerWarp() }
-            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
+            .setTitle(
+                if (alreadyRegistered) R.string.warp_reregister_button
+                else R.string.warp_register_button
+            )
+            .setMessage(
+                if (alreadyRegistered) getString(R.string.warp_reregister_confirm)
+                else getString(R.string.warp_register_confirm)
+            )
+            .setPositiveButton(
+                if (alreadyRegistered) getString(R.string.warp_reregister_positive)
+                else getString(R.string.warp_register_positive)
+            ) { dialog, _ -> dialog.dismiss(); registerWarp() }
+            .setNegativeButton(R.string.lbl_cancel) { dialog, _ -> dialog.dismiss() }
             .setCancelable(true)
             .create()
             .show()
@@ -470,9 +484,22 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
             else         -> getString(R.string.warp_status_unregistered)
         }
 
-        // Register button: only shown when not yet registered
-        b.settingsActivityWarpRegisterBtn.visibility =
-            if (isRegistered) View.GONE else View.VISIBLE
+        // Register button: ALWAYS visible, deliberately.
+        //
+        // It used to be hidden once registered, which left no way to obtain a
+        // fresh WARP key from the UI -- the only route was clearing app data or
+        // hand-editing config.json. Keeping it visible makes re-registration a
+        // normal, discoverable action (useful when a key stops working, gets
+        // rate-limited, or needs rotating).
+        //
+        // The label changes once registered so the button does not imply the
+        // device is unregistered, and showWarpRegistrationDialog() warns that
+        // re-registering replaces the existing key -- since a stray tap here is
+        // now possible in a state where it previously could not happen.
+        b.settingsActivityWarpRegisterBtn.visibility = View.VISIBLE
+        b.settingsActivityWarpRegisterBtn.text =
+            if (isRegistered) getString(R.string.warp_reregister_button)
+            else getString(R.string.warp_register_button)
 
         // config.json editor row: only meaningful once registered (a config
         // file exists on disk). Populate the field the first time the row

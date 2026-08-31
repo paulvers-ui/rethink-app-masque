@@ -1996,4 +1996,12 @@
     <string name="crash_report_dismiss" translatable="true">Not now</string>
     <string name="crash_report_share_subject" translatable="true">[Rethink Dns Fork]: Crash report</string>
     <string name="crash_report_share_intro" translatable="true">Crash report from Rethink Dns Fork. Details below.</string>
+
+    <!-- WARP re-registration. The register button stays visible after the device
+         is registered so a key can be rotated without clearing app data. -->
+    <string name="warp_reregister_button">Re-register with WARP</string>
+    <string name="warp_register_confirm">Register this device with Cloudflare WARP?</string>
+    <string name="warp_register_positive">Register</string>
+    <string name="warp_reregister_confirm">This device is already registered. Registering again requests a brand new key from Cloudflare and discards the current one. Your existing config.json will be replaced.\n\nContinue?</string>
+    <string name="warp_reregister_positive">Re-register</string>
 </resources>

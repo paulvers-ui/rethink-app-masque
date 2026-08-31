@@ -451,7 +451,11 @@
               </LinearLayout>
           </LinearLayout>
 
-          <!-- Register button (centered, visible until registered) -->
+          <!-- Register button (centered). Always visible: the label and the
+               confirmation dialog switch to a re-register variant once the
+               device is registered, so a WARP key can be rotated from the UI
+               instead of requiring app-data clearing. Visibility and text are
+               set in ProxySettingsActivity.updateWarpUi(). -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/settings_activity_warp_register_btn"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
