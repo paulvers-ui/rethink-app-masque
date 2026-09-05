@@ -271,14 +271,14 @@ jobs:
 
           test -n "$apk" || { echo "::error::No usable arm64 APK found among the outputs"; exit 1; }
 
-          cp "$apk" "RethinkDnsFork-${ver}.apk"
-          sha256sum "RethinkDnsFork-${ver}.apk" > "RethinkDnsFork-${ver}.apk.sha256"
-          files="RethinkDnsFork-${ver}.apk"
+          cp "$apk" "AuroraVPN-${ver}.apk"
+          sha256sum "AuroraVPN-${ver}.apk" > "AuroraVPN-${ver}.apk.sha256"
+          files="AuroraVPN-${ver}.apk"
           files="$files
-          RethinkDnsFork-${ver}.apk.sha256"
+          AuroraVPN-${ver}.apk.sha256"
 
-          versionName=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionName='\K[^']+")
-          versionCode=$("$AAPT" dump badging "RethinkDnsFork-${ver}.apk" | grep -oP "versionCode='\K[^']+")
+          versionName=$("$AAPT" dump badging "AuroraVPN-${ver}.apk" | grep -oP "versionName='\K[^']+")
+          versionCode=$("$AAPT" dump badging "AuroraVPN-${ver}.apk" | grep -oP "versionCode='\K[^']+")
           echo "APK (arm64-v8a): versionName=$versionName versionCode=$versionCode"
 
           {
@@ -320,7 +320,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.apks.outputs.version }}
-          name: Rethink Dns Fork ${{ steps.apks.outputs.version }}
+          name: AuroraVPN ${{ steps.apks.outputs.version }}
           prerelease: ${{ contains(steps.apks.outputs.version, '-alpha') || contains(steps.apks.outputs.version, '-beta') || contains(steps.apks.outputs.version, '-rc') }}
           generate_release_notes: true
           body: |
