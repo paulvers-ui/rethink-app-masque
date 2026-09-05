@@ -1,1 +1,1 @@
-Rethink ：DNS + 防火墙 + VPN
+AuroraVPN

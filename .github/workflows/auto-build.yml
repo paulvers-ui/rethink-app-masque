@@ -151,7 +151,7 @@ jobs:
           test -n "$src" || src=$(find app/build/outputs/apk/fdroidFull/debug -name "*.apk" | head -1)
           test -n "$src" || { echo "::error::No debug APK was produced"; exit 1; }
           ver="${{ steps.ver.outputs.tag }}"
-          out="RethinkDnsFork-${ver}-debug.apk"
+          out="AuroraVPN-${ver}-debug.apk"
           cp "$src" "$out"
           sha256sum "$out" > "${out}.sha256"
           echo "apk_path=${out}" >> "$GITHUB_OUTPUT"

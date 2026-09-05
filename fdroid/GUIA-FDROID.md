@@ -158,11 +158,11 @@ take the most effort.
 
 ```bash
 git add metadata/com.arcadesignpro.auroravpn.yml srclibs/usque.yml srclibs/firestack.yml
-git commit -m "New app: Rethink Dns Fork"
+git commit -m "New app: AuroraVPN"
 git push origin com.arcadesignpro.auroravpn
 ```
 
-MR against `fdroiddata`, titled `New app: Rethink Dns Fork`. Check that the
+MR against `fdroiddata`, titled `New app: AuroraVPN`. Check that the
 pipelines pass and that the build one **actually produces an APK**: if it
 passes but doesn't produce one, you probably left the build step disabled.
 

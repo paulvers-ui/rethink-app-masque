@@ -1,5 +1,5 @@
 <div align="center">
-  <img src=".github/assets/logo.png" alt="Rethink Dns Fork" width="120">
+  <img src=".github/assets/logo.png" alt="AuroraVPN" width="120">
 
   # Rethink Dns Firewall Free Vpn Fork
 
@@ -37,7 +37,7 @@ Same as the original project — see [LICENSE](LICENSE).
 
 <div align="center">
 
-# Rethink Dns Fork (简体中文)
+# AuroraVPN (简体中文)
 
 面向 Android 的加密 DNS 客户端、防火墙及 WireGuard/WARP 代理。
 

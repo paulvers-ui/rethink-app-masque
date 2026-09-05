@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">Rethink Dns Fork</string>
+    <string name="app_name" translatable="false">AuroraVPN</string>
     <string name="app_name_small_case" translatable="false">rethink fork</string>
     <string name="title_about" translatable="true">About</string>
     <string name="title_settings" translatable="true">Settings</string>
@@ -1994,8 +1994,8 @@
     <string name="crash_report_desc" translatable="true">Sorry about that. Sending the report helps get it fixed — it contains the error details and your device model, not your browsing history or DNS queries.\n\n%1$s</string>
     <string name="crash_report_send" translatable="true">Send report</string>
     <string name="crash_report_dismiss" translatable="true">Not now</string>
-    <string name="crash_report_share_subject" translatable="true">[Rethink Dns Fork]: Crash report</string>
-    <string name="crash_report_share_intro" translatable="true">Crash report from Rethink Dns Fork. Details below.</string>
+    <string name="crash_report_share_subject" translatable="true">[AuroraVPN]: Crash report</string>
+    <string name="crash_report_share_intro" translatable="true">Crash report from AuroraVPN. Details below.</string>
 
     <!-- WARP re-registration. The register button stays visible after the device
          is registered so a key can be rotated without clearing app data. -->

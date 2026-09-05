@@ -44,7 +44,7 @@ usque's binary on top of everything upstream already has.
 # after release-apk.yml has produced at least one real release:
 curl -sL "https://github.com/paulvers-ui/rethink-app-masque/releases/latest" \
   -o /dev/null -w '%{size_download}\n' # rough check via redirect, or just:
-ls -lh RethinkDnsFork-v*.apk RethinkDnsFork-v*-arm64-v8a.apk RethinkDnsFork-v*-armeabi-v7a.apk
+ls -lh AuroraVPN-v*.apk AuroraVPN-v*-arm64-v8a.apk AuroraVPN-v*-armeabi-v7a.apk
 ```
 
 Or simplest: open the release on GitHub and look at each asset's listed size.
@@ -52,8 +52,8 @@ Or simplest: open the release on GitHub and look at each asset's listed size.
 **If the universal APK is over 30MB** (likely, given `libusque.so` alone is 13MB
 plus `firestack.aar`'s native libraries), IzzyOnDroid's own documented remediation
 is switching to a per-ABI submission instead of universal. `release-apk.yml`
-already produces `RethinkDnsFork-*-arm64-v8a.apk` and
-`RethinkDnsFork-*-armeabi-v7a.apk` as separate, smaller assets for exactly this
+already produces `AuroraVPN-*-arm64-v8a.apk` and
+`AuroraVPN-*-armeabi-v7a.apk` as separate, smaller assets for exactly this
 reason -- submit one of those instead of the universal one if it's under the
 limit and the universal isn't.
 
@@ -79,7 +79,7 @@ this fork correctly. Full translation of all 35+ locales isn't required for
 submission, but the `en-US` one is what reviewers will actually look at.
 
 ```bash
-echo "Rethink Dns Fork: DNS + Firewall + VPN" > fastlane/metadata/android/en-US/title.txt
+echo "AuroraVPN: DNS + Firewall + VPN" > fastlane/metadata/android/en-US/title.txt
 echo "Firewall, WARP over MASQUE, DNS + WireGuard proxy -- a Rethink fork." \
   > fastlane/metadata/android/en-US/short_description.txt
 ```
@@ -104,7 +104,7 @@ this fingerprint to include in the submission.
 
 ```bash
 # against the actual APK you plan to submit, downloaded from your Release:
-apksigner verify --print-certs RethinkDnsFork-v1.0.0.apk | grep SHA-256
+apksigner verify --print-certs AuroraVPN-v1.0.0.apk | grep SHA-256
 ```
 
 Note the lowercase hex value -- that's what goes in the issue/metadata.
