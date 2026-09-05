@@ -21,6 +21,6 @@ WireGuard: Bảo mật lưu lượng Internet chiều ra.
 
 Ứng dụng sử dụng giao thức WireGuard hiện đại, nhanh chóng, gọn nhẹ và bảo mật để mã hóa các kết nối đi ra tới bất kỳ nhà cung cấp VPN tương thích nào mà bạn lựa chọn.
 
-Chống kiểm duyệt: Ứng dụng mã hóa kết nối Internet của bạn đến máy chủ Hệ thống Tên miền (DNS) do Rethink vận hành với sự hiện diện tại hơn 300 địa điểm trên toàn thế giới. Máy chủ DNS được ví như cuốn danh bạ của Internet: Một máy chủ DNS cung cấp các địa chỉ chính xác cần thiết để bạn truy cập một trang web hoặc mở một ứng dụng.
+Chống kiểm duyệt: Ứng dụng mã hóa kết nối Internet của bạn đến máy chủ Hệ thống Tên miền (DNS) do Cloudflare vận hành với sự hiện diện tại hơn 300 địa điểm trên toàn thế giới. Máy chủ DNS được ví như cuốn danh bạ của Internet: Một máy chủ DNS cung cấp các địa chỉ chính xác cần thiết để bạn truy cập một trang web hoặc mở một ứng dụng.
 
 Giám sát dữ liệu: Theo dõi mức sử dụng dữ liệu Di động hoặc WiFi trên từng ứng dụng và từng kết nối cụ thể.

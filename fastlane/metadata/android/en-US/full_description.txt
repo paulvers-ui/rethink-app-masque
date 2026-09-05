@@ -26,6 +26,6 @@ The app uses fast, modern, light-weight, and secure WireGuard protocol to encryp
 
 Anti-censorship: 
 
-The app encrypts your internet connection to Domain Name System (DNS) server run by Rethink with presence in our 300+ locations world-wide. DNS servers are the address book of the internet: A DNS server provides the exact addresses you need to visit a website or open an app.
+The app encrypts your internet connection to Domain Name System (DNS) server run by Cloudflare with presence in our 300+ locations world-wide. DNS servers are the address book of the internet: A DNS server provides the exact addresses you need to visit a website or open an app.
 
 Data Monitor: Track per-app and per-connection Mobile or WiFi data usage.

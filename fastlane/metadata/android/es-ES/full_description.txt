@@ -26,6 +26,6 @@ La aplicación utiliza el protocolo rápido, moderno, ligero y seguro WireGuard 
 
 Anti-censura: 
 
-La aplicación cifra su conexión de Internet al Sistema de Nombres de Dominio (DNS) del servidor gestionado por Rethink con presencia en nuestras más de 300 ubicaciones en todo el mundo. Los servidores DNS son la libreta de direcciones de Internet: Un servidor DNS proporciona las direcciones exactas que necesitas para visitar un sitio web o abrir una aplicación.
+La aplicación cifra su conexión de Internet al Sistema de Nombres de Dominio (DNS) del servidor gestionado por Cloudflare con presencia en nuestras más de 300 ubicaciones en todo el mundo. Los servidores DNS son la libreta de direcciones de Internet: Un servidor DNS proporciona las direcciones exactas que necesitas para visitar un sitio web o abrir una aplicación.
 
 Monitor de datos: Rastrea el uso de datos por aplicación y por conexión móvil o WiFi.

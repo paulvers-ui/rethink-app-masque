@@ -26,6 +26,6 @@ Aplikasi ini menggunakan protokol WireGuard yang cepat, modern, ringan, dan aman
 
 Anti-sensor: 
 
-Aplikasi ini mengenkripsi koneksi internet Anda ke server Domain Name System (DNS) yang dijalankan oleh Rethink dengan kehadiran di lebih dari 300 lokasi di seluruh dunia. Server DNS adalah buku alamat internet: Server DNS menyediakan alamat tepat yang Anda butuhkan untuk mengunjungi situs web atau membuka aplikasi.
+Aplikasi ini mengenkripsi koneksi internet Anda ke server Domain Name System (DNS) yang dijalankan oleh Cloudflare dengan kehadiran di lebih dari 300 lokasi di seluruh dunia. Server DNS adalah buku alamat internet: Server DNS menyediakan alamat tepat yang Anda butuhkan untuk mengunjungi situs web atau membuka aplikasi.
 
 Data Monitor: Pantau penggunaan data seluler atau WiFi per aplikasi dan per koneksi.
