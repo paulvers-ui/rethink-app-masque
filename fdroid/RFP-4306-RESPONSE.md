@@ -14,12 +14,12 @@ Thanks for reviewing. A few corrections and clarifications, checked directly
 against the repo before posting:
 
 **License**: this was filed as MIT by mistake -- the repo's `LICENSE` file
-and the F-Droid metadata (`fdroid/com.creatore.rethinkfork.yml`) both
+and the F-Droid metadata (`fdroid/com.arcadesignpro.auroravpn.yml`) both
 correctly say **Apache-2.0**, matching the upstream Rethink project. Sorry
 for the confusion at filing time.
 
 **On the `com.celzero.bravedns` label and the `trackers` / `in-exodus-privacy`
-flags**: this fork's real, installed package ID is `com.creatore.rethinkfork`,
+flags**: this fork's real, installed package ID is `com.arcadesignpro.auroravpn`,
 confirmed on every signed release APK with `aapt dump badging` /
 `apksigner verify`. `com.celzero.bravedns` only appears as the Gradle
 `namespace` (the package the generated `R`/`BuildConfig` classes live in --
@@ -79,7 +79,7 @@ re-scanned after this lands.
 
 **Donation**: as requested by the checklist, this fork will set up its own
 support link (ko-fi) separate from upstream's -- already reflected in
-`fdroid/com.creatore.rethinkfork.yml`'s description.
+`fdroid/com.arcadesignpro.auroravpn.yml`'s description.
 
 ---
 

@@ -1167,7 +1167,7 @@
     <string name="adv_set_dial_timeout_title" translatable="true">유휴 제한시간</string>
     <string name="lbl_ultra_secure" translatable="true">강력한 보안</string>
     <string name="top_active_conns" translatable="true">상위 활성 연결</string>
-    <string name="adv_tasker_dialog_instructions" translatable="true">지침:\n 방송 메시지에 추가 정보 필요:\n • key: sender\n • value: 호출하는 앱의 패키지 이름\n\n 예: key:sender value:com.termux\n\n 지원하는 동작:\n • VPN 시작 – com.creatore.rethinkfork.intent.action.VPN_START\n • VPN 중단 – com.creatore.rethinkfork.intent.action.VPN_STOP</string>
+    <string name="adv_tasker_dialog_instructions" translatable="true">지침:\n 방송 메시지에 추가 정보 필요:\n • key: sender\n • value: 호출하는 앱의 패키지 이름\n\n 예: key:sender value:com.termux\n\n 지원하는 동작:\n • VPN 시작 – com.arcadesignpro.auroravpn.intent.action.VPN_START\n • VPN 중단 – com.arcadesignpro.auroravpn.intent.action.VPN_STOP</string>
     <string name="firewall_rule_exempt_dns_proxied_desc" translatable="true"><![CDATA[이 DNS 연결은 프록시를 통해 사용자 선호 DNS 엔드포인트로 포워딩되었습니다.<br/><br/> 변경하려면 DNS <i>설정</i> 화면에서 <i>DNS 유출 방지</i>를 끄세요.]]></string>
     <string name="firewall_rule_block_http_desc" translatable="true"><![CDATA[이 연결은 <i>안전하지 않은 HTTP</i> 연결을 사용한 것으로 보여 차단되었습니다.<br/><br/> 변경하려면 <i>전역</i> 탭으로 이동하세요.]]></string>
     <string name="firewall_rule_block_domain_desc" translatable="true"><![CDATA[사용자가 설정한 방화벽 규칙이 이 <i>도메인</i>을 차단했습니다.<br/><br/> 변경하려면 <i>앱별 방화벽</i> 화면으로 이동하세요.]]></string>

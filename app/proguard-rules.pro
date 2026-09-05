@@ -9,7 +9,7 @@
 # and specify the fully qualified class name to the JavaScript interface
 # class:
 # commenting below, webview removed from version v053i
-#-keepclassmembers class com.creatore.rethinkfork.ui.DnsConfigureWebViewActivity$JSInterface {
+#-keepclassmembers class com.arcadesignpro.auroravpn.ui.DnsConfigureWebViewActivity$JSInterface {
 #   public *;
 #}
 
@@ -62,7 +62,7 @@
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class com.google.gson.** { *; }
--keep class com.creatore.rethinkfork.data.FileTag { *; }
+-keep class com.arcadesignpro.auroravpn.data.FileTag { *; }
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
@@ -113,8 +113,8 @@
 # implements Bridge; its callback methods are invoked exclusively from Go, so
 # nothing in Kotlin statically "calls" them and R8 would otherwise be free to
 # remove or alter them.
--keep class com.creatore.rethinkfork.service.BraveVPNService { *; }
--keep class com.creatore.rethinkfork.net.go.GoVpnAdapter { *; }
+-keep class com.arcadesignpro.auroravpn.service.BraveVPNService { *; }
+-keep class com.arcadesignpro.auroravpn.net.go.GoVpnAdapter { *; }
 
 # Any class implementing a firestack interface, wherever it lives.
 -keep class * implements com.celzero.firestack.backend.Bridge { *; }

@@ -39,8 +39,8 @@ android_app {
     ],
 
     required: [
-        "privapp_whitelist_com.creatore.rethinkfork",
-        "com.creatore.rethinkfork_whitelist",
+        "privapp_whitelist_com.arcadesignpro.auroravpn",
+        "com.arcadesignpro.auroravpn_whitelist",
     ],
 
     static_libs: [
@@ -91,17 +91,17 @@ java_import {
 }
 
 prebuilt_etc {
-    name: "privapp_whitelist_com.creatore.rethinkfork",
+    name: "privapp_whitelist_com.arcadesignpro.auroravpn",
     system_ext_specific: true,
     sub_dir: "permissions",
-    src: "com.creatore.rethinkfork.xml",
+    src: "com.arcadesignpro.auroravpn.xml",
     filename_from_src: true,
 }
 
 prebuilt_etc {
-    name: "com.creatore.rethinkfork_whitelist",
+    name: "com.arcadesignpro.auroravpn_whitelist",
     system_ext_specific: true,
     sub_dir: "sysconfig",
-    src: "com.creatore.rethinkfork_whitelist.xml",
+    src: "com.arcadesignpro.auroravpn_whitelist.xml",
     filename_from_src: true,
 }

@@ -29,7 +29,7 @@
             app can put an arbitrary string in an intent extra.
     -->
     <permission
-        android:name="com.creatore.rethinkfork.permission.VPN_CONTROL"
+        android:name="com.arcadesignpro.auroravpn.permission.VPN_CONTROL"
         android:label="Control RethinkDNS VPN"
         android:description="@string/app_name"
         android:protectionLevel="normal" />
@@ -298,7 +298,7 @@
             FIX #4 — VpnControlReceiver: require the VPN_CONTROL custom permission.
 
             Senders must declare:
-                <uses-permission android:name="com.creatore.rethinkfork.permission.VPN_CONTROL" />
+                <uses-permission android:name="com.arcadesignpro.auroravpn.permission.VPN_CONTROL" />
             This is a normal-level permission (not signature), so automation apps like
             Tasker can request it and the user grants it at install time.  It creates an
             explicit, auditable permission contract visible in the app's manifest and in
@@ -312,12 +312,12 @@
         <receiver
             android:name=".receiver.VpnControlReceiver"
             android:exported="true"
-            android:permission="com.creatore.rethinkfork.permission.VPN_CONTROL"
+            android:permission="com.arcadesignpro.auroravpn.permission.VPN_CONTROL"
             android:label="@string/app_name"
             tools:ignore="ExportedReceiver">
             <intent-filter>
-                <action android:name="com.creatore.rethinkfork.intent.action.VPN_START" />
-                <action android:name="com.creatore.rethinkfork.intent.action.VPN_STOP" />
+                <action android:name="com.arcadesignpro.auroravpn.intent.action.VPN_START" />
+                <action android:name="com.arcadesignpro.auroravpn.intent.action.VPN_STOP" />
             </intent-filter>
         </receiver>
 
