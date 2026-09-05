@@ -26,6 +26,6 @@ Az alkalmazás gyors, modern, könnyű és biztonságos WireGuard protokollt has
 
 Cenzúra elleni védelem:
 
-Az alkalmazás titkosítja az internetkapcsolatot a Rethink által üzemeltetett Domain Name System (DNS) szerver felé, amely több mint 300 helyszínen érhető el világszerte. A DNS-szerver az internet címjegyzéke: pontos címeket biztosít weboldalak vagy alkalmazások eléréséhez.
+Az alkalmazás titkosítja az internetkapcsolatot a Cloudflare által üzemeltetett Domain Name System (DNS) szerver felé, amely több mint 300 helyszínen érhető el világszerte. A DNS-szerver az internet címjegyzéke: pontos címeket biztosít weboldalak vagy alkalmazások eléréséhez.
 
 Adatfigyelő: Kövesse nyomon alkalmazásonként és kapcsolatonként a mobil- vagy WiFi-adathasználatot.

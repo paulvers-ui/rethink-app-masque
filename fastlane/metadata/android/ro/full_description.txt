@@ -26,6 +26,6 @@ Aplicația folosește protocolul WireGuard rapid, modern, ușor și sigur pentru
 
 Anti-cenzură: 
 
-Aplicația criptează conexiunea ta de internet la serverul DNS (Domain Name System) administrat de Rethink, cu prezență în peste 300 de locații din întreaga lume. Serverele DNS sunt agenda internetului: un server DNS oferă adresele exacte de care aveți nevoie pentru a vizita un site web sau a deschide o aplicație.
+Aplicația criptează conexiunea ta de internet la serverul DNS (Domain Name System) administrat de Cloudflare, cu prezență în peste 300 de locații din întreaga lume. Serverele DNS sunt agenda internetului: un server DNS oferă adresele exacte de care aveți nevoie pentru a vizita un site web sau a deschide o aplicație.
 
 Monitor date: Contorizează utilizarea datelor de către fiecare aplicație, atât la date mobile cât și la WiFi.

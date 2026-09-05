@@ -26,6 +26,6 @@ Die App verwendet das schnelle, moderne, schlanke und sichere WireGuard-Protokol
 
 Zensurumgehung:
 
-Die App verschlüsselt deine Internetverbindung zu einem Domain Name System (DNS)-Server, der von Rethink betrieben wird und an über 300 Standorten weltweit existiert. DNS-Server sind das Adressbuch des Internets: Ein DNS-Server liefert die exakte Adresse, die du benötigst, um eine Website zu besuchen oder eine App zu öffnen.
+Die App verschlüsselt deine Internetverbindung zu einem Domain Name System (DNS)-Server, der von Cloudflare betrieben wird und an über 300 Standorten weltweit existiert. DNS-Server sind das Adressbuch des Internets: Ein DNS-Server liefert die exakte Adresse, die du benötigst, um eine Website zu besuchen oder eine App zu öffnen.
 
 Datenverbrauch: Überwacht den Datenverbrauch (mobil und WLAN) pro App und pro Verbindung.

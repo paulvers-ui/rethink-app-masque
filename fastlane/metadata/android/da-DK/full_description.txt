@@ -26,6 +26,6 @@ App'en bruger hurtig, moderne, letvægt og sikker WireGuard-protokol til at kryp
 
 Anti-censur:
 
-App'en krypterer din internetforbindelse til en Domain Name System (DNS) server, der drives af Rethink med tilstedeværelse på 300+ lokationer over hele verden DNS-servere er internettets adressebog: En DNS-server giver de nøjagtige adresser, du skal bruge for at besøge en hjemmeside eller åbne en app.
+App'en krypterer din internetforbindelse til en Domain Name System (DNS) server, der drives af Cloudflare med tilstedeværelse på 300+ lokationer over hele verden DNS-servere er internettets adressebog: En DNS-server giver de nøjagtige adresser, du skal bruge for at besøge en hjemmeside eller åbne en app.
 
 Data-monitorering: Spor pr-app og pr-tilslutning mobil- eller WiFi-databrug.

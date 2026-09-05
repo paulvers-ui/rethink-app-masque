@@ -26,6 +26,6 @@ Uygulama, giden bağlantıları şifrelemek için tercihinizce herhangi uyumlu V
 
 Sansür Karşıtı:
 
-Uygulama, internet bağlantınızı dünya çapında 300'den fazla konumda bulunan, Rethink tarafından yürütülen DNS sunucularına bağlar. DNS sunucuları internetin telefon rehberi gibidir; bir DNS sunucusu herhangi bir websiteye bağlanmak veya bir uygulama açarken bağlanmanız gereken spesifik "telefon numarası"nı sunar.
+Uygulama, internet bağlantınızı dünya çapında 300'den fazla konumda bulunan, Cloudflare tarafından yürütülen DNS sunucularına bağlar. DNS sunucuları internetin telefon rehberi gibidir; bir DNS sunucusu herhangi bir websiteye bağlanmak veya bir uygulama açarken bağlanmanız gereken spesifik "telefon numarası"nı sunar.
 
 Veri Denetleyicisi: Uygulama başı ve bağlantı başı mobil veri veya WiFi veri kullanımını denetle.
