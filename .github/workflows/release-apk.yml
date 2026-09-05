@@ -246,8 +246,8 @@ jobs:
             fi
 
             appid=$("$AAPT" dump badging "$f" | grep -oP "package: name='\K[^']+")
-            if [ "$appid" != "com.creatore.rethinkfork" ]; then
-              echo "::error::$f has applicationId '$appid', expected com.creatore.rethinkfork -- wrong variant got built"
+            if [ "$appid" != "com.arcadesignpro.auroravpn" ]; then
+              echo "::error::$f has applicationId '$appid', expected com.arcadesignpro.auroravpn -- wrong variant got built"
               exit 1
             fi
 

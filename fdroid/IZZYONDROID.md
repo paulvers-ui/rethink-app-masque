@@ -139,7 +139,7 @@ existing accepted submission:
 - Link to the latest Release with the APK attached
 - The `AllowedAPKSigningKeys` fingerprint from step 2
 - What this fork changes from the original (same content as `Description:` in
-  `fdroid/com.creatore.rethinkfork.yml` -- own package ID, WARP over MASQUE via
+  `fdroid/com.arcadesignpro.auroravpn.yml` -- own package ID, WARP over MASQUE via
   usque, single Dark Plus theme, network status sound alerts, no Firebase in
   this variant, own sponsor link, Cloudflare fallback DNS)
 - Link to the notification issue from step 3

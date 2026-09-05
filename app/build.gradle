@@ -54,18 +54,17 @@ def getVersionCode = {
 
 android {
     compileSdkVersion(35)
-    namespace 'com.creatore.rethinkfork'
+    namespace 'com.arcadesignpro.auroravpn'
 
     defaultConfig {
-        // applicationId matches namespace now -- both are com.creatore.rethinkfork.
-        // Previously namespace stayed as com.celzero.bravedns (only controlling the
-        // generated R/BuildConfig package) to avoid a ~460-file rename; that rename
-        // has since been done, so the two are aligned. See the F-Droid RFP response
-        // (fdroid/RFP-4306-RESPONSE.md) for why this mismatch existed and why it was
-        // worth fixing: a scanner reading `namespace` instead of `applicationId`
-        // could attribute this fork's trackers/listing status to the ORIGINAL
-        // Rethink app instead of this one.
-        applicationId "com.creatore.rethinkfork"
+        // applicationId matches namespace -- both are com.arcadesignpro.auroravpn,
+        // following the AuroraVPN rebrand from com.creatore.rethinkfork. Keeping
+        // the two aligned avoids the exact scanner-confusion problem documented in
+        // fdroid/RFP-4306-RESPONSE.md from the previous rename (celzero.bravedns ->
+        // creatore.rethinkfork): a scanner reading `namespace` instead of
+        // `applicationId` would attribute this app's identity to whatever package
+        // used to live at that name.
+        applicationId "com.arcadesignpro.auroravpn"
         minSdkVersion(23)
         targetSdkVersion 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

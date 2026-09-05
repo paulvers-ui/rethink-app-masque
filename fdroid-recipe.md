@@ -1,14 +1,14 @@
 # F-Droid Build Recipe — `paulvers-ui/rethink-app`
 
 > **Type:** Android APK (Kotlin + Gradle)  
-> **Package ID:** `com.creatore.rethinkfork`  
+> **Package ID:** `com.arcadesignpro.auroravpn`  
 > **Min SDK:** 26 (Android 8.0) | **Target/Compile SDK:** 35  
 > **JDK:** 17  
 > **ABI version codes:** armeabi-v7a=2, arm64-v8a=3, x86=8, x86_64=9  
 
 ---
 
-## Metadata file: `metadata/com.creatore.rethinkfork.yml`
+## Metadata file: `metadata/com.arcadesignpro.auroravpn.yml`
 
 ```yaml
 Categories:
