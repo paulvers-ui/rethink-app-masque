@@ -45,7 +45,6 @@ Same as the original project — see [LICENSE](LICENSE).
 
 本项目 fork 自 [Rethink DNS + Firewall + VPN](https://github.com/celzero/rethink-app)，相较原版做了以下改动：
 
-- **独立的包名**（`com.arcadesignpro.auroravpn`）——可与原版 Rethink 在同一部手机上共存安装，互不冲突。
 - **通过 MASQUE 使用 WARP**，采用 [usque](https://github.com/paulvers-ui/usque) 替代 Cloudflare 官方的 WireGuard 客户端。
 - **单一主题**（Dark Plus）——选择器中的其他主题选项均已移除。
 - **网络状态语音提示**：隧道断开、代理异常、接口切换等——已做防抖处理，避免同类事件短时间内反复提示。
