@@ -1,7 +1,7 @@
 <div align="center">
   <img src=".github/assets/logo.png" alt="AuroraVPN" width="120">
 
-  # Rethink Dns Firewall Free Vpn Fork
+  # AURORAVPN FREE VPN + DNS + FIREWALL
 
   Encrypted DNS client, firewall, and WireGuard/WARP proxy for Android.
 
