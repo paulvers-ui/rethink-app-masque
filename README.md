@@ -15,7 +15,7 @@
 
 This is a fork of [Rethink DNS + Firewall + VPN](https://github.com/celzero/rethink-app) with help of arcadesignpro, creatoreprints, diniboy1123, with these changes from the original:
 
-- **Own package ID** (`com.arcadesignpro.auroravpn`) — installs alongside the original Rethink on the same phone, no conflict.
+
 - **WARP over MASQUE**, using [usque](https://github.com/paulvers-ui/usque) instead of Cloudflare's official WireGuard client.
 - **Single theme** (Dark Plus) — every other option was removed from the picker.
 - **Network status sound alerts**: tunnel down, unhealthy proxy, interface switch — debounced so a burst of related events doesn't fire repeatedly.
