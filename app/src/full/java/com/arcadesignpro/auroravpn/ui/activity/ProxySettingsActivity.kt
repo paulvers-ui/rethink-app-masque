@@ -527,6 +527,24 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
         b.settingsActivityWarpSwitchRow.visibility =
             if (isRegistered) View.VISIBLE else View.GONE
 
+        // Auto-disable row: same gating as the connect switch above -- meaningless to
+        // show before WARP can even be turned on.
+        b.settingsActivityWarpAutoDisableRow.visibility =
+            if (isRegistered) View.VISIBLE else View.GONE
+        b.settingsActivityWarpAutoDisableSwitch.setOnCheckedChangeListener(null)
+        b.settingsActivityWarpAutoDisableSwitch.isChecked = persistentState.warpAutoDisableEnabled
+        b.settingsActivityWarpAutoDisableSwitch.setOnCheckedChangeListener { _, isChecked ->
+            persistentState.warpAutoDisableEnabled = isChecked
+            // Take effect immediately if WARP is already running, not just on the next
+            // enable -- flip ON while connected arms the timer right away; flip OFF
+            // cancels whatever is currently pending.
+            if (isChecked) {
+                VpnController.scheduleWarpAutoDisableIfEnabled()
+            } else {
+                VpnController.cancelWarpAutoDisable()
+            }
+        }
+
         // Update switch state without triggering the listener
         b.settingsActivityWarpSwitch.setOnCheckedChangeListener(null)
         b.settingsActivityWarpSwitch.isChecked = isConnected
@@ -571,6 +589,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
                         // Previously this was reversed, causing the observer to read
                         // usqueEnabled=false and flip the switch back to OFF (double-tap bug).
                         persistentState.usqueEnabled = true
+                        VpnController.scheduleWarpAutoDisableIfEnabled()
                         val warpProxy = ProxyEndpoint(
                             WARP_PROXY_ID,
                             warpProxyName,
@@ -621,6 +640,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
                 UsqueManager.stopSocksProxy()
                 appConfig.removeProxy(AppConfig.ProxyType.SOCKS5, AppConfig.ProxyProvider.CUSTOM)
                 persistentState.usqueEnabled = false
+                VpnController.cancelWarpAutoDisable()
                 updateWarpUi()
             }
         }

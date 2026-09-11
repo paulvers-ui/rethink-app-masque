@@ -2004,4 +2004,8 @@
     <string name="warp_register_positive">Register</string>
     <string name="warp_reregister_confirm">This device is already registered. Registering again requests a brand new key from Cloudflare and discards the current one. Your existing config.json will be replaced.\n\nContinue?</string>
     <string name="warp_reregister_positive">Re-register</string>
+
+    <!-- WARP auto-disable safety timer -->
+    <string name="warp_auto_disable_title">Auto-disable after 11 hours</string>
+    <string name="warp_auto_disable_desc">Turns WARP off on its own if it has been running continuously for 11 hours straight.</string>
 </resources>

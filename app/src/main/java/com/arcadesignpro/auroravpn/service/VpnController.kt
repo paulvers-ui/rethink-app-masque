@@ -386,6 +386,14 @@ object VpnController : KoinComponent {
         braveVpnService?.refreshOrPauseOrResumeOrReAddProxies()
     }
 
+    fun scheduleWarpAutoDisableIfEnabled() {
+        braveVpnService?.scheduleWarpAutoDisableIfEnabled()
+    }
+
+    fun cancelWarpAutoDisable() {
+        braveVpnService?.cancelWarpAutoDisable()
+    }
+
     fun closeConnectionsIfNeeded(uid: Int = INVALID_UID, reason: String) {
         braveVpnService?.closeConnectionsIfNeeded(uid, reason)
     }
