@@ -217,6 +217,11 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
     // acquired with a timeout (belt-and-suspenders against a leak if release() is ever
     // skipped by an unexpected code path) and released in a finally block.
     private var usqueDozeWakeLock: android.os.PowerManager.WakeLock? = null
+    // One-shot WARP safety timer (PersistentState.warpAutoDisableEnabled). Deliberately a
+    // separate receiver from usqueDozeReceiver above, not a repeating alarm reusing that
+    // one's cadence: this needs to fire exactly once, 11 hours after WARP was switched on,
+    // regardless of the watchdog's own ~15 min cycle.
+    private var warpAutoDisableReceiver: android.content.BroadcastReceiver? = null
 
     private fun scheduleUsqueDozeAlarm() {
         val am = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
@@ -243,6 +248,49 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         am.cancel(pi)
+    }
+
+    // Called whenever WARP is switched on (ProxySettingsActivity -> VpnController ->
+    // here). Schedules a fresh 11h-from-now alarm if the user has opted into the
+    // auto-disable timer; otherwise makes sure no stale alarm from a previous session
+    // (e.g. the setting was on, then turned off, but an old alarm was never cancelled)
+    // is still pending. Always reschedules from "now", not from any earlier timestamp --
+    // every fresh WARP enable gets its own full 11h window.
+    fun scheduleWarpAutoDisableIfEnabled() {
+        if (!persistentState.warpAutoDisableEnabled) {
+            cancelWarpAutoDisable()
+            return
+        }
+        val am = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+        val intent = android.content.Intent(ACTION_WARP_AUTO_DISABLE).setPackage(packageName)
+        val pi = android.app.PendingIntent.getBroadcast(
+            this, 0, intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val triggerAt = android.os.SystemClock.elapsedRealtime() + WARP_AUTO_DISABLE_INTERVAL_MS
+        // Same non-exact rationale as scheduleUsqueDozeAlarm(): setAndAllowWhileIdle avoids
+        // needing SCHEDULE_EXACT_ALARM. A safety timer firing somewhat late during deep
+        // Doze (minutes, not hours -- this is a single long-delay alarm, not a short
+        // repeating one, so it is far less exposed to the maintenance-window batching that
+        // affects the 9-minute watchdog) is an acceptable trade against not needing an
+        // extra permission for an opt-in feature most installs will never enable.
+        am.setAndAllowWhileIdle(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+        persistentState.warpAutoDisableAtMs = System.currentTimeMillis() + WARP_AUTO_DISABLE_INTERVAL_MS
+        Logger.i(LOG_TAG_VPN, "warp: auto-disable timer armed, fires in 11h")
+    }
+
+    // Called whenever WARP is switched off manually, and internally by the alarm's own
+    // handler after it fires -- either way, a pending alarm must not outlive the WARP
+    // session it was armed for.
+    fun cancelWarpAutoDisable() {
+        val am = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+        val intent = android.content.Intent(ACTION_WARP_AUTO_DISABLE).setPackage(packageName)
+        val pi = android.app.PendingIntent.getBroadcast(
+            this, 0, intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        am.cancel(pi)
+        persistentState.warpAutoDisableAtMs = 0L
     }
 
     /**
@@ -400,6 +448,11 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         // network; this is a safety backstop against holding the CPU awake indefinitely
         // if something in that sequence ever hangs unexpectedly, not a normal-case budget.
         private const val USQUE_DOZE_WAKELOCK_TIMEOUT_MS = 30_000L
+
+        // WARP safety timer -- see PersistentState.warpAutoDisableEnabled's doc comment.
+        const val ACTION_WARP_AUTO_DISABLE = "com.arcadesignpro.auroravpn.WARP_AUTO_DISABLE"
+        private const val WARP_AUTO_DISABLE_INTERVAL_MS = 11 * 60 * 60 * 1000L
+        private const val WARP_AUTO_DISABLE_WAKELOCK_TIMEOUT_MS = 30_000L
 
         // --- DNS transport health watchdog ---
         // Poll interval for the DNS health watchdog (15 s).
@@ -1838,6 +1891,112 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
               }
               scheduleUsqueDozeAlarm()
           }
+
+        // WARP auto-disable receiver: registered unconditionally (not gated behind
+        // usqueEnabled like the block above), since the setting can be toggled from
+        // ProxySettingsActivity at any time, independent of whether WARP happens to
+        // already be on when the service starts. The receiver only ever has real work to
+        // do once scheduleWarpAutoDisableIfEnabled() has actually armed an alarm.
+        if (warpAutoDisableReceiver == null) {
+            warpAutoDisableReceiver = object : android.content.BroadcastReceiver() {
+                // Same rationale as usqueDozeReceiver's own wakelock (see its onCreate
+                // comment): hold the device awake across the async disable sequence below,
+                // not just the synchronous onReceive() call.
+                @Suppress("TooGenericExceptionCaught")
+                override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
+                    if (intent.action != ACTION_WARP_AUTO_DISABLE) return
+                    if (!persistentState.warpAutoDisableEnabled) return
+                    Logger.i(LOG_TAG_VPN, "warp: auto-disable timer fired")
+
+                    val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+                    val wl = pm?.newWakeLock(
+                        android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                        "$TAG:warpAutoDisable"
+                    )
+                    try {
+                        wl?.acquire(WARP_AUTO_DISABLE_WAKELOCK_TIMEOUT_MS)
+                    } catch (e: Exception) {
+                        Logger.w(LOG_TAG_VPN, "warp: could not acquire auto-disable wakelock: ${e.message}")
+                    }
+
+                    io("warpAutoDisable") {
+                        try {
+                            UsqueManager.stopSocksProxy()
+                            appConfig.removeProxy(
+                                AppConfig.ProxyType.SOCKS5,
+                                AppConfig.ProxyProvider.CUSTOM
+                            )
+                            persistentState.usqueEnabled = false
+                            Logger.i(LOG_TAG_VPN, "warp: auto-disabled after 11h safety timer")
+                        } finally {
+                            // No reschedule here, unlike the doze watchdog -- this is a
+                            // one-shot timer, not a repeating chain. Clears the stored
+                            // trigger timestamp so the UI stops showing a pending alarm.
+                            persistentState.warpAutoDisableAtMs = 0L
+                            try {
+                                wl?.let { if (it.isHeld) it.release() }
+                            } catch (e: Exception) {
+                                Logger.w(LOG_TAG_VPN, "warp: error releasing auto-disable wakelock: ${e.message}")
+                            }
+                        }
+                    }
+                }
+            }
+            ContextCompat.registerReceiver(
+                this,
+                warpAutoDisableReceiver,
+                android.content.IntentFilter(ACTION_WARP_AUTO_DISABLE),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        }
+
+        // Continuity across a service/process restart mid-timer: the AlarmManager alarm
+        // itself survives independently of this process, but the dynamically-registered
+        // receiver above does not survive a full process death -- if that happened, a
+        // fresh registration alone would leave the OS alarm firing into a receiver that
+        // no longer exists. warpAutoDisableAtMs (set when the timer was armed) lets this
+        // re-arm against the SAME original deadline rather than either losing the timer
+        // silently or restarting a fresh 11h window.
+        if (persistentState.warpAutoDisableEnabled) {
+            val target = persistentState.warpAutoDisableAtMs
+            when {
+                target <= 0L -> {
+                    // Setting is on but nothing is currently armed (e.g. WARP itself is
+                    // off right now) -- nothing to re-arm; scheduleWarpAutoDisableIfEnabled()
+                    // will run the next time WARP is actually switched on.
+                }
+                target <= System.currentTimeMillis() -> {
+                    // The deadline already passed while no process was alive to receive
+                    // the alarm. Catch up immediately rather than silently drop the
+                    // safety guarantee for however long it takes the next Doze-watchdog
+                    // cycle to notice.
+                    Logger.w(LOG_TAG_VPN, "warp: auto-disable deadline passed while process was down, disabling now")
+                    io("warpAutoDisableCatchUp") {
+                        UsqueManager.stopSocksProxy()
+                        appConfig.removeProxy(AppConfig.ProxyType.SOCKS5, AppConfig.ProxyProvider.CUSTOM)
+                        persistentState.usqueEnabled = false
+                        persistentState.warpAutoDisableAtMs = 0L
+                    }
+                }
+                else -> {
+                    // Still in the future -- re-arm the OS alarm for that exact original
+                    // time, not a fresh 11h window.
+                    val am = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+                    val intent = android.content.Intent(ACTION_WARP_AUTO_DISABLE).setPackage(packageName)
+                    val pi = android.app.PendingIntent.getBroadcast(
+                        this, 0, intent,
+                        android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                    )
+                    val remainingMs = target - System.currentTimeMillis()
+                    am.setAndAllowWhileIdle(
+                        android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        android.os.SystemClock.elapsedRealtime() + remainingMs,
+                        pi
+                    )
+                    Logger.i(LOG_TAG_VPN, "warp: auto-disable timer re-armed against original deadline")
+                }
+            }
+        }
     }
 
 

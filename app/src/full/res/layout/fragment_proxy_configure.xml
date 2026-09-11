@@ -230,6 +230,48 @@
 
         </RelativeLayout>
 
+        <!-- Optional safety timer: auto-disable WARP a fixed number of hours after it is
+             turned on. Off by default; see PersistentState.warpAutoDisableEnabled's doc
+             comment for why this must never be on unless explicitly chosen. -->
+        <LinearLayout
+            android:id="@+id/settings_activity_warp_auto_disable_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/warp_auto_disable_title"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/settings_activity_warp_auto_disable_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/warp_auto_disable_desc"
+                    android:textSize="12sp"
+                    android:layout_marginTop="2dp" />
+
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/settings_activity_warp_auto_disable_switch"
+                style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp" />
+
+        </LinearLayout>
+
         <!-- SNI override editor: max 20 chars, default cloudflare.com -->
           <LinearLayout
               android:layout_width="match_parent"

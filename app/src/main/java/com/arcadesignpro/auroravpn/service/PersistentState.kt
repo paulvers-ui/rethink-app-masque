@@ -709,6 +709,18 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     var customModeOrIpChanged by booleanPref("custom_lan_mode_ip_changed").withDefault<Boolean>(false)
     var usqueEnabled by booleanPref("pref_usque_enabled").withDefault<Boolean>(false)
 
+    // Optional safety timer: when enabled, WARP automatically turns itself off a fixed
+    // number of hours after being switched on, without needing anyone to be present to
+    // do it manually. Off by default -- this must never silently change behavior for an
+    // existing install (e.g. a carrier deployment serving other people's devices, where
+    // an unannounced daily disconnect would be a regression, not a safety feature). See
+    // BraveVPNService.scheduleWarpAutoDisableIfEnabled() for the actual timer.
+    var warpAutoDisableEnabled by booleanPref("pref_warp_auto_disable_enabled").withDefault<Boolean>(false)
+    // Epoch ms the current auto-disable alarm is set to fire, or 0L if none is pending.
+    // Stored so the UI can show "auto-disables at HH:mm" without re-deriving it, and so a
+    // process restart can tell whether a still-pending alarm needs to be rescheduled.
+    var warpAutoDisableAtMs by longPref("pref_warp_auto_disable_at_ms").withDefault<Long>(0L)
+
       // SNI override sent in the QUIC ClientHello of the WARP MASQUE tunnel.
       // Defaults to "cloudflare.com". Capped at 20 chars in the UI.
       var warpSpoofedSni by stringPref("pref_warp_spoofed_sni").withDefault<String>("cloudflare.com")
