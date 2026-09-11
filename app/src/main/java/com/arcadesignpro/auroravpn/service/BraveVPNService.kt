@@ -212,6 +212,11 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
     // BraveVPNService.kt:219). Precision is irrelevant for a liveness watchdog; the OS
     // throttle (~9 min minimum cadence) is acceptable.
     private var usqueDozeReceiver: android.content.BroadcastReceiver? = null
+    // Held only across the brief onReceive() -> async-check -> reschedule window below;
+    // see the WAKE_LOCK permission's manifest comment for the full rationale. Always
+    // acquired with a timeout (belt-and-suspenders against a leak if release() is ever
+    // skipped by an unexpected code path) and released in a finally block.
+    private var usqueDozeWakeLock: android.os.PowerManager.WakeLock? = null
 
     private fun scheduleUsqueDozeAlarm() {
         val am = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
@@ -379,10 +384,22 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
 
         // Sprint 20 Bug 1: Doze-proof watchdog alarm action.
         // coroutine delay() is suspended by Android Doze; this alarm fires even in deep Doze
-        // (at most once per ~9 min per Android OS throttle) to check WARP tunnel liveness.
+        // to check WARP tunnel liveness.
         const val ACTION_USQUE_DOZE_WATCHDOG = "com.arcadesignpro.auroravpn.USQUE_DOZE_WATCHDOG"
-        // Doze watchdog alarm interval: 9 min matches Android's minimum setExactAndAllowWhileIdle cadence
+        // Doze watchdog alarm interval: requested at 9 min, but scheduled via
+        // AlarmManager.setAndAllowWhileIdle() (non-exact -- see scheduleUsqueDozeAlarm()'s
+        // own comment for why exact is intentionally NOT used without also declaring
+        // SCHEDULE_EXACT_ALARM). Non-exact alarms are batched into the OS's own Doze
+        // maintenance windows, which space out progressively the longer a device stays in
+        // deep Doze -- observed in production logs firing every ~15-16 min during a
+        // sustained overnight session, not the 9 min requested here. That drift is expected
+        // OS behavior, not a bug in this constant.
         private const val USQUE_DOZE_ALARM_INTERVAL_MS = 9 * 60 * 1000L
+        // Hard ceiling on how long the Doze wakelock below may be held. The actual
+        // check-and-restart sequence should finish in well under a second on a healthy
+        // network; this is a safety backstop against holding the CPU awake indefinitely
+        // if something in that sequence ever hangs unexpectedly, not a normal-case budget.
+        private const val USQUE_DOZE_WAKELOCK_TIMEOUT_MS = 30_000L
 
         // --- DNS transport health watchdog ---
         // Poll interval for the DNS health watchdog (15 s).
@@ -1738,29 +1755,75 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
 
               // Sprint 20 Bug 1: coroutine delay() is fully suspended by Android Doze mode.
               // The watchdog above went silent for 2.6 hours because Doze froze the delay().
-              // Register a dynamic BroadcastReceiver + AlarmManager.setExactAndAllowWhileIdle()
-              // alarm that fires through deep Doze (at OS-throttled cadence of ≥9 min) and runs
-              // the same liveness check so the tunnel is never stuck dead for hours while asleep.
+              // Register a dynamic BroadcastReceiver + AlarmManager.setAndAllowWhileIdle()
+              // alarm that fires through deep Doze and runs the same liveness check so the
+              // tunnel is never stuck dead for hours while asleep.
+              //
+              // Sprint 22 fix: onReceive() itself runs with an implicit system-held wakeup,
+              // but that is released the instant onReceive() returns -- and io("usqueDozeCheck")
+              // launches its work asynchronously and returns immediately, so the device was
+              // free to fall back into Doze before the network liveness probe inside that
+              // coroutine ever got to run. Confirmed in production: the alarm fired reliably
+              // every cycle all night (visible in logcat), yet the tunnel stayed dead for over
+              // 10 hours because the check body never got far enough to detect it, let alone
+              // restart it. usqueDozeWakeLock below is acquired synchronously in onReceive()
+              // (guaranteed to run) and released only once the async check + restart +
+              // reschedule sequence fully completes, bridging that gap.
               if (usqueDozeReceiver == null) {
                   usqueDozeReceiver = object : android.content.BroadcastReceiver() {
+                      // Both catch(Exception) blocks below wrap OS interaction (PowerManager,
+                      // WakeLock) purely to log-and-continue: a wakelock failure must not
+                      // prevent the liveness check itself from running, and this is an
+                      // internal watchdog with no user-facing failure path to report to.
+                      @Suppress("TooGenericExceptionCaught")
                       override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
                           if (intent.action != ACTION_USQUE_DOZE_WATCHDOG) return
                           if (!persistentState.usqueEnabled) return
                           Logger.i(LOG_TAG_VPN, "usque: Doze alarm fired — checking liveness")
+
+                          val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+                          val wl = pm?.newWakeLock(
+                              android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                              "$TAG:usqueDozeCheck"
+                          )
+                          try {
+                              wl?.acquire(USQUE_DOZE_WAKELOCK_TIMEOUT_MS)
+                          } catch (e: Exception) {
+                              // WAKE_LOCK is a normal permission declared in the manifest, so this
+                              // should never fail -- but a missing wakelock must not block the
+                              // liveness check itself, only remove its Doze-survival guarantee.
+                              Logger.w(LOG_TAG_VPN, "usque: could not acquire Doze wakelock: ${e.message}")
+                          }
+                          usqueDozeWakeLock = wl
+
                           io("usqueDozeCheck") {
-                              // Sprint 21: probe even if isRunning()=false (process may be dead).
-                              // probeUsqueLiveness() returns false on connection refused, which
-                              // is the correct dead-process signal — no isRunning() guard needed.
-                              val tunnelOk = UsqueManager.isRunning() && UsqueManager.probeUsqueLiveness()
-                              if (!tunnelOk) {
-                                  Logger.w(LOG_TAG_VPN, "usque: Doze watchdog — tunnel down (running=${UsqueManager.isRunning()}), restarting")
-                                  refreshResolvers() // Bug 2: pre-flush before port goes dark
-                                  startUsqueWithRetry()
-                                  usqueLastWatchdogRestartMs = System.currentTimeMillis()
-                                  refreshResolvers() // post-start flush
+                              try {
+                                  // Sprint 21: probe even if isRunning()=false (process may be dead).
+                                  // probeUsqueLiveness() returns false on connection refused, which
+                                  // is the correct dead-process signal — no isRunning() guard needed.
+                                  val tunnelOk = UsqueManager.isRunning() && UsqueManager.probeUsqueLiveness()
+                                  if (!tunnelOk) {
+                                      Logger.w(
+                                          LOG_TAG_VPN,
+                                          "usque: Doze watchdog — tunnel down (running=${UsqueManager.isRunning()}), restarting"
+                                      )
+                                      refreshResolvers() // Bug 2: pre-flush before port goes dark
+                                      startUsqueWithRetry()
+                                      usqueLastWatchdogRestartMs = System.currentTimeMillis()
+                                      refreshResolvers() // post-start flush
+                                  }
+                              } finally {
+                                  // Reschedule next Doze alarm regardless (keeps the chain alive),
+                                  // then release the wakelock -- in that order, so a failure in the
+                                  // check above can never leave the chain unscheduled.
+                                  scheduleUsqueDozeAlarm()
+                                  try {
+                                      usqueDozeWakeLock?.let { if (it.isHeld) it.release() }
+                                  } catch (e: Exception) {
+                                      Logger.w(LOG_TAG_VPN, "usque: error releasing Doze wakelock: ${e.message}")
+                                  }
+                                  usqueDozeWakeLock = null
                               }
-                              // Reschedule next Doze alarm regardless (keeps the chain alive)
-                              scheduleUsqueDozeAlarm()
                           }
                       }
                   }
@@ -3927,6 +3990,15 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
             usqueDozeReceiver?.let { unregisterReceiver(it) }
         } catch (_: IllegalArgumentException) {}
         usqueDozeReceiver = null
+        // Fast-path cleanup if the service is torn down mid-check (receiver unregistered
+        // above, so no new check can start after this point). Not strictly required --
+        // the wakelock's own acquire(USQUE_DOZE_WAKELOCK_TIMEOUT_MS) call already bounds
+        // worst case to 30s -- but releasing promptly here is free and avoids relying on
+        // the timeout as the only backstop.
+        try {
+            usqueDozeWakeLock?.let { if (it.isHeld) it.release() }
+        } catch (_: Exception) {}
+        usqueDozeWakeLock = null
         // ... rest of existing onDestroy code unchanged ...
         if (persistentState.firewallBubbleEnabled) {
             BubbleHelper.dismissBubble(this)
