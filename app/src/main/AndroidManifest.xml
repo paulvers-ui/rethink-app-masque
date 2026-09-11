@@ -9,6 +9,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Held only briefly (bounded, always with a safety timeout) by the usque
+         Doze watchdog in BraveVPNService, to guarantee the device stays awake
+         long enough for the post-alarm liveness check + restart to actually
+         complete. Without this, a BroadcastReceiver's async follow-up work can
+         get starved mid-check if the device re-enters Doze the instant
+         onReceive() returns; observed in production as usque silently
+         staying dead for hours after an overnight Doze cycle. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- https://developer.android.com/about/versions/13/behavior-changes-all#notification-permission -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
