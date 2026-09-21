@@ -75,10 +75,17 @@ object UsqueManager {
     const val DEFAULT_SOCKS_ARGS_TEMPLATE =
         "socks -b $SOCKS_HOST -p $SOCKS_PORT -c {config}"
 
-    /** Returns the default arg string (with {sni} appended when SNI is set). */
+    // How usque resolves SOCKS target names: DNS-over-HTTPS to Cloudflare by IP, DNSSEC
+    // checked (usque >= v0.1.0). --doh and --dnssec validate are usque's defaults anyway;
+    // they are spelled out so the args screen shows them and they can be edited there.
+    private const val DEFAULT_SOCKS_DNS_ARGS =
+        "--doh --dnssec validate --doh-url https://1.1.1.1/dns-query --doh-url https://1.0.0.1/dns-query"
+
+    /** Returns the default arg string: {sni} appended when SNI is set, then the DNS flags. */
     fun defaultSocksArgsTemplate(sni: String): String {
         val base = DEFAULT_SOCKS_ARGS_TEMPLATE
-        return if (sni.isNotBlank()) "$base -s {sni}" else base
+        val withSni = if (sni.isNotBlank()) "$base -s {sni}" else base
+        return "$withSni $DEFAULT_SOCKS_DNS_ARGS"
     }
 
     /** Returns the args string currently shown in the UI editor: the user
