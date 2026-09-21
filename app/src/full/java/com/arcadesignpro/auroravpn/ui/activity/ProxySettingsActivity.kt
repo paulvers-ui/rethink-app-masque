@@ -544,6 +544,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
                 VpnController.cancelWarpAutoDisable()
             }
         }
+        updateWarpAutoDisableStatus()
 
         // Update switch state without triggering the listener
         b.settingsActivityWarpSwitch.setOnCheckedChangeListener(null)
@@ -589,6 +590,9 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
                         // Previously this was reversed, causing the observer to read
                         // usqueEnabled=false and flip the switch back to OFF (double-tap bug).
                         persistentState.usqueEnabled = true
+                        // Fresh WARP session: the auto-disable dot goes back to white
+                        // ("not triggered yet") until this session's own timer fires.
+                        persistentState.warpAutoDisableTriggeredAtMs = 0L
                         VpnController.scheduleWarpAutoDisableIfEnabled()
                         val warpProxy = ProxyEndpoint(
                             WARP_PROXY_ID,
@@ -644,6 +648,29 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
                 updateWarpUi()
             }
         }
+    }
+
+    /**
+     * Status dot next to the auto-disable switch: white + "Not triggered yet" until the 11h
+     * timer actually turns WARP off, then red + "11-hour timer triggered". Stays red until
+     * WARP is switched back on (see PersistentState.warpAutoDisableTriggeredAtMs).
+     */
+    private fun updateWarpAutoDisableStatus() {
+        val triggered = persistentState.warpAutoDisableTriggeredAtMs > 0L
+        b.settingsActivityWarpAutoDisableStatusDot.setImageResource(
+            if (triggered) R.drawable.dot_red else R.drawable.dot_white
+        )
+        b.settingsActivityWarpAutoDisableStatusText.text =
+            getString(
+                if (triggered) R.string.warp_auto_disable_status_triggered
+                else R.string.warp_auto_disable_status_not_triggered
+            )
+        b.settingsActivityWarpAutoDisableStatusText.setTextColor(
+            UIUtils.fetchColor(
+                this,
+                if (triggered) R.attr.chipTextNegative else R.attr.primaryTextColor
+            )
+        )
     }
 
         /**
