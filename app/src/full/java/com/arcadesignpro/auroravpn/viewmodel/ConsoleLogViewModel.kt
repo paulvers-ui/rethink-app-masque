@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
 
 class ConsoleLogViewModel(private val dao: ConsoleLogDAO) : ViewModel() {
     private var filter: MutableLiveData<String> = MutableLiveData()
-    private var logLevel: Long = Logger.LoggerLevel.ERROR.id
+    private var logLevel: Long = Logger.uiLogLevel
     init {
         filter.postValue("")
     }

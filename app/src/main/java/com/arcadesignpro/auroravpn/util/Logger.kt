@@ -40,7 +40,29 @@ object Logger : KoinComponent {
             _logLevel = value
         }
 
-    var uiLogLevel = LoggerLevel.ERROR.id
+    // Level shown in Logs > App logs. Defaults to VERBOSE and is persisted, so the level
+    // picked there survives restarts instead of falling back to ERROR on every launch.
+    @Volatile private var _uiLogLevel: Long? = null
+    var uiLogLevel: Long
+        get() {
+            _uiLogLevel?.let { return it }
+            val level = try {
+                persistentState.consoleLogLevel
+            } catch (_: Exception) {
+                // Fallback for tests or when Koin is not initialized
+                LoggerLevel.VERBOSE.id
+            }
+            _uiLogLevel = level
+            return level
+        }
+        set(value) {
+            _uiLogLevel = value
+            try {
+                persistentState.consoleLogLevel = value
+            } catch (_: Exception) {
+                // Koin not initialized (tests): keep the in-memory value only
+            }
+        }
 
     const val LOG_TAG_APP_UPDATE = "NonStoreAppUpdater"
     const val LOG_TAG_VPN = "RethinkDnsVpn"
