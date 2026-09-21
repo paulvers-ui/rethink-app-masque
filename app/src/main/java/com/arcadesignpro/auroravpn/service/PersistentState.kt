@@ -730,8 +730,8 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     var warpAutoDisableTriggeredAtMs by longPref("pref_warp_auto_disable_triggered_at_ms").withDefault<Long>(0L)
 
       // SNI override sent in the QUIC ClientHello of the WARP MASQUE tunnel.
-      // Defaults to "cloudflare.com". Capped at 20 chars in the UI.
-      var warpSpoofedSni by stringPref("pref_warp_spoofed_sni").withDefault<String>("cloudflare.com")
+      // Defaults to UsqueManager.DEFAULT_WARP_SNI. Capped at 20 chars in the UI.
+      var warpSpoofedSni by stringPref("pref_warp_spoofed_sni").withDefault<String>(UsqueManager.DEFAULT_WARP_SNI)
 
       // User-editable override for the full argument string passed to
       // libusque.so when starting the SOCKS proxy. Empty string means

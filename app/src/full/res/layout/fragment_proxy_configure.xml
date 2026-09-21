@@ -300,7 +300,7 @@
 
         </LinearLayout>
 
-        <!-- SNI override editor: max 20 chars, default cloudflare.com -->
+        <!-- SNI override editor: max 20 chars, default google.com (UsqueManager.DEFAULT_WARP_SNI) -->
           <LinearLayout
               android:layout_width="match_parent"
               android:layout_height="wrap_content"
@@ -321,7 +321,7 @@
                       android:inputType="textUri"
                       android:maxLength="20"
                       android:singleLine="true"
-                      android:text="cloudflare.com" />
+                      android:text="google.com" />
               </com.google.android.material.textfield.TextInputLayout>
 
               <com.google.android.material.button.MaterialButton

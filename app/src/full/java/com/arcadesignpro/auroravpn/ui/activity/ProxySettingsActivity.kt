@@ -267,7 +267,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
 
         b.settingsActivityWarpSniSaveBtn.setOnClickListener {
             val raw = b.settingsActivityWarpSniEdit.text?.toString()?.trim().orEmpty()
-            val value = if (raw.isEmpty()) "cloudflare.com" else raw.take(20)
+            val value = if (raw.isEmpty()) UsqueManager.DEFAULT_WARP_SNI else raw.take(20)
             val previous = persistentState.warpSpoofedSni
             persistentState.warpSpoofedSni = value
             b.settingsActivityWarpSniEdit.setText(value)
@@ -281,7 +281,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
         }
 
         b.settingsActivityWarpSniResetBtn.setOnClickListener {
-            val default = "cloudflare.com"
+            val default = UsqueManager.DEFAULT_WARP_SNI
             val previous = persistentState.warpSpoofedSni
             persistentState.warpSpoofedSni = default
             b.settingsActivityWarpSniEdit.setText(default)
