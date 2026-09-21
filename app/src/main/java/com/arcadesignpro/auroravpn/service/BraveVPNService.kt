@@ -293,6 +293,21 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         persistentState.warpAutoDisableAtMs = 0L
     }
 
+    // Shared by both auto-disable paths in onCreate() (the alarm receiver and the restart
+    // catch-up): turns WARP off and, only if it was actually running, records the trigger
+    // time behind the red "triggered" dot in ProxySettingsActivity -- a stray alarm firing
+    // with WARP already off must not flip it red. Lives outside onCreate() so these
+    // branches don't count toward its complexity (detekt CyclomaticComplexMethod).
+    private fun disableWarpForAutoDisableTimer() {
+        val wasOn = persistentState.usqueEnabled
+        UsqueManager.stopSocksProxy()
+        appConfig.removeProxy(AppConfig.ProxyType.SOCKS5, AppConfig.ProxyProvider.CUSTOM)
+        persistentState.usqueEnabled = false
+        if (wasOn) {
+            persistentState.warpAutoDisableTriggeredAtMs = System.currentTimeMillis()
+        }
+    }
+
     /**
      * Sprint 21: Retry-with-backoff wrapper for starting the usque SOCKS5 proxy.
      *
@@ -1921,19 +1936,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
 
                     io("warpAutoDisable") {
                         try {
-                            // Read before disabling: the settings-screen dot only turns red
-                            // when the timer really cut a running WARP off, not when a stray
-                            // alarm fires with WARP already off.
-                            val wasOn = persistentState.usqueEnabled
-                            UsqueManager.stopSocksProxy()
-                            appConfig.removeProxy(
-                                AppConfig.ProxyType.SOCKS5,
-                                AppConfig.ProxyProvider.CUSTOM
-                            )
-                            persistentState.usqueEnabled = false
-                            if (wasOn) {
-                                persistentState.warpAutoDisableTriggeredAtMs = System.currentTimeMillis()
-                            }
+                            disableWarpForAutoDisableTimer()
                             Logger.i(LOG_TAG_VPN, "warp: auto-disabled after 11h safety timer")
                         } finally {
                             // No reschedule here, unlike the doze watchdog -- this is a
@@ -1979,15 +1982,8 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
                     // cycle to notice.
                     Logger.w(LOG_TAG_VPN, "warp: auto-disable deadline passed while process was down, disabling now")
                     io("warpAutoDisableCatchUp") {
-                        val wasOn = persistentState.usqueEnabled
-                        UsqueManager.stopSocksProxy()
-                        appConfig.removeProxy(AppConfig.ProxyType.SOCKS5, AppConfig.ProxyProvider.CUSTOM)
-                        persistentState.usqueEnabled = false
+                        disableWarpForAutoDisableTimer()
                         persistentState.warpAutoDisableAtMs = 0L
-                        // Same "triggered" marker as the alarm path in the receiver above.
-                        if (wasOn) {
-                            persistentState.warpAutoDisableTriggeredAtMs = System.currentTimeMillis()
-                        }
                     }
                 }
                 else -> {
