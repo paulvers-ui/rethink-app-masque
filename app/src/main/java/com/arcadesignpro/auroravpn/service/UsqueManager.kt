@@ -75,17 +75,23 @@ object UsqueManager {
     const val DEFAULT_SOCKS_ARGS_TEMPLATE =
         "socks -b $SOCKS_HOST -p $SOCKS_PORT -c {config}"
 
+    // Fixed 1350-byte QUIC packets, the size Cloudflare's own WARP client uses. With usque's
+    // default (start at 1280 and grow by path MTU discovery) a full 1280-byte tunnel packet
+    // does not fit until discovery succeeds, and usque drops it without logging: TLS
+    // handshakes through WARP stalled about a second after every connect.
+    private const val DEFAULT_SOCKS_QUIC_ARGS = "-i 1350"
+
     // How usque resolves SOCKS target names: DNS-over-HTTPS to Cloudflare by IP, DNSSEC
     // checked (usque >= v0.1.0). --doh and --dnssec validate are usque's defaults anyway;
     // they are spelled out so the args screen shows them and they can be edited there.
     private const val DEFAULT_SOCKS_DNS_ARGS =
         "--doh --dnssec validate --doh-url https://1.1.1.1/dns-query --doh-url https://1.0.0.1/dns-query"
 
-    /** Returns the default arg string: {sni} appended when SNI is set, then the DNS flags. */
+    /** Returns the default arg string: {sni} appended when SNI is set, then the QUIC and DNS flags. */
     fun defaultSocksArgsTemplate(sni: String): String {
         val base = DEFAULT_SOCKS_ARGS_TEMPLATE
         val withSni = if (sni.isNotBlank()) "$base -s {sni}" else base
-        return "$withSni $DEFAULT_SOCKS_DNS_ARGS"
+        return "$withSni $DEFAULT_SOCKS_QUIC_ARGS $DEFAULT_SOCKS_DNS_ARGS"
     }
 
     /** Returns the args string currently shown in the UI editor: the user
