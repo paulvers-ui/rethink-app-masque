@@ -30,10 +30,21 @@ object UsqueManager {
     }
 
     // ── debug log file ────────────────────────────────────────────────────────
+    // usque's own output streams in here too (see pumpOutput), so the file is capped: past
+    // DEBUG_LOG_MAX_BYTES the older half is dropped. Synchronized because the stdout/stderr
+    // pumps append concurrently with everything else.
+    private const val DEBUG_LOG_MAX_BYTES = 2L * 1024 * 1024
+
+    @Synchronized
     private fun dlog(ctx: Context, msg: String) {
         Log.d("WARP_DEBUG", msg)
         try {
-            File(ctx.filesDir, "warp_debug.txt").appendText("${System.currentTimeMillis()} $msg\n")
+            val f = File(ctx.filesDir, "warp_debug.txt")
+            if (f.length() > DEBUG_LOG_MAX_BYTES) {
+                val text = f.readText()
+                f.writeText(text.substring(text.length / 2))
+            }
+            f.appendText("${System.currentTimeMillis()} $msg\n")
         } catch (_: Exception) {}
     }
 
@@ -411,15 +422,9 @@ object UsqueManager {
             process = proc
 
             // Drain stdout and stderr in background threads so the process doesn't block on a
-            // full pipe buffer. Capture output for diagnostics if the process exits early.
-            val outputWriter = StringWriter()
-            val errorWriter = StringWriter()
-            val outThread = Thread {
-                try { outputWriter.write(proc.inputStream.bufferedReader().readText()) } catch (_: Exception) {}
-            }.also { it.isDaemon = true; it.start() }
-            val errThread = Thread {
-                try { errorWriter.write(proc.errorStream.bufferedReader().readText()) } catch (_: Exception) {}
-            }.also { it.isDaemon = true; it.start() }
+            // full pipe buffer, logging each line as it arrives (see pumpOutput).
+            val outThread = pumpOutput(ctx, proc.inputStream, "stdout")
+            val errThread = pumpOutput(ctx, proc.errorStream, "stderr")
 
             // Wait for the port to actually be listening (up to 5s) instead of a blind sleep.
             // This prevents a race on slow devices where 1500ms wasn't enough.
@@ -451,13 +456,11 @@ object UsqueManager {
                 }.apply { isDaemon = true; name = "usque-death-watcher" }.start()
             } else {
                 portConfirmedAlive = false
-                // Process already exited — collect its output before reporting failure.
+                // Process already exited — let the pumps flush its last lines before reporting.
                 outThread.join(2000)
                 errThread.join(2000)
                 val exit = try { proc.exitValue() } catch (_: Exception) { -1 }
                 dlog(ctx, "startSocksProxy: exit=$exit")
-                dlog(ctx, "startSocksProxy: stdout=${outputWriter}")
-                dlog(ctx, "startSocksProxy: stderr=${errorWriter}")
                 process = null
             }
 
@@ -469,6 +472,27 @@ object UsqueManager {
             false
         }
     }
+
+    /**
+     * Streams one of usque's output pipes into warp_debug.txt and the app log (Logs > App logs),
+     * line by line, for as long as the process runs. The output used to be buffered whole in
+     * memory for the life of the process and written out only if usque died during startup, so
+     * a tunnel that never came up -- process alive, port open, nothing getting through -- left
+     * no trace at all.
+     */
+    private fun pumpOutput(ctx: Context, stream: java.io.InputStream, label: String): Thread =
+        Thread {
+            try {
+                stream.bufferedReader().forEachLine { line ->
+                    dlog(ctx, "usque $label: $line")
+                    Logger.i(Logger.LOG_TAG_PROXY, "usque: $line")
+                }
+            } catch (_: Exception) {}
+        }.apply {
+            isDaemon = true
+            name = "usque-$label"
+            start()
+        }
 
     /** Wait until port [port] stops accepting connections or [timeoutMs] elapses. */
     private fun waitForPortRelease(ctx: Context, port: Int, timeoutMs: Long): Boolean {

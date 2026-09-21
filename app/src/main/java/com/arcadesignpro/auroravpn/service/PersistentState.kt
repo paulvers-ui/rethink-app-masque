@@ -316,6 +316,9 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     // go logger level, default 3 -> info
     var goLoggerLevel by longPref("go_logger_level").withDefault<Long>(3)
 
+    // Logs > App logs level (Logger.uiLogLevel), default 1 -> verbose
+    var consoleLogLevel by longPref("console_log_level").withDefault<Long>(1)
+
     // firewall bubble feature toggle
     var firewallBubbleEnabled by booleanPref("pref_firewall_bubble_enabled").withDefault<Boolean>(false)
 
