@@ -12,6 +12,10 @@ import kotlinx.coroutines.withContext
 object UsqueManager {
     const val SOCKS_HOST = "127.0.0.1"
     const val SOCKS_PORT = 40000
+    // Default SNI in the WARP tunnel's QUIC ClientHello. Not a Cloudflare name: on the
+    // networks this app targets, a Cloudflare SNI gets the tunnel throttled to a trickle
+    // (handshakes pass, downloads stall) while google.com passes.
+    const val DEFAULT_WARP_SNI = "google.com"
     private const val BINARY_NAME = "libusque.so"
     @Volatile private var process: Process? = null
     // Prevents concurrent startSocksProxy calls from killing each other (restart storm).
