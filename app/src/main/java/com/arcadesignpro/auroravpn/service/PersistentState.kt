@@ -720,6 +720,11 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     // Stored so the UI can show "auto-disables at HH:mm" without re-deriving it, and so a
     // process restart can tell whether a still-pending alarm needs to be rescheduled.
     var warpAutoDisableAtMs by longPref("pref_warp_auto_disable_at_ms").withDefault<Long>(0L)
+    // Epoch ms at which the auto-disable timer actually turned a running WARP off, or 0L if
+    // it has not done so since WARP was last switched on. Drives the red ("triggered") /
+    // white ("not triggered yet") dot next to the auto-disable switch in ProxySettingsActivity:
+    // set by BraveVPNService when the timer fires, cleared when WARP is switched back on.
+    var warpAutoDisableTriggeredAtMs by longPref("pref_warp_auto_disable_triggered_at_ms").withDefault<Long>(0L)
 
       // SNI override sent in the QUIC ClientHello of the WARP MASQUE tunnel.
       // Defaults to "cloudflare.com". Capped at 20 chars in the UI.
