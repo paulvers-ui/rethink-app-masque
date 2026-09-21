@@ -70,21 +70,15 @@ object UsqueManager {
     // substituted at process-start time:
     //   {config} → absolute path of the on-disk config.json
     //   {sni}    → current warpSpoofedSni value (may be empty)
-    // Installs with a saved override keep using it unchanged.
+    // The default template mirrors the historical hard-coded arg list so
+    // existing installs behave identically until the user opts in.
     const val DEFAULT_SOCKS_ARGS_TEMPLATE =
         "socks -b $SOCKS_HOST -p $SOCKS_PORT -c {config}"
 
-    // MASQUE over HTTP/2 (TCP 443) instead of HTTP/3 (QUIC, UDP 443). QUIC is blocked or
-    // throttled on many mobile networks, and then the SOCKS port still opens but nothing
-    // gets through: a fresh install (no saved override, so no --http2) lost all
-    // connectivity with WARP on, on a device where the same args plus --http2 worked.
-    private const val DEFAULT_SOCKS_TRANSPORT_ARG = "--http2"
-
-    /** Returns the default arg string: {sni} appended when SNI is set, then --http2. */
+    /** Returns the default arg string (with {sni} appended when SNI is set). */
     fun defaultSocksArgsTemplate(sni: String): String {
         val base = DEFAULT_SOCKS_ARGS_TEMPLATE
-        val withSni = if (sni.isNotBlank()) "$base -s {sni}" else base
-        return "$withSni $DEFAULT_SOCKS_TRANSPORT_ARG"
+        return if (sni.isNotBlank()) "$base -s {sni}" else base
     }
 
     /** Returns the args string currently shown in the UI editor: the user
