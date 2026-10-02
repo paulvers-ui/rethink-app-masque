@@ -1,0 +1,113 @@
+# Builds libusque.so (android/arm64) from paulvers-ui/usque (default: main,
+# which carries the `chain` subcommand the Chain mode UI needs since usque#6)
+# and commits it into app/src/main/jniLibs/arm64-v8a/. The previous .so is kept
+# as libusque.so.prev; libusque.so.bak is never touched.
+#
+# NOTE: GitHub only lists a workflow_dispatch workflow once the file is on the
+# default branch (main). Then: Actions -> "Chain libusque.so" -> Run workflow,
+# pick the app branch to commit to. It commits straight to that branch, so the
+# next app build picks up the new binary automatically.
+name: Chain libusque.so (build + commit arm64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      usque_ref:
+        description: usque branch/tag/SHA to build
+        required: false
+        default: main
+      commit_binary:
+        description: Commit the .so into jniLibs (false = artifact only)
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: write   # needed to commit the binary back
+
+env:
+  JNI_DIR: app/src/main/jniLibs/arm64-v8a
+  USQUE_REPO: paulvers-ui/usque
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout app (this repo)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout usque @ ${{ github.event.inputs.usque_ref || 'main' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.USQUE_REPO }}
+          ref: ${{ github.event.inputs.usque_ref || 'main' }}
+          path: _usque
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: _usque/go.mod
+
+      - name: Sanity — chain subcommand present in usque
+        working-directory: _usque
+        run: |
+          test -f cmd/chain.go || { echo "::error::usque ref has no cmd/chain.go — pick a ref that includes the chain command (main since usque#6)."; exit 1; }
+
+      - name: Build libusque.so (android/arm64)
+        working-directory: _usque
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: "0"
+        run: |
+          set -eux
+          go build -trimpath -ldflags="-s -w" -o /tmp/libusque.so .
+          ls -la /tmp/libusque.so
+
+      - name: Verify it is an AArch64 ELF with the chain command
+        run: |
+          set -e
+          magic=$(od -An -tx1 -N4 /tmp/libusque.so | tr -d ' \n')
+          test "$magic" = "7f454c46" || { echo "::error::not an ELF"; exit 1; }
+          mach=$(od -An -tx1 -j18 -N2 /tmp/libusque.so | tr -d ' \n')
+          test "$mach" = "b700" || { echo "::error::e_machine=$mach, expected b700 (AArch64)"; exit 1; }
+          grep -q "SOCKS5 proxy over WARP1" /tmp/libusque.so || { echo "::error::chain subcommand string missing from binary"; exit 1; }
+          echo "AArch64 + chain OK"
+
+      - name: Install into jniLibs (backup current .so first)
+        if: ${{ github.event.inputs.commit_binary != 'false' }}
+        run: |
+          set -eux
+          mkdir -p "$JNI_DIR"
+          if [ -f "$JNI_DIR/libusque.so" ]; then
+            cp -f "$JNI_DIR/libusque.so" "$JNI_DIR/libusque.so.prev"
+          fi
+          cp -f /tmp/libusque.so "$JNI_DIR/libusque.so"
+          sha256sum "$JNI_DIR/libusque.so" | cut -d' ' -f1 > "$JNI_DIR/libusque.so.working.sha256"
+          ls -la "$JNI_DIR"
+
+      - name: Commit the new binary
+        if: ${{ github.event.inputs.commit_binary != 'false' }}
+        run: |
+          set -eux
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$JNI_DIR/libusque.so" "$JNI_DIR/libusque.so.prev" "$JNI_DIR/libusque.so.working.sha256"
+          if git diff --cached --quiet; then
+            echo "::notice::binary unchanged — nothing to commit"
+          else
+            SRC_SHA=$(cd _usque && git rev-parse --short HEAD)
+            git commit -m "chore(chain): libusque.so arm64 from usque@${SRC_SHA} (with chain subcommand)"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+      - name: Upload artifact (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: libusque-arm64-chain-${{ github.sha }}
+          path: /tmp/libusque.so
+          retention-days: 30
+          if-no-files-found: error

@@ -852,4 +852,54 @@
     </style>
 
 
+<style name="chainSectionHeader">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">20dp</item>
+        <item name="android:textColor">?attr/accentGood</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="chainRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="chainDot">
+        <item name="android:layout_width">10dp</item>
+        <item name="android:layout_height">10dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+    </style>
+
+    <style name="chainStatusLabel">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textColor">?attr/primaryTextColor</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="chainEditor">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:background">?attr/background</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:gravity">top|start</item>
+        <item name="android:padding">8dp</item>
+        <item name="android:textColor">?attr/primaryTextColor</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="chainButtonRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:gravity">end</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
 </resources>

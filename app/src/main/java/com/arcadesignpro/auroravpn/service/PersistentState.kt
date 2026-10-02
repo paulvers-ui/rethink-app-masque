@@ -712,6 +712,11 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     var customModeOrIpChanged by booleanPref("custom_lan_mode_ip_changed").withDefault<Boolean>(false)
     var usqueEnabled by booleanPref("pref_usque_enabled").withDefault<Boolean>(false)
 
+    // Chain mode (WARP1 -> wg0 -> WARP2). Independent of usqueEnabled: the plain
+    // single-hop WARP and the chain are mutually exclusive at use time but each
+    // remembers its own last state. See ChainManager.
+    var chainEnabled by booleanPref("pref_chain_enabled").withDefault<Boolean>(false)
+
     // Optional safety timer: when enabled, WARP automatically turns itself off a fixed
     // number of hours after being switched on, without needing anyone to be present to
     // do it manually. Off by default -- this must never silently change behavior for an
