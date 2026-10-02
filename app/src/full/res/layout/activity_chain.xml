@@ -60,12 +60,21 @@
                 android:enabled="false" />
         </LinearLayout>
 
-        <!-- STEP 1: WARP1 -->
+        <!-- STEP 1: WARP1 — status + register + its own switch -->
         <TextView style="@style/chainSectionHeader" android:text="@string/chain_step1_title" />
 
         <LinearLayout style="@style/chainRow">
             <ImageView android:id="@+id/warp1Dot" style="@style/chainDot" android:src="@drawable/dot_white" />
             <TextView android:id="@+id/warp1Status" style="@style/chainStatusLabel" android:text="@string/chain_not_registered" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/warp1Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:enabled="false" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/chainButtonRow">
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/warp1RegisterBtn"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
@@ -74,12 +83,18 @@
                 android:text="@string/chain_register1_btn" />
         </LinearLayout>
 
-        <!-- STEP 2: wg0.conf -->
+        <!-- STEP 2: wg0.conf — status + its own switch -->
         <TextView style="@style/chainSectionHeader" android:text="@string/chain_step2_title" />
 
         <LinearLayout style="@style/chainRow">
             <ImageView android:id="@+id/wgDot" style="@style/chainDot" android:src="@drawable/dot_white" />
             <TextView android:id="@+id/wgStatus" style="@style/chainStatusLabel" android:text="@string/chain_wg_missing" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/wgSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:enabled="false" />
         </LinearLayout>
 
         <EditText
@@ -89,6 +104,12 @@
             android:minLines="6" />
 
         <LinearLayout style="@style/chainButtonRow">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/wgImportBtn"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/chain_wg_import" />
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/wgReloadBtn"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
@@ -103,12 +124,21 @@
                 android:text="@string/chain_wg_save" />
         </LinearLayout>
 
-        <!-- STEP 3: WARP2 -->
+        <!-- STEP 3: WARP2 — status + register + its own switch -->
         <TextView style="@style/chainSectionHeader" android:text="@string/chain_step3_title" />
 
         <LinearLayout style="@style/chainRow">
             <ImageView android:id="@+id/warp2Dot" style="@style/chainDot" android:src="@drawable/dot_white" />
             <TextView android:id="@+id/warp2Status" style="@style/chainStatusLabel" android:text="@string/chain_not_registered" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/warp2Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:enabled="false" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/chainButtonRow">
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/warp2RegisterBtn"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"

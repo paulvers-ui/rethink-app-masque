@@ -2027,6 +2027,9 @@
     <string name="chain_not_registered">Not registered</string>
     <string name="chain_wg_hint">Paste your wg0.conf (plain WireGuard; AmneziaWG is not supported)</string>
     <string name="chain_wg_save">Save wg0.conf</string>
+    <string name="chain_wg_import">Import .conf</string>
+    <string name="chain_wg_imported">wg0.conf imported</string>
+    <string name="chain_wg_import_failed">Could not read that file</string>
     <string name="chain_wg_loaded">wg0.conf loaded</string>
     <string name="chain_wg_missing">No wg0.conf yet</string>
     <string name="chain_wg_invalid">Invalid wg0.conf — needs [Interface] PrivateKey and [Peer] Endpoint</string>
@@ -2041,6 +2044,11 @@
     <string name="chain_status_connected">Connected</string>
     <string name="chain_status_ready">Ready — not connected</string>
     <string name="chain_status_incomplete">Setup incomplete</string>
+    <string name="chain_hop_on">On</string>
+    <string name="chain_hop_off">Off</string>
+    <string name="chain_need_register_first">Register this hop first</string>
+    <string name="chain_need_wg_first">Load wg0.conf first</string>
+    <string name="chain_switch_hint">Flip all three on, then Connect</string>
     <string name="chain_log_title">Verbose log (chain_debug.txt)</string>
     <string name="chain_log_refresh">Refresh</string>
     <string name="chain_log_clear">Clear</string>
