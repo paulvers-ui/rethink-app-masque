@@ -2010,4 +2010,38 @@
     <string name="warp_auto_disable_desc">Turns WARP off on its own if it has been running continuously for 11 hours straight.</string>
     <string name="warp_auto_disable_status_not_triggered">Not triggered yet</string>
     <string name="warp_auto_disable_status_triggered">11-hour timer triggered</string>
-</resources>
+
+    <!-- Chain mode: WARP1 -> wg0 -> WARP2 -->
+    <string name="chain_title">Chain mode (WARP → WG → WARP)</string>
+    <string name="chain_desc">Nest three tunnels in one process: WARP1 hides you from your ISP, a WireGuard hop gives a new location, and WARP2 washes it into a Cloudflare IP. Set up each step, then connect.</string>
+    <string name="chain_step1_title">1. Register WARP1 (ISP-facing)</string>
+    <string name="chain_step2_title">2. WireGuard hop (wg0.conf)</string>
+    <string name="chain_step3_title">3. Register WARP2 (exit)</string>
+    <string name="chain_step4_title">4. Connect the chain</string>
+    <string name="chain_register1_btn">Register WARP1</string>
+    <string name="chain_register2_btn">Register WARP2</string>
+    <string name="chain_reregister_btn">Re-register</string>
+    <string name="chain_registering">Registering…</string>
+    <string name="chain_registered_ok">Registered</string>
+    <string name="chain_register_failed">Registration failed — see log (Cloudflare may rate-limit a 2nd registration)</string>
+    <string name="chain_not_registered">Not registered</string>
+    <string name="chain_wg_hint">Paste your wg0.conf (plain WireGuard; AmneziaWG is not supported)</string>
+    <string name="chain_wg_save">Save wg0.conf</string>
+    <string name="chain_wg_loaded">wg0.conf loaded</string>
+    <string name="chain_wg_missing">No wg0.conf yet</string>
+    <string name="chain_wg_invalid">Invalid wg0.conf — needs [Interface] PrivateKey and [Peer] Endpoint</string>
+    <string name="chain_config_reload">Reload</string>
+    <string name="chain_config_save">Save</string>
+    <string name="chain_connect">Connect chain</string>
+    <string name="chain_disconnect">Disconnect</string>
+    <string name="chain_connecting">Connecting the three hops…</string>
+    <string name="chain_connected">Chain connected (apps → WARP2 → wg0 → WARP1)</string>
+    <string name="chain_connect_failed">Chain failed to start — see log</string>
+    <string name="chain_not_ready">Finish steps 1–3 first</string>
+    <string name="chain_status_connected">Connected</string>
+    <string name="chain_status_ready">Ready — not connected</string>
+    <string name="chain_status_incomplete">Setup incomplete</string>
+    <string name="chain_log_title">Verbose log (chain_debug.txt)</string>
+    <string name="chain_log_refresh">Refresh</string>
+    <string name="chain_log_clear">Clear</string>
+    <string name="chain_log_share">Share</string></resources>

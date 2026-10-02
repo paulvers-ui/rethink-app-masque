@@ -262,6 +262,11 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
         // ===== WARP TUNNEL SECTION =====
         b.settingsActivityWarpRegisterBtn.setOnClickListener { showWarpRegistrationDialog() }
 
+        // Entry point to the nested WARP -> WG -> WARP chain setup/test screen.
+        b.settingsActivityOpenChainBtn.setOnClickListener {
+            startActivity(android.content.Intent(this, ChainSettingsActivity::class.java))
+        }
+
         // SNI editor: prefill, save, reset, and live-restart WARP if it's running.
         b.settingsActivityWarpSniEdit.setText(persistentState.warpSpoofedSni)
 

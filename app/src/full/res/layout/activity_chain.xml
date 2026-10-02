@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/chain_title"
+            android:textColor="?attr/primaryTextColor"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/chain_desc"
+            android:textColor="?attr/secondaryTextColor"
+            android:textSize="13sp" />
+
+        <!-- Overall status + master switch -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/chainStatusDot"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_marginEnd="8dp"
+                android:src="@drawable/dot_white" />
+
+            <TextView
+                android:id="@+id/chainStatusText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/chain_status_incomplete"
+                android:textColor="?attr/primaryTextColor"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/chainMasterSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:enabled="false" />
+        </LinearLayout>
+
+        <!-- STEP 1: WARP1 -->
+        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step1_title" />
+
+        <LinearLayout style="@style/chainRow">
+            <ImageView android:id="@+id/warp1Dot" style="@style/chainDot" android:src="@drawable/dot_white" />
+            <TextView android:id="@+id/warp1Status" style="@style/chainStatusLabel" android:text="@string/chain_not_registered" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/warp1RegisterBtn"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/chain_register1_btn" />
+        </LinearLayout>
+
+        <!-- STEP 2: wg0.conf -->
+        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step2_title" />
+
+        <LinearLayout style="@style/chainRow">
+            <ImageView android:id="@+id/wgDot" style="@style/chainDot" android:src="@drawable/dot_white" />
+            <TextView android:id="@+id/wgStatus" style="@style/chainStatusLabel" android:text="@string/chain_wg_missing" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/wgConfigEdit"
+            style="@style/chainEditor"
+            android:hint="@string/chain_wg_hint"
+            android:minLines="6" />
+
+        <LinearLayout style="@style/chainButtonRow">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/wgReloadBtn"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/chain_config_reload" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/wgSaveBtn"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/chain_wg_save" />
+        </LinearLayout>
+
+        <!-- STEP 3: WARP2 -->
+        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step3_title" />
+
+        <LinearLayout style="@style/chainRow">
+            <ImageView android:id="@+id/warp2Dot" style="@style/chainDot" android:src="@drawable/dot_white" />
+            <TextView android:id="@+id/warp2Status" style="@style/chainStatusLabel" android:text="@string/chain_not_registered" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/warp2RegisterBtn"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/chain_register2_btn" />
+        </LinearLayout>
+
+        <!-- STEP 4: Connect -->
+        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step4_title" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/chainConnectBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:enabled="false"
+            android:text="@string/chain_connect" />
+
+        <!-- Verbose log -->
+        <TextView style="@style/chainSectionHeader" android:text="@string/chain_log_title" />
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:layout_marginTop="4dp"
+            android:background="?attr/background">
+
+            <TextView
+                android:id="@+id/chainLogView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:padding="8dp"
+                android:textColor="?attr/secondaryTextColor"
+                android:textIsSelectable="true"
+                android:textSize="11sp" />
+        </ScrollView>
+
+        <LinearLayout style="@style/chainButtonRow">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/chainLogRefreshBtn"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/chain_log_refresh" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/chainLogClearBtn"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/chain_log_clear" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/chainLogShareBtn"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/chain_log_share" />
+        </LinearLayout>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
