@@ -30,7 +30,13 @@ import kotlinx.coroutines.withContext
  * WARP2 and start the chain are independent steps the UI can run and test one
  * at a time.
  */
+// One flat object per step on purpose (see above), and every catch sits on a
+// process / file / socket boundary where any failure must degrade to "false"
+// instead of crashing the app — same trade-off UsqueManager makes.
+@Suppress("TooManyFunctions", "TooGenericExceptionCaught", "ReturnCount")
 object ChainManager {
+    private const val TAG = "CHAIN_DEBUG"
+
     const val SOCKS_HOST = "127.0.0.1"
 
     // Distinct from UsqueManager.SOCKS_PORT (40000) so the chain and a stray
@@ -41,6 +47,23 @@ object ChainManager {
     const val WARP1_CONFIG = "config.json"
     const val EXIT_CONFIG = "config_exit.json"
     const val WG_CONFIG = "wg0.conf"
+
+    // Timeouts (ms). The chain brings up three tunnels in series, so it gets a
+    // longer start window than the single-hop path.
+    private const val CHAIN_START_TIMEOUT_MS = 15_000L
+    private const val PORT_RELEASE_TIMEOUT_MS = 2_000L
+    private const val PORT_RELEASE_POLL_MS = 100L
+    private const val PORT_PROBE_POLL_MS = 250L
+    private const val PORT_CONNECT_TIMEOUT_MS = 300
+    private const val REGISTER_OUTPUT_JOIN_MS = 3_000L
+    private const val OUTPUT_DRAIN_JOIN_MS = 2_000L
+    private const val LIVENESS_CONNECT_TIMEOUT_MS = 3_000
+    private const val LIVENESS_READ_TIMEOUT_MS = 8_000
+
+    // SOCKS5 liveness probe: CONNECT to 1.1.1.1:80.
+    private const val SOCKS5_VERSION: Byte = 5
+    private const val PROBE_PORT_LOW_BYTE: Byte = 80
+    private const val SOCKS5_REPLY_LEN = 10
 
     @Volatile private var process: Process? = null
     private val startLock = kotlinx.coroutines.sync.Mutex()
@@ -56,7 +79,7 @@ object ChainManager {
 
     @Synchronized
     private fun dlog(ctx: Context, msg: String) {
-        Log.d("CHAIN_DEBUG", msg)
+        Log.d(TAG, msg)
         try {
             val f = File(ctx.filesDir, DEBUG_LOG_NAME)
             if (f.length() > DEBUG_LOG_MAX_BYTES) {
@@ -168,9 +191,13 @@ object ChainManager {
             val proc = pb.start()
 
             val out = StringWriter(); val errw = StringWriter()
-            val tout = Thread { try { out.write(proc.inputStream.bufferedReader().readText()) } catch (_: Exception) {} }.also { it.start() }
-            val terr = Thread { try { errw.write(proc.errorStream.bufferedReader().readText()) } catch (_: Exception) {} }.also { it.start() }
-            val exit = proc.waitFor(); tout.join(3000); terr.join(3000)
+            val tout = Thread {
+                try { out.write(proc.inputStream.bufferedReader().readText()) } catch (_: Exception) {}
+            }.also { it.start() }
+            val terr = Thread {
+                try { errw.write(proc.errorStream.bufferedReader().readText()) } catch (_: Exception) {}
+            }.also { it.start() }
+            val exit = proc.waitFor(); tout.join(REGISTER_OUTPUT_JOIN_MS); terr.join(REGISTER_OUTPUT_JOIN_MS)
 
             dlog(ctx, "register exit=$exit")
             dlog(ctx, "register stdout=$out")
@@ -195,6 +222,9 @@ object ChainManager {
         }
     }
 
+    // A linear start/attach/verify sequence kept in one place so the log reads
+    // top to bottom; mirrors UsqueManager.startSocksProxyLocked.
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "CognitiveComplexMethod")
     private fun startChainLocked(ctx: Context): Boolean {
         dlog(ctx, "startChain: >>>ENTRY<<<")
         val existing = process
@@ -205,7 +235,7 @@ object ChainManager {
         }
         if (process != null) {
             stopChain()
-            waitForPortRelease(ctx, 2000)
+            waitForPortRelease(ctx, PORT_RELEASE_TIMEOUT_MS)
         }
         if (isPortAlive()) {
             dlog(ctx, "startChain: port alive, no proc ref — reattach to orphan")
@@ -253,7 +283,7 @@ object ChainManager {
             // The chain brings up three tunnels in series (WARP1, then wg0, then
             // the HTTP/2 exit), so give the port longer to appear than the
             // single-hop path does.
-            val portReady = probePort(ctx, 15000)
+            val portReady = probePort(ctx, CHAIN_START_TIMEOUT_MS)
             val procAlive = proc.isAlive
             dlog(ctx, "startChain: proc.isAlive=$procAlive portReady=$portReady")
 
@@ -265,14 +295,14 @@ object ChainManager {
                         captured.waitFor()
                         if (process === captured && portConfirmedAlive) {
                             portConfirmedAlive = false
-                            Log.w("CHAIN_DEBUG", "chain process died unexpectedly — firing restart callback")
+                            Log.w(TAG, "chain process died unexpectedly — firing restart callback")
                             deathCallback?.invoke()
                         }
                     } catch (_: Exception) {}
                 }.apply { isDaemon = true; name = "chain-death-watcher" }.start()
             } else {
                 portConfirmedAlive = false
-                outThread.join(2000); errThread.join(2000)
+                outThread.join(OUTPUT_DRAIN_JOIN_MS); errThread.join(OUTPUT_DRAIN_JOIN_MS)
                 val code = try { proc.exitValue() } catch (_: Exception) { -1 }
                 dlog(ctx, "startChain: exit=$code")
                 process = null
@@ -299,18 +329,18 @@ object ChainManager {
 
     fun stopChain() {
         val p = process
-        Log.d("CHAIN_DEBUG", "stopChain: isAlive=${p?.isAlive}")
+        Log.d(TAG, "stopChain: isAlive=${p?.isAlive}")
         portConfirmedAlive = false
         process = null
         if (p == null) return
         try {
             p.destroy()
             if (!p.waitFor(STOP_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                Log.w("CHAIN_DEBUG", "stopChain: SIGTERM ignored — SIGKILL")
+                Log.w(TAG, "stopChain: SIGTERM ignored — SIGKILL")
                 p.destroyForcibly(); p.waitFor(STOP_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
             }
         } catch (e: Exception) {
-            Log.w("CHAIN_DEBUG", "stopChain: kill failed ${e.message}")
+            Log.w(TAG, "stopChain: kill failed ${e.message}")
             try { p.destroyForcibly() } catch (_: Exception) {}
         }
     }
@@ -333,7 +363,7 @@ object ChainManager {
         android.net.TrafficStats.setThreadStatsTag(android.os.Process.myTid())
         try {
             java.net.Socket().use { s ->
-                s.connect(java.net.InetSocketAddress(SOCKS_HOST, SOCKS_PORT), 300); true
+                s.connect(java.net.InetSocketAddress(SOCKS_HOST, SOCKS_PORT), PORT_CONNECT_TIMEOUT_MS); true
             }
         } finally { android.net.TrafficStats.clearThreadStatsTag() }
     } catch (_: Exception) { false }
@@ -347,16 +377,18 @@ object ChainManager {
             android.net.TrafficStats.setThreadStatsTag(android.os.Process.myTid())
             try {
                 java.net.Socket().use { s ->
-                    s.soTimeout = 8000
-                    s.connect(java.net.InetSocketAddress(SOCKS_HOST, SOCKS_PORT), 3000)
+                    s.soTimeout = LIVENESS_READ_TIMEOUT_MS
+                    s.connect(java.net.InetSocketAddress(SOCKS_HOST, SOCKS_PORT), LIVENESS_CONNECT_TIMEOUT_MS)
                     val out = s.getOutputStream(); val inp = s.getInputStream()
-                    out.write(byteArrayOf(5, 1, 0))
+                    // greeting: VER, 1 method, NO AUTH
+                    out.write(byteArrayOf(SOCKS5_VERSION, 1, 0))
                     val greet = ByteArray(2)
-                    if (inp.read(greet) != 2 || greet[0] != 5.toByte() || greet[1] == 0xFF.toByte()) return@withContext false
-                    out.write(byteArrayOf(5, 1, 0, 1, 1, 1, 1, 1, 0, 80))
-                    val rep = ByteArray(10)
+                    if (inp.read(greet) != 2 || greet[0] != SOCKS5_VERSION || greet[1] == 0xFF.toByte()) return@withContext false
+                    // CONNECT, RSV, ATYP=IPv4, 1.1.1.1, port 0x0050 (80)
+                    out.write(byteArrayOf(SOCKS5_VERSION, 1, 0, 1, 1, 1, 1, 1, 0, PROBE_PORT_LOW_BYTE))
+                    val rep = ByteArray(SOCKS5_REPLY_LEN)
                     val n = inp.read(rep)
-                    n >= 2 && rep[0] == 5.toByte() && rep[1] == 0x00.toByte()
+                    n >= 2 && rep[0] == SOCKS5_VERSION && rep[1] == 0x00.toByte()
                 }
             } finally { android.net.TrafficStats.clearThreadStatsTag() }
         } catch (_: Exception) { false }
@@ -373,7 +405,7 @@ object ChainManager {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             if (!isPortAlive()) return true
-            Thread.sleep(100)
+            Thread.sleep(PORT_RELEASE_POLL_MS)
         }
         dlog(ctx, "waitForPortRelease: still bound after ${timeoutMs}ms")
         return false
@@ -386,11 +418,11 @@ object ChainManager {
             attempt++
             try {
                 java.net.Socket().use { s ->
-                    s.connect(java.net.InetSocketAddress(SOCKS_HOST, SOCKS_PORT), 300)
+                    s.connect(java.net.InetSocketAddress(SOCKS_HOST, SOCKS_PORT), PORT_CONNECT_TIMEOUT_MS)
                     dlog(ctx, "probePort: ready after $attempt attempts"); return true
                 }
             } catch (_: Exception) {}
-            Thread.sleep(250)
+            Thread.sleep(PORT_PROBE_POLL_MS)
         }
         dlog(ctx, "probePort: NOT ready after ${timeoutMs}ms / $attempt attempts")
         return false

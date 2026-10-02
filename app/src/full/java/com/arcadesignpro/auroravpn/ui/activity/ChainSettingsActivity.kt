@@ -40,6 +40,10 @@ import org.koin.android.ext.android.inject
  * drives [ChainManager]; it does not modify the single-hop WARP UI or the VPN
  * service. Flipping a switch off for a running chain disconnects it.
  */
+// One small handler per card/button keeps the steps independent; the two catches
+// guard content-resolver / share-intent calls that can throw anything and must
+// only show a toast.
+@Suppress("TooManyFunctions", "TooGenericExceptionCaught", "ReturnCount")
 class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
     private val b by viewBinding(ActivityChainBinding::bind)
     private val persistentState by inject<PersistentState>()
@@ -266,7 +270,7 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
     // ── verbose log ───────────────────────────────────────────────────────────
     private fun refreshLog() {
         val text = ChainManager.readDebugLog(this)
-        b.chainLogView.text = if (text.length > 20000) text.takeLast(20000) else text
+        b.chainLogView.text = if (text.length > LOG_VIEW_MAX_CHARS) text.takeLast(LOG_VIEW_MAX_CHARS) else text
     }
 
     private fun shareLog() {
@@ -287,4 +291,9 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
     }
 
     private fun toast(msg: String) = showToastUiCentered(this, msg, Toast.LENGTH_SHORT)
+
+    companion object {
+        // Tail of chain_debug.txt shown on screen; the full file is shareable.
+        private const val LOG_VIEW_MAX_CHARS = 20_000
+    }
 }
