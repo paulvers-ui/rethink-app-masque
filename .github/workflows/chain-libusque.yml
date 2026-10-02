@@ -1,14 +1,12 @@
-# Builds libusque.so (android/arm64) from paulvers-ui/usque@split — the build
-# that carries the `chain` subcommand the Chain mode UI needs — and commits it
-# into app/src/main/jniLibs/arm64-v8a/, backing up the current .so first.
+# Builds libusque.so (android/arm64) from paulvers-ui/usque (default: main,
+# which carries the `chain` subcommand the Chain mode UI needs since usque#6)
+# and commits it into app/src/main/jniLibs/arm64-v8a/. The previous .so is kept
+# as libusque.so.prev; libusque.so.bak is never touched.
 #
-# NOTE: workflow_dispatch only shows in the Actions tab for branches where this
-# file exists. It is on `split`, so in Actions pick "Chain libusque.so" and set
-# the branch dropdown to `split` before Run. It commits to that same branch.
-#
-# Run it from the Actions tab (workflow_dispatch). It commits straight to the
-# branch you launch it on (default: split), so the next app build picks up the
-# new binary automatically.
+# NOTE: GitHub only lists a workflow_dispatch workflow once the file is on the
+# default branch (main). Then: Actions -> "Chain libusque.so" -> Run workflow,
+# pick the app branch to commit to. It commits straight to that branch, so the
+# next app build picks up the new binary automatically.
 name: Chain libusque.so (build + commit arm64)
 
 on:
@@ -17,7 +15,7 @@ on:
       usque_ref:
         description: usque branch/tag/SHA to build
         required: false
-        default: split
+        default: main
       commit_binary:
         description: Commit the .so into jniLibs (false = artifact only)
         type: boolean
@@ -41,11 +39,11 @@ jobs:
           ref: ${{ github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout usque @ ${{ github.event.inputs.usque_ref || 'split' }}
+      - name: Checkout usque @ ${{ github.event.inputs.usque_ref || 'main' }}
         uses: actions/checkout@v4
         with:
           repository: ${{ env.USQUE_REPO }}
-          ref: ${{ github.event.inputs.usque_ref || 'split' }}
+          ref: ${{ github.event.inputs.usque_ref || 'main' }}
           path: _usque
 
       - name: Set up Go
@@ -56,7 +54,7 @@ jobs:
       - name: Sanity — chain subcommand present in usque
         working-directory: _usque
         run: |
-          test -f cmd/chain.go || { echo "::error::usque ref has no cmd/chain.go — pick the 'split' branch."; exit 1; }
+          test -f cmd/chain.go || { echo "::error::usque ref has no cmd/chain.go — pick a ref that includes the chain command (main since usque#6)."; exit 1; }
 
       - name: Build libusque.so (android/arm64)
         working-directory: _usque
@@ -85,7 +83,7 @@ jobs:
           set -eux
           mkdir -p "$JNI_DIR"
           if [ -f "$JNI_DIR/libusque.so" ]; then
-            cp -f "$JNI_DIR/libusque.so" "$JNI_DIR/libusque.so.bak"
+            cp -f "$JNI_DIR/libusque.so" "$JNI_DIR/libusque.so.prev"
           fi
           cp -f /tmp/libusque.so "$JNI_DIR/libusque.so"
           sha256sum "$JNI_DIR/libusque.so" | cut -d' ' -f1 > "$JNI_DIR/libusque.so.working.sha256"
@@ -97,7 +95,7 @@ jobs:
           set -eux
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$JNI_DIR/libusque.so" "$JNI_DIR/libusque.so.bak" "$JNI_DIR/libusque.so.working.sha256"
+          git add "$JNI_DIR/libusque.so" "$JNI_DIR/libusque.so.prev" "$JNI_DIR/libusque.so.working.sha256"
           if git diff --cached --quiet; then
             echo "::notice::binary unchanged — nothing to commit"
           else
