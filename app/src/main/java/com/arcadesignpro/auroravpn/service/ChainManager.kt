@@ -6,6 +6,7 @@ import android.util.Log
 import java.io.File
 import java.io.StringWriter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
@@ -360,6 +361,30 @@ object ChainManager {
                 }
             } finally { android.net.TrafficStats.clearThreadStatsTag() }
         } catch (_: Exception) { false }
+    }
+
+    /**
+     * The SOCKS port opens before the hops carry traffic: WARP1 connects, then
+     * wg0 must handshake inside it, then WARP2 connects inside wg0. Retry the
+     * end-to-end probe until it passes, the process dies, or timeoutMs elapses.
+     */
+    suspend fun awaitChainLiveness(ctx: Context, timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var attempt = 0
+        while (System.currentTimeMillis() < deadline) {
+            attempt++
+            if (probeChainLiveness()) {
+                dlog(ctx, "awaitChainLiveness: OK after $attempt attempts")
+                return true
+            }
+            if (process?.isAlive != true) {
+                dlog(ctx, "awaitChainLiveness: process died after $attempt attempts")
+                return false
+            }
+            delay(2000)
+        }
+        dlog(ctx, "awaitChainLiveness: no traffic through the chain after ${timeoutMs}ms / $attempt attempts")
+        return false
     }
 
     fun reattachIfPortAlive(ctx: Context): Boolean {
