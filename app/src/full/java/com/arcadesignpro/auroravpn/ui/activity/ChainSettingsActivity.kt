@@ -7,20 +7,26 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import by.kirich1409.viewbindingdelegate.viewBinding
 import com.arcadesignpro.auroravpn.R
+import com.arcadesignpro.auroravpn.data.AppConfig
 import com.arcadesignpro.auroravpn.databinding.ActivityChainBinding
 import com.arcadesignpro.auroravpn.service.ChainManager
+import com.arcadesignpro.auroravpn.service.ChainRouting
 import com.arcadesignpro.auroravpn.service.PersistentState
+import com.arcadesignpro.auroravpn.service.UsqueManager
 import com.arcadesignpro.auroravpn.util.Themes
 import com.arcadesignpro.auroravpn.util.Utilities.showToastUiCentered
 import com.arcadesignpro.auroravpn.util.handleFrostEffectIfNeeded
 import com.google.android.material.switchmaterial.SwitchMaterial
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.inject
@@ -47,6 +53,7 @@ import org.koin.android.ext.android.inject
 class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
     private val b by viewBinding(ActivityChainBinding::bind)
     private val persistentState by inject<PersistentState>()
+    private val appConfig by inject<AppConfig>()
 
     private var busy = false
     // Guards against the programmatic isChecked updates in refreshAllStatus()
@@ -93,6 +100,7 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
         b.wgSaveBtn.setOnClickListener { saveWgFromEditor() }
 
         b.chainConnectBtn.setOnClickListener { toggleChain() }
+        b.chainExitCheckBtn.setOnClickListener { checkExitIp() }
 
         b.chainLogRefreshBtn.setOnClickListener { refreshLog() }
         b.chainLogClearBtn.setOnClickListener { ChainManager.clearDebugLog(this); refreshLog() }
@@ -122,10 +130,10 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
             refreshAllStatus()
             return
         }
-        if (!isChecked && ChainManager.isRunning()) {
-            // Disarming any hop tears the running chain down.
-            ChainManager.stopChain()
-            persistentState.chainEnabled = false
+        if (!isChecked && ChainManager.isRunning() && !busy) {
+            // Disarming any hop tears the running chain down (and gives the VPN
+            // tunnel back to simple WARP / no proxy first).
+            disconnectChain()
         }
         refreshAllStatus()
     }
@@ -187,9 +195,7 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
     private fun toggleChain() {
         if (busy) return
         if (ChainManager.isRunning()) {
-            ChainManager.stopChain()
-            persistentState.chainEnabled = false
-            refreshAllStatus(); refreshLog()
+            disconnectChain()
             return
         }
         if (!ChainManager.chainReady(this)) {
@@ -199,20 +205,134 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
         b.chainConnectBtn.isEnabled = false
         b.chainStatusText.text = getString(R.string.chain_connecting)
         lifecycleScope.launch {
-            val started = withContext(Dispatchers.IO) { ChainManager.startChain(this@ChainSettingsActivity) }
-            // Only report success if the whole chain actually carries traffic
-            // (a half-up chain can bind the port then stall).
-            val live = started && withContext(Dispatchers.IO) { ChainManager.awaitChainLiveness(this@ChainSettingsActivity) }
-            busy = false
-            if (live) {
-                persistentState.chainEnabled = true
-                toast(getString(R.string.chain_connected))
-            } else {
-                ChainManager.stopChain()
-                persistentState.chainEnabled = false
-                toast(getString(R.string.chain_connect_failed))
+            val ctx = this@ChainSettingsActivity
+            var live = false
+            try {
+                val started = withContext(Dispatchers.IO) { ChainManager.startChain(ctx) }
+                // Only report success if the whole chain actually carries traffic
+                // (a half-up chain can bind the port then stall).
+                live = started && withContext(Dispatchers.IO) { ChainManager.awaitChainLiveness(ctx) }
+                if (live) {
+                    // Point the VPN tunnel (every other app) at the chain's SOCKS5.
+                    live = withContext(NonCancellable) { ChainRouting.routeThroughChain(ctx, appConfig, persistentState) }
+                }
+            } finally {
+                // Also runs when the screen is left mid-connect: never leave a chain
+                // process running that the tunnel does not use.
+                if (!live) {
+                    withContext(NonCancellable) {
+                        ChainRouting.leaveChain(ctx, appConfig, persistentState)
+                        withContext(Dispatchers.IO) { ChainManager.stopChain() }
+                    }
+                }
             }
+            busy = false
+            toast(getString(if (live) R.string.chain_connected else R.string.chain_connect_failed))
             refreshAllStatus(); refreshLog()
+        }
+    }
+
+    // Moves the VPN tunnel off the chain first (back to simple WARP if it was on,
+    // else no custom proxy), then stops the chain, so traffic never targets a dead port.
+    private fun disconnectChain() {
+        busy = true
+        refreshAllStatus()
+        lifecycleScope.launch {
+            val ctx = this@ChainSettingsActivity
+            withContext(NonCancellable) {
+                ChainRouting.leaveChain(ctx, appConfig, persistentState)
+                withContext(Dispatchers.IO) { ChainManager.stopChain() }
+            }
+            busy = false
+            refreshAllStatus(); refreshLog()
+        }
+    }
+
+    // ── step 5: verify the exit IP ────────────────────────────────────────────
+    /**
+     * Asks Cloudflare what it sees through the chain (WARP2 exit) and, if it is
+     * running, through simple WARP (WARP1's identity, from the phone), and shows
+     * which local SOCKS5 the VPN tunnel itself is set to. Read-only: it starts
+     * nothing and changes no proxy setting.
+     */
+    private fun checkExitIp() {
+        if (busy) return
+        busy = true
+        b.chainExitResult.text = getString(R.string.chain_exit_checking)
+        refreshAllStatus()
+        lifecycleScope.launch {
+            val ctx = this@ChainSettingsActivity
+            // isRunning() may probe the port (reattached chain), so not on Main.
+            if (!withContext(Dispatchers.IO) { ChainManager.isRunning() }) {
+                busy = false
+                b.chainExitResult.text = getString(R.string.chain_exit_need_connect)
+                refreshAllStatus()
+                return@launch
+            }
+            val chain = async { ChainManager.fetchExitTrace(ctx, ChainManager.SOCKS_PORT) }
+            val warp = async {
+                val warpUp = withContext(Dispatchers.IO) { UsqueManager.isPortAlive() }
+                if (warpUp) ChainManager.fetchExitTrace(ctx, UsqueManager.SOCKS_PORT) else null
+            }
+            val vpnRoute = describeVpnRoute()
+            val text = renderExitCheck(chain.await(), warp.await(), vpnRoute)
+            busy = false
+            b.chainExitResult.text = text
+            refreshAllStatus(); refreshLog()
+        }
+    }
+
+    /** Which local SOCKS5 the VPN tunnel (every other app) is configured to use. */
+    private suspend fun describeVpnRoute(): String {
+        val ep = if (appConfig.isCustomSocks5Enabled()) {
+            withContext(Dispatchers.IO) { appConfig.getSocks5ProxyDetails() }
+        } else {
+            null
+        }
+        if (ep == null) return getString(R.string.chain_exit_vpn_no_socks)
+        val local = ep.proxyIP == ChainManager.SOCKS_HOST
+        val label = when {
+            local && ep.proxyPort == ChainManager.SOCKS_PORT -> R.string.chain_exit_vpn_is_chain
+            local && ep.proxyPort == UsqueManager.SOCKS_PORT -> R.string.chain_exit_vpn_is_warp
+            else -> R.string.chain_exit_vpn_is_other
+        }
+        return getString(R.string.chain_exit_vpn_route, "${ep.proxyIP}:${ep.proxyPort}", getString(label))
+    }
+
+    private fun renderExitCheck(
+        chain: ChainManager.ExitTrace,
+        warp: ChainManager.ExitTrace?,
+        vpnRoute: String,
+    ): String {
+        val lines = mutableListOf(
+            getString(R.string.chain_exit_label_chain, ChainManager.SOCKS_PORT),
+            traceLine(chain),
+        )
+        if (warp != null) {
+            lines += getString(R.string.chain_exit_label_warp, UsqueManager.SOCKS_PORT)
+            lines += traceLine(warp)
+        }
+        lines += ""
+        lines += getString(exitVerdict(chain, warp))
+        lines += vpnRoute
+        return lines.joinToString("\n")
+    }
+
+    private fun traceLine(t: ChainManager.ExitTrace): String = when (t) {
+        is ChainManager.ExitTrace.Ok -> getString(R.string.chain_exit_trace_ok, t.ip, t.loc, t.colo, t.warp)
+        is ChainManager.ExitTrace.Failed -> getString(R.string.chain_exit_trace_failed, t.reason)
+    }
+
+    // colo (the Cloudflare data center) is the strongest signal: WARP2 reaches
+    // Cloudflare from the wg0 server, simple WARP / WARP1 from the phone.
+    @StringRes
+    private fun exitVerdict(chain: ChainManager.ExitTrace, warp: ChainManager.ExitTrace?): Int {
+        val c = chain as? ChainManager.ExitTrace.Ok ?: return R.string.chain_exit_verdict_chain_failed
+        val w = warp as? ChainManager.ExitTrace.Ok ?: return R.string.chain_exit_verdict_no_compare
+        return when {
+            c.ip == w.ip -> R.string.chain_exit_verdict_same_ip
+            c.colo != w.colo -> R.string.chain_exit_verdict_different
+            else -> R.string.chain_exit_verdict_same_colo
         }
     }
 
@@ -242,6 +362,7 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
 
         b.chainConnectBtn.isEnabled = ready && !busy
         b.chainConnectBtn.setText(if (running) R.string.chain_disconnect else R.string.chain_connect)
+        b.chainExitCheckBtn.isEnabled = running && !busy
 
         b.chainMasterSwitch.isEnabled = false // reflects the live chain; connect via the button
         b.chainMasterSwitch.isChecked = running

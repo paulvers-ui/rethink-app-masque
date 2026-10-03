@@ -70,6 +70,53 @@ object ChainManager {
     private const val PROBE_PORT_LOW_BYTE: Byte = 80
     private const val SOCKS5_REPLY_LEN = 10
 
+    // SOCKS5 reply framing for the exit-IP check: VER REP RSV ATYP, then
+    // BND.ADDR (length depends on ATYP) and BND.PORT. Read exactly, so the
+    // stream is left at the first byte of the HTTP response.
+    private const val SOCKS5_REPLY_HEAD_LEN = 4
+    private const val SOCKS5_ATYP_INDEX = 3
+    private const val SOCKS5_ATYP_IPV4 = 1
+    private const val SOCKS5_ATYP_DOMAIN = 3
+    private const val SOCKS5_ATYP_IPV6 = 4
+    private const val IPV4_ADDR_LEN = 4
+    private const val IPV6_ADDR_LEN = 16
+    private const val PORT_LEN = 2
+    private const val BYTE_MASK = 0xFF
+
+    // Exit-IP check: Cloudflare's /cdn-cgi/trace over plain HTTP through a local
+    // SOCKS5. The CONNECT target stays 1.1.1.1:80 (same as the liveness probe, no
+    // DNS), but Host must be cp.cloudflare.com: 1.1.1.1 now 301-redirects a
+    // plain-HTTP trace for its own Host to https, while Cloudflare's captive-portal
+    // host is still served on 1.1.1.1:80 (checked Oct 2026).
+    private const val TRACE_READ_TIMEOUT_MS = 10_000
+    private const val TRACE_MAX_BYTES = 16 * 1024
+    private const val TRACE_CHUNK_BYTES = 2_048
+    private const val TRACE_REQUEST =
+        "GET /cdn-cgi/trace HTTP/1.1\r\n" +
+            "Host: cp.cloudflare.com\r\n" +
+            "User-Agent: AuroraVPN-chain-check\r\n" +
+            "Accept: text/plain\r\n" +
+            "Connection: close\r\n\r\n"
+    private const val TRACE_KEY_IP = "ip"
+    private const val TRACE_KEY_LOC = "loc"
+    private const val TRACE_KEY_COLO = "colo"
+    private const val TRACE_KEY_WARP = "warp"
+    private val TRACE_KEYS = setOf(TRACE_KEY_IP, TRACE_KEY_LOC, TRACE_KEY_COLO, TRACE_KEY_WARP)
+    // "CF-RAY: a44866674eab06f3-BOG": the suffix is the serving colo, present
+    // even on a 301/403, so it still identifies the exit PoP if the trace fails.
+    private const val CF_RAY_HEADER = "cf-ray:"
+
+    /** Cloudflare's view of one request sent through a local SOCKS5 port. */
+    sealed interface ExitTrace {
+        /**
+         * [ip] = egress IP Cloudflare saw, [loc] = its country, [colo] = IATA code
+         * of the Cloudflare data center that served it, [warp] = on / plus / off.
+         */
+        data class Ok(val ip: String, val loc: String, val colo: String, val warp: String) : ExitTrace
+
+        data class Failed(val reason: String) : ExitTrace
+    }
+
     @Volatile private var process: Process? = null
     private val startLock = kotlinx.coroutines.sync.Mutex()
     @Volatile private var isStarting = false
@@ -307,6 +354,10 @@ object ChainManager {
                 }.apply { isDaemon = true; name = "chain-death-watcher" }.start()
             } else {
                 portConfirmedAlive = false
+                // Port never came up but the process may still be alive (e.g. a slow
+                // wg0 hostname lookup): kill it, or it would bind :40001 later as an
+                // orphan that stopChain() can no longer reach.
+                if (proc.isAlive) proc.destroyForcibly()
                 outThread.join(OUTPUT_DRAIN_JOIN_MS); errThread.join(OUTPUT_DRAIN_JOIN_MS)
                 val code = try { proc.exitValue() } catch (_: Exception) { -1 }
                 dlog(ctx, "startChain: exit=$code")
@@ -349,6 +400,9 @@ object ChainManager {
             try { p.destroyForcibly() } catch (_: Exception) {}
         }
     }
+
+    /** True while startChain() is bringing the hops up (the service must not restart it then). */
+    fun isChainStarting(): Boolean = isStarting
 
     fun isRunning(): Boolean {
         if (isStarting) return true
@@ -422,6 +476,118 @@ object ChainManager {
         dlog(ctx, "awaitChainLiveness: no traffic through the chain after ${timeoutMs}ms / $attempt attempts")
         return false
     }
+
+    // ── exit-IP check (Cloudflare trace through a local SOCKS5) ───────────────
+    /**
+     * GETs /cdn-cgi/trace through the SOCKS5 on 127.0.0.1:[port] and returns what
+     * Cloudflare saw (ip=, loc=, colo=, warp=). On [SOCKS_PORT] the request leaves
+     * via WARP2: the chain's SOCKS server dials only through the WARP2 stack, and
+     * WARP2 reaches Cloudflare from the wg0 server. On UsqueManager.SOCKS_PORT it
+     * leaves via simple WARP, which uses WARP1's identity (config.json) from the
+     * phone, so it is the WARP1-side baseline to compare against. Read-only.
+     */
+    suspend fun fetchExitTrace(ctx: Context, port: Int = SOCKS_PORT): ExitTrace = withContext(Dispatchers.IO) {
+        val result = try {
+            android.net.TrafficStats.setThreadStatsTag(android.os.Process.myTid())
+            try { traceViaSocks5(port) } finally { android.net.TrafficStats.clearThreadStatsTag() }
+        } catch (e: Exception) {
+            ExitTrace.Failed(e.message ?: e.javaClass.simpleName)
+        }
+        dlog(ctx, "exitTrace(:$port): $result")
+        result
+    }
+
+    private fun traceViaSocks5(port: Int): ExitTrace = java.net.Socket().use { s ->
+        s.soTimeout = TRACE_READ_TIMEOUT_MS
+        s.connect(java.net.InetSocketAddress(SOCKS_HOST, port), LIVENESS_CONNECT_TIMEOUT_MS)
+        val inp = java.io.DataInputStream(s.getInputStream())
+        val out = s.getOutputStream()
+        socks5ConnectCloudflare(inp, out)
+        out.write(TRACE_REQUEST.toByteArray(Charsets.US_ASCII))
+        out.flush()
+        parseTrace(readTraceResponse(inp))
+    }
+
+    /** No-auth greeting + CONNECT 1.1.1.1:80; throws IOException with a readable reason. */
+    private fun socks5ConnectCloudflare(inp: java.io.DataInputStream, out: java.io.OutputStream) {
+        out.write(byteArrayOf(SOCKS5_VERSION, 1, 0))
+        out.flush()
+        val greet = ByteArray(2)
+        inp.readFully(greet)
+        if (greet[0] != SOCKS5_VERSION || greet[1] != 0.toByte()) {
+            socksFail("SOCKS5 greeting rejected (method=${greet[1].toInt() and BYTE_MASK})")
+        }
+        out.write(byteArrayOf(SOCKS5_VERSION, 1, 0, 1, 1, 1, 1, 1, 0, PROBE_PORT_LOW_BYTE))
+        out.flush()
+        val head = ByteArray(SOCKS5_REPLY_HEAD_LEN)
+        inp.readFully(head)
+        val rep = head[1].toInt() and BYTE_MASK
+        if (head[0] != SOCKS5_VERSION || rep != 0) socksFail("SOCKS5 CONNECT 1.1.1.1:80 failed (rep=$rep)")
+        val addrLen = when (head[SOCKS5_ATYP_INDEX].toInt()) {
+            SOCKS5_ATYP_IPV4 -> IPV4_ADDR_LEN
+            SOCKS5_ATYP_IPV6 -> IPV6_ADDR_LEN
+            SOCKS5_ATYP_DOMAIN -> inp.readUnsignedByte()
+            else -> socksFail("SOCKS5 reply has unknown ATYP ${head[SOCKS5_ATYP_INDEX]}")
+        }
+        inp.readFully(ByteArray(addrLen + PORT_LEN))
+    }
+
+    private fun socksFail(reason: String): Nothing = throw java.io.IOException(reason)
+
+    /**
+     * Reads until EOF (the request says Connection: close), [TRACE_MAX_BYTES], a
+     * read timeout, or until every key in [TRACE_KEYS] has arrived on a complete line.
+     */
+    private fun readTraceResponse(inp: java.io.InputStream): String {
+        val buf = java.io.ByteArrayOutputStream()
+        val chunk = ByteArray(TRACE_CHUNK_BYTES)
+        var done = false
+        while (!done && buf.size() < TRACE_MAX_BYTES) {
+            // A timeout after partial data still leaves something worth parsing.
+            val n = try { inp.read(chunk) } catch (_: java.net.SocketTimeoutException) { -1 }
+            if (n < 0) {
+                done = true
+            } else {
+                buf.write(chunk, 0, n)
+                val completeLines = String(buf.toByteArray(), Charsets.UTF_8).substringBeforeLast('\n', "")
+                done = traceFields(completeLines).keys.containsAll(TRACE_KEYS)
+            }
+        }
+        return String(buf.toByteArray(), Charsets.UTF_8)
+    }
+
+    private fun parseTrace(response: String): ExitTrace {
+        val fields = traceFields(response)
+        val colo = fields[TRACE_KEY_COLO] ?: cfRayColo(response)
+        val ip = fields[TRACE_KEY_IP]
+        if (ip.isNullOrEmpty()) {
+            val status = response.substringBefore('\n').trim().ifEmpty { "empty response" }
+            val coloHint = if (colo.isEmpty()) "" else ", colo $colo from CF-RAY"
+            return ExitTrace.Failed("no ip= in Cloudflare trace ($status$coloHint)")
+        }
+        return ExitTrace.Ok(
+            ip = ip,
+            loc = fields[TRACE_KEY_LOC].orEmpty(),
+            colo = colo,
+            warp = fields[TRACE_KEY_WARP].orEmpty(),
+        )
+    }
+
+    /** key=value lines of the trace body; no HTTP header yields one of [TRACE_KEYS]. */
+    private fun traceFields(text: String): Map<String, String> =
+        text.lineSequence()
+            .map { it.trim() }
+            .filter { '=' in it }
+            .map { it.substringBefore('=') to it.substringAfter('=') }
+            .filter { it.first in TRACE_KEYS }
+            .toMap()
+
+    private fun cfRayColo(response: String): String =
+        response.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.startsWith(CF_RAY_HEADER, ignoreCase = true) }
+            ?.substringAfterLast('-', "")
+            .orEmpty()
 
     fun reattachIfPortAlive(ctx: Context): Boolean {
         val alive = isPortAlive()

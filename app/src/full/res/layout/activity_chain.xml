@@ -158,6 +158,39 @@
             android:enabled="false"
             android:text="@string/chain_connect" />
 
+        <!-- STEP 5: verify the exit IP (Cloudflare trace via :40001, and :40000 to compare) -->
+        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step5_title" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/chain_exit_desc"
+            android:textColor="?attr/secondaryTextColor"
+            android:textSize="13sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/chainExitCheckBtn"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:enabled="false"
+            android:text="@string/chain_exit_check_btn" />
+
+        <TextView
+            android:id="@+id/chainExitResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="?attr/background"
+            android:fontFamily="monospace"
+            android:padding="8dp"
+            android:text="@string/chain_exit_not_checked"
+            android:textColor="?attr/primaryTextColor"
+            android:textIsSelectable="true"
+            android:textSize="12sp" />
+
         <!-- Verbose log -->
         <TextView style="@style/chainSectionHeader" android:text="@string/chain_log_title" />
 
