@@ -202,7 +202,7 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
             val started = withContext(Dispatchers.IO) { ChainManager.startChain(this@ChainSettingsActivity) }
             // Only report success if the whole chain actually carries traffic
             // (a half-up chain can bind the port then stall).
-            val live = started && withContext(Dispatchers.IO) { ChainManager.probeChainLiveness() }
+            val live = started && withContext(Dispatchers.IO) { ChainManager.awaitChainLiveness(this@ChainSettingsActivity) }
             busy = false
             if (live) {
                 persistentState.chainEnabled = true
