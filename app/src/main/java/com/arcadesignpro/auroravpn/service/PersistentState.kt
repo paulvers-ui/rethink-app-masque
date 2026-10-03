@@ -717,6 +717,19 @@ class PersistentState(context: Context) : SimpleKrate(context), KoinComponent {
     // remembers its own last state. See ChainManager.
     var chainEnabled by booleanPref("pref_chain_enabled").withDefault<Boolean>(false)
 
+    // Chain mode, per hop (ChainSettingsActivity, ChainArgs). The SNIs fill {sni} /
+    // {exit_sni}; an empty args string means "use ChainArgs' default for that hop",
+    // which the screen shows in full. The *On switches let a hop be turned off,
+    // which keeps the chain from connecting until it is back on.
+    var chainWarp1Sni by stringPref("pref_chain_warp1_sni").withDefault<String>(UsqueManager.DEFAULT_WARP_SNI)
+    var chainWarp2Sni by stringPref("pref_chain_warp2_sni").withDefault<String>(ChainArgs.DEFAULT_WARP2_SNI)
+    var chainWarp1Args by stringPref("pref_chain_warp1_args").withDefault<String>("")
+    var chainWgArgs by stringPref("pref_chain_wg_args").withDefault<String>("")
+    var chainWarp2Args by stringPref("pref_chain_warp2_args").withDefault<String>("")
+    var chainWarp1On by booleanPref("pref_chain_warp1_on").withDefault<Boolean>(true)
+    var chainWgOn by booleanPref("pref_chain_wg_on").withDefault<Boolean>(true)
+    var chainWarp2On by booleanPref("pref_chain_warp2_on").withDefault<Boolean>(true)
+
     // Optional safety timer: when enabled, WARP automatically turns itself off a fixed
     // number of hours after being switched on, without needing anyone to be present to
     // do it manually. Off by default -- this must never silently change behavior for an

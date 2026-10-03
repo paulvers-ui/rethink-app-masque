@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Chain mode (WARP1 -> wg0 -> WARP2). One card per hop, laid out like the simple
+     WARP section of fragment_proxy_configure.xml: SNI with Save / Reset, the config
+     editor with Reload / Save, and the libusque.so flags with Reset / Reload / Save
+     plus the effective value. Driven by ChainSettingsActivity. -->
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -9,6 +13,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:animateLayoutChanges="true"
         android:orientation="vertical"
         android:padding="16dp">
 
@@ -21,216 +26,678 @@
             android:textStyle="bold" />
 
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            style="@style/chainHelp"
             android:layout_marginTop="4dp"
             android:text="@string/chain_desc"
-            android:textColor="?attr/secondaryTextColor"
             android:textSize="13sp" />
 
-        <!-- Overall status + master switch -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+        <!-- ===== Status: master switch, connect, MTU plan, exit check ===== -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/chainStatusCard"
+            style="@style/chainCard"
+            android:layout_marginTop="16dp">
 
-            <ImageView
-                android:id="@+id/chainStatusDot"
-                android:layout_width="12dp"
-                android:layout_height="12dp"
-                android:layout_marginEnd="8dp"
-                android:src="@drawable/dot_white" />
+            <LinearLayout style="@style/chainCardBody">
 
-            <TextView
-                android:id="@+id/chainStatusText"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/chain_status_incomplete"
-                android:textColor="?attr/primaryTextColor"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/chainMasterSwitch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:enabled="false" />
-        </LinearLayout>
+                    <ImageView
+                        android:id="@+id/chainStatusDot"
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:layout_marginEnd="10dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/dot_white" />
 
-        <!-- STEP 1: WARP1 — status + register + its own switch -->
-        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step1_title" />
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
-        <LinearLayout style="@style/chainRow">
-            <ImageView android:id="@+id/warp1Dot" style="@style/chainDot" android:src="@drawable/dot_white" />
-            <TextView android:id="@+id/warp1Status" style="@style/chainStatusLabel" android:text="@string/chain_not_registered" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/warp1Switch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:enabled="false" />
-        </LinearLayout>
+                        <TextView
+                            android:id="@+id/chainStatusText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/chain_status_incomplete"
+                            android:textColor="?attr/primaryTextColor"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
 
-        <LinearLayout style="@style/chainButtonRow">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/warp1RegisterBtn"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/chain_register1_btn" />
-        </LinearLayout>
+                        <TextView
+                            style="@style/chainHelp"
+                            android:text="@string/chain_master_label" />
+                    </LinearLayout>
 
-        <!-- STEP 2: wg0.conf — status + its own switch -->
-        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step2_title" />
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/chainMasterSwitch"
+                        style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/chain_master_label" />
+                </LinearLayout>
 
-        <LinearLayout style="@style/chainRow">
-            <ImageView android:id="@+id/wgDot" style="@style/chainDot" android:src="@drawable/dot_white" />
-            <TextView android:id="@+id/wgStatus" style="@style/chainStatusLabel" android:text="@string/chain_wg_missing" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/wgSwitch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:enabled="false" />
-        </LinearLayout>
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/chainProgress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    app:trackCornerRadius="4dp" />
 
-        <EditText
-            android:id="@+id/wgConfigEdit"
-            style="@style/chainEditor"
-            android:hint="@string/chain_wg_hint"
-            android:minLines="6" />
+                <TextView
+                    android:id="@+id/chainMtuSummary"
+                    style="@style/chainEffective"
+                    android:layout_marginTop="10dp"
+                    android:textSize="12sp" />
 
-        <LinearLayout style="@style/chainButtonRow">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/wgImportBtn"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/chain_wg_import" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/wgReloadBtn"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/chain_config_reload" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/wgSaveBtn"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/chain_wg_save" />
-        </LinearLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chainConnectBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="12dp"
+                    android:enabled="false"
+                    android:text="@string/chain_connect"
+                    app:cornerRadius="14dp" />
 
-        <!-- STEP 3: WARP2 — status + register + its own switch -->
-        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step3_title" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chainExitCheckBtn"
+                    style="@style/chainBtn"
+                    android:layout_width="match_parent"
+                    android:layout_marginStart="0dp"
+                    android:layout_marginTop="4dp"
+                    android:enabled="false"
+                    android:text="@string/chain_exit_check_btn" />
 
-        <LinearLayout style="@style/chainRow">
-            <ImageView android:id="@+id/warp2Dot" style="@style/chainDot" android:src="@drawable/dot_white" />
-            <TextView android:id="@+id/warp2Status" style="@style/chainStatusLabel" android:text="@string/chain_not_registered" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/warp2Switch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:enabled="false" />
-        </LinearLayout>
+                <TextView
+                    style="@style/chainHelp"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/chain_exit_desc" />
 
-        <LinearLayout style="@style/chainButtonRow">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/warp2RegisterBtn"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/chain_register2_btn" />
-        </LinearLayout>
+                <TextView
+                    android:id="@+id/chainExitResult"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="monospace"
+                    android:text="@string/chain_exit_not_checked"
+                    android:textColor="?attr/primaryTextColor"
+                    android:textIsSelectable="true"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
-        <!-- STEP 4: Connect -->
-        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step4_title" />
+        <!-- ===== WARP1 (entry) ===== -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/warp1Card"
+            style="@style/chainCard">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/chainConnectBtn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:enabled="false"
-            android:text="@string/chain_connect" />
+            <LinearLayout style="@style/chainCardBody">
 
-        <!-- STEP 5: verify the exit IP (Cloudflare trace via :40001, and :40000 to compare) -->
-        <TextView style="@style/chainSectionHeader" android:text="@string/chain_step5_title" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/chain_exit_desc"
-            android:textColor="?attr/secondaryTextColor"
-            android:textSize="13sp" />
+                    <ImageView
+                        android:id="@+id/warp1Dot"
+                        style="@style/chainDot"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/dot_white" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/chainExitCheckBtn"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:enabled="false"
-            android:text="@string/chain_exit_check_btn" />
+                    <TextView
+                        style="@style/chainCardTitle"
+                        android:text="@string/chain_hop1_title" />
 
-        <TextView
-            android:id="@+id/chainExitResult"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="?attr/background"
-            android:fontFamily="monospace"
-            android:padding="8dp"
-            android:text="@string/chain_exit_not_checked"
-            android:textColor="?attr/primaryTextColor"
-            android:textIsSelectable="true"
-            android:textSize="12sp" />
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/warp1Switch"
+                        style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/chain_hop1_title" />
+                </LinearLayout>
 
-        <!-- Verbose log -->
-        <TextView style="@style/chainSectionHeader" android:text="@string/chain_log_title" />
+                <TextView
+                    style="@style/chainHelp"
+                    android:text="@string/chain_hop1_sub" />
 
-        <ScrollView
-            android:layout_width="match_parent"
-            android:layout_height="220dp"
-            android:layout_marginTop="4dp"
-            android:background="?attr/background">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/chainLogView"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="monospace"
-                android:padding="8dp"
-                android:textColor="?attr/secondaryTextColor"
-                android:textIsSelectable="true"
-                android:textSize="11sp" />
-        </ScrollView>
+                    <TextView
+                        android:id="@+id/warp1Status"
+                        style="@style/chainStatusLabel"
+                        android:text="@string/chain_not_registered" />
 
-        <LinearLayout style="@style/chainButtonRow">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/chainLogRefreshBtn"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/chain_log_refresh" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/chainLogClearBtn"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/chain_log_clear" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/chainLogShareBtn"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/chain_log_share" />
-        </LinearLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/warp1RegisterBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_register1_btn" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="@string/chain_sni_hint_warp1">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/warp1SniEdit"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textUri"
+                            android:maxLength="253"
+                            android:singleLine="true" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/warp1SniSaveBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_save" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/warp1SniResetBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_reset" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/warp1AdvancedHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="6dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/chainStatusLabel"
+                        android:text="@string/chain_advanced"
+                        android:textColor="?attr/accentGood"
+                        android:textStyle="bold" />
+
+                    <ImageView
+                        android:id="@+id/warp1AdvancedArrow"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_keyboard_arrow_down"
+                        app:tint="?attr/accentGood" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/warp1AdvancedBody"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView style="@style/chainSubTitle" android:layout_marginTop="2dp" android:text="@string/chain_config_title_warp1" />
+                    <TextView style="@style/chainHelp" android:text="@string/chain_config_desc_warp1" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:hint="config.json">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/warp1ConfigEdit"
+                            style="@style/chainMonoEdit"
+                            android:maxLines="18"
+                            android:minLines="6" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <LinearLayout style="@style/chainButtonRow">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp1ConfigReloadBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_config_reload" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp1ConfigSaveBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_save" />
+                    </LinearLayout>
+
+                    <TextView style="@style/chainSubTitle" android:text="@string/chain_args_title_warp1" />
+                    <TextView style="@style/chainHelp" android:text="@string/chain_args_desc_warp1" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:hint="-s {sni} -m 1280 -i 1350 …">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/warp1ArgsEdit"
+                            style="@style/chainMonoEdit"
+                            android:maxLines="6"
+                            android:minLines="2" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <TextView style="@style/chainHelp" android:layout_marginTop="4dp" android:text="@string/chain_args_effective" />
+                    <TextView android:id="@+id/warp1ArgsEffective" style="@style/chainEffective" />
+
+                    <LinearLayout style="@style/chainButtonRow">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp1ArgsResetBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_reset" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp1ArgsReloadBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_config_reload" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp1ArgsSaveBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_save" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ===== wg0 (WireGuard, middle) ===== -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/wgCard"
+            style="@style/chainCard">
+
+            <LinearLayout style="@style/chainCardBody">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/wgDot"
+                        style="@style/chainDot"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/dot_white" />
+
+                    <TextView
+                        style="@style/chainCardTitle"
+                        android:text="@string/chain_hop2_title" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/wgSwitch"
+                        style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/chain_hop2_title" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/chainHelp"
+                    android:text="@string/chain_hop2_sub" />
+
+                <TextView
+                    android:id="@+id/wgStatus"
+                    style="@style/chainHelp"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/chain_wg_missing"
+                    android:textColor="?attr/primaryTextColor"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="wg0.conf">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/wgConfigEdit"
+                        style="@style/chainMonoEdit"
+                        android:maxLines="18"
+                        android:minLines="6" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView style="@style/chainHelp" android:text="@string/chain_wg_hint" />
+
+                <LinearLayout style="@style/chainButtonRow">
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/wgImportBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_wg_import" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/wgReloadBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_config_reload" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/wgSaveBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_save" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/wgAdvancedHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="6dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/chainStatusLabel"
+                        android:text="@string/chain_advanced"
+                        android:textColor="?attr/accentGood"
+                        android:textStyle="bold" />
+
+                    <ImageView
+                        android:id="@+id/wgAdvancedArrow"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_keyboard_arrow_down"
+                        app:tint="?attr/accentGood" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/wgAdvancedBody"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView style="@style/chainSubTitle" android:layout_marginTop="2dp" android:text="@string/chain_args_title_wg" />
+                    <TextView style="@style/chainHelp" android:text="@string/chain_args_desc_wg" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:hint="--wg-mtu 0 --wg-keepalive 25">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/wgArgsEdit"
+                            style="@style/chainMonoEdit"
+                            android:maxLines="6"
+                            android:minLines="2" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <TextView style="@style/chainHelp" android:layout_marginTop="4dp" android:text="@string/chain_args_effective" />
+                    <TextView android:id="@+id/wgArgsEffective" style="@style/chainEffective" />
+
+                    <LinearLayout style="@style/chainButtonRow">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/wgArgsResetBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_reset" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/wgArgsReloadBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_config_reload" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/wgArgsSaveBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_save" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ===== WARP2 (exit) ===== -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/warp2Card"
+            style="@style/chainCard">
+
+            <LinearLayout style="@style/chainCardBody">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/warp2Dot"
+                        style="@style/chainDot"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/dot_white" />
+
+                    <TextView
+                        style="@style/chainCardTitle"
+                        android:text="@string/chain_hop3_title" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/warp2Switch"
+                        style="@style/CustomWidget.MaterialComponents.CompoundButton.Switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/chain_hop3_title" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/chainHelp"
+                    android:text="@string/chain_hop3_sub" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/warp2Status"
+                        style="@style/chainStatusLabel"
+                        android:text="@string/chain_not_registered" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/warp2RegisterBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_register2_btn" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="@string/chain_sni_hint_warp2">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/warp2SniEdit"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textUri"
+                            android:maxLength="253"
+                            android:singleLine="true" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/warp2SniSaveBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_save" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/warp2SniResetBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_reset" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/warp2AdvancedHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="6dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/chainStatusLabel"
+                        android:text="@string/chain_advanced"
+                        android:textColor="?attr/accentGood"
+                        android:textStyle="bold" />
+
+                    <ImageView
+                        android:id="@+id/warp2AdvancedArrow"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_keyboard_arrow_down"
+                        app:tint="?attr/accentGood" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/warp2AdvancedBody"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView style="@style/chainSubTitle" android:layout_marginTop="2dp" android:text="@string/chain_config_title_warp2" />
+                    <TextView style="@style/chainHelp" android:text="@string/chain_config_desc_warp2" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:hint="config_exit.json">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/warp2ConfigEdit"
+                            style="@style/chainMonoEdit"
+                            android:maxLines="18"
+                            android:minLines="6" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <LinearLayout style="@style/chainButtonRow">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp2ConfigReloadBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_config_reload" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp2ConfigSaveBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_save" />
+                    </LinearLayout>
+
+                    <TextView style="@style/chainSubTitle" android:text="@string/chain_args_title_warp2" />
+                    <TextView style="@style/chainHelp" android:text="@string/chain_args_desc_warp2" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:hint="--exit-sni {exit_sni} --exit-transport auto …">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/warp2ArgsEdit"
+                            style="@style/chainMonoEdit"
+                            android:maxLines="6"
+                            android:minLines="2" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <TextView style="@style/chainHelp" android:layout_marginTop="4dp" android:text="@string/chain_args_effective" />
+                    <TextView android:id="@+id/warp2ArgsEffective" style="@style/chainEffective" />
+
+                    <LinearLayout style="@style/chainButtonRow">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp2ArgsResetBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_reset" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp2ArgsReloadBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_config_reload" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/warp2ArgsSaveBtn"
+                            style="@style/chainBtn"
+                            android:text="@string/chain_save" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ===== The command libusque.so will run ===== -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/chainCmdCard"
+            style="@style/chainCard">
+
+            <LinearLayout style="@style/chainCardBody">
+
+                <TextView
+                    style="@style/chainCardTitle"
+                    android:layout_width="match_parent"
+                    android:text="@string/chain_cmd_title" />
+
+                <TextView style="@style/chainHelp" android:layout_marginTop="6dp" android:text="@string/chain_cmd_core_label" />
+                <TextView android:id="@+id/chainCmdCore" style="@style/chainEffective" />
+
+                <TextView style="@style/chainHelp" android:layout_marginTop="8dp" android:text="@string/chain_cmd_full_label" />
+                <TextView android:id="@+id/chainCmdFull" style="@style/chainEffective" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ===== Verbose log ===== -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/chainLogCard"
+            style="@style/chainCard">
+
+            <LinearLayout style="@style/chainCardBody">
+
+                <TextView
+                    style="@style/chainCardTitle"
+                    android:layout_width="match_parent"
+                    android:text="@string/chain_log_title" />
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="240dp"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:id="@+id/chainLogView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:textColor="?attr/secondaryTextColor"
+                        android:textIsSelectable="true"
+                        android:textSize="11sp" />
+                </ScrollView>
+
+                <LinearLayout style="@style/chainButtonRow">
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/chainLogRefreshBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_log_refresh" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/chainLogClearBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_log_clear" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/chainLogShareBtn"
+                        style="@style/chainBtn"
+                        android:text="@string/chain_log_share" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

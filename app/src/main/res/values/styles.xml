@@ -852,22 +852,7 @@
     </style>
 
 
-<style name="chainSectionHeader">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">20dp</item>
-        <item name="android:textColor">?attr/accentGood</item>
-        <item name="android:textSize">15sp</item>
-        <item name="android:textStyle">bold</item>
-    </style>
 
-    <style name="chainRow">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">8dp</item>
-        <item name="android:gravity">center_vertical</item>
-        <item name="android:orientation">horizontal</item>
-    </style>
 
     <style name="chainDot">
         <item name="android:layout_width">10dp</item>
@@ -883,17 +868,6 @@
         <item name="android:textSize">14sp</item>
     </style>
 
-    <style name="chainEditor">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">8dp</item>
-        <item name="android:background">?attr/background</item>
-        <item name="android:fontFamily">monospace</item>
-        <item name="android:gravity">top|start</item>
-        <item name="android:padding">8dp</item>
-        <item name="android:textColor">?attr/primaryTextColor</item>
-        <item name="android:textSize">12sp</item>
-    </style>
 
     <style name="chainButtonRow">
         <item name="android:layout_width">match_parent</item>
@@ -901,5 +875,80 @@
         <item name="android:layout_marginTop">4dp</item>
         <item name="android:gravity">end</item>
         <item name="android:orientation">horizontal</item>
+    </style>
+
+    <!-- Chain screen v2 (activity_chain.xml) -->
+    <style name="chainCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">12dp</item>
+        <item name="cardCornerRadius">16dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="strokeColor">?attr/border</item>
+        <item name="cardBackgroundColor">?attr/background</item>
+    </style>
+
+    <style name="chainCardBody">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">14dp</item>
+        <item name="android:animateLayoutChanges">true</item>
+    </style>
+
+    <style name="chainCardTitle">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textColor">?attr/primaryTextColor</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="chainHelp">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textColor">?attr/secondaryTextColor</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="chainSubTitle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:textColor">?attr/primaryTextColor</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="chainBtn" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:textColor">?attr/primaryTextColor</item>
+        <item name="cornerRadius">12dp</item>
+        <item name="strokeColor">?attr/border</item>
+    </style>
+
+    <style name="chainEffective">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">?attr/accentGood</item>
+        <item name="android:textIsSelectable">true</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="chainMonoEdit">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:gravity">top|start</item>
+        <item name="android:inputType">textMultiLine|textNoSuggestions</item>
+        <item name="android:scrollbars">vertical</item>
+        <item name="android:textSize">12sp</item>
     </style>
 </resources>

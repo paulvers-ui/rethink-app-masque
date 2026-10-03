@@ -2014,10 +2014,6 @@
     <!-- Chain mode: WARP1 -> wg0 -> WARP2 -->
     <string name="chain_title">Chain mode (WARP → WG → WARP)</string>
     <string name="chain_desc">Nest three tunnels in one process: WARP1 hides you from your ISP, a WireGuard hop gives a new location, and WARP2 washes it into a Cloudflare IP. Set up each step, then connect.</string>
-    <string name="chain_step1_title">1. Register WARP1 (ISP-facing)</string>
-    <string name="chain_step2_title">2. WireGuard hop (wg0.conf)</string>
-    <string name="chain_step3_title">3. Register WARP2 (exit)</string>
-    <string name="chain_step4_title">4. Connect the chain</string>
     <string name="chain_register1_btn">Register WARP1</string>
     <string name="chain_register2_btn">Register WARP2</string>
     <string name="chain_reregister_btn">Re-register</string>
@@ -2026,7 +2022,6 @@
     <string name="chain_register_failed">Registration failed — see log (Cloudflare may rate-limit a 2nd registration)</string>
     <string name="chain_not_registered">Not registered</string>
     <string name="chain_wg_hint">Paste your wg0.conf (plain WireGuard; AmneziaWG is not supported)</string>
-    <string name="chain_wg_save">Save wg0.conf</string>
     <string name="chain_wg_import">Import .conf</string>
     <string name="chain_wg_imported">wg0.conf imported</string>
     <string name="chain_wg_import_failed">Could not read that file</string>
@@ -2034,7 +2029,6 @@
     <string name="chain_wg_missing">No wg0.conf yet</string>
     <string name="chain_wg_invalid">Invalid wg0.conf — needs [Interface] PrivateKey and [Peer] Endpoint</string>
     <string name="chain_config_reload">Reload</string>
-    <string name="chain_config_save">Save</string>
     <string name="chain_connect">Connect chain</string>
     <string name="chain_disconnect">Disconnect</string>
     <string name="chain_connecting">Connecting the three hops…</string>
@@ -2045,17 +2039,13 @@
     <string name="chain_status_connected">Connected</string>
     <string name="chain_status_ready">Ready — not connected</string>
     <string name="chain_status_incomplete">Setup incomplete</string>
-    <string name="chain_hop_on">On</string>
-    <string name="chain_hop_off">Off</string>
     <string name="chain_need_register_first">Register this hop first</string>
     <string name="chain_need_wg_first">Load wg0.conf first</string>
-    <string name="chain_switch_hint">Flip all three on, then Connect</string>
     <string name="chain_log_title">Verbose log (chain_debug.txt)</string>
     <string name="chain_log_refresh">Refresh</string>
     <string name="chain_log_clear">Clear</string>
     <string name="chain_log_share">Share</string>
     <!-- Chain mode, step 5: exit-IP check (Cloudflare /cdn-cgi/trace through the local SOCKS5) -->
-    <string name="chain_step5_title">5. Verify the exit IP</string>
     <string name="chain_exit_desc">Asks Cloudflare what it sees through the chain, and through simple WARP if it is running. A different colo (Cloudflare data center) proves the chain exits via WARP2.</string>
     <string name="chain_exit_check_btn">Check exit IP</string>
     <string name="chain_exit_not_checked">Not checked yet</string>
@@ -2075,4 +2065,55 @@
     <string name="chain_exit_vpn_is_warp">simple WARP, NOT the chain. Browsers and apps show the simple-WARP IP until the VPN is pointed at the chain port.</string>
     <string name="chain_exit_vpn_is_other">not the chain.</string>
     <string name="chain_exit_vpn_no_socks">VPN tunnel (all other apps) is not using a custom SOCKS5 proxy, so it does not go through the chain.</string>
+    <!-- Chain screen v2: per-hop cards (SNI, config, libusque.so flags), MTU summary -->
+    <string name="chain_master_label">Chain enabled</string>
+    <string name="chain_status_restarting">Restarting with the new settings…</string>
+    <string name="chain_status_hop_off">A hop is turned off</string>
+    <string name="chain_mtu_summary">MTU: WARP1 %1$d → wg0 %2$s → WARP2 %3$d (%4$s)</string>
+    <string name="chain_mtu_no_wg">—</string>
+    <string name="chain_transport_h2">HTTP/2</string>
+    <string name="chain_transport_quic">QUIC</string>
+    <string name="chain_hop1_title">WARP1 · entry</string>
+    <string name="chain_hop1_sub">Hides you from your ISP. The only hop on your network: its SNI is what the ISP sees.</string>
+    <string name="chain_hop2_title">wg0 · WireGuard</string>
+    <string name="chain_hop2_sub">Gives the new location. Runs inside WARP1.</string>
+    <string name="chain_hop3_title">WARP2 · exit</string>
+    <string name="chain_hop3_sub">Cloudflare egress IP. Runs inside wg0, over HTTP/2 because QUIC does not fit there.</string>
+    <string name="chain_hop_turned_off">Turned off: the chain will not connect until it is back on</string>
+    <string name="chain_need_hops_on">Turn all three hops on first</string>
+    <string name="chain_sni_hint_warp1">SNI (ClientHello, seen by your ISP)</string>
+    <string name="chain_sni_hint_warp2">Exit SNI (inside wg0, hidden from your ISP)</string>
+    <string name="chain_sni_saved">SNI saved: %1$s</string>
+    <string name="chain_sni_unchanged">SNI unchanged: %1$s</string>
+    <string name="chain_sni_reset_done">SNI reset to %1$s</string>
+    <string name="chain_sni_invalid">Invalid SNI: letters, digits, dots and hyphens only</string>
+    <string name="chain_save">Save</string>
+    <string name="chain_reset">Reset</string>
+    <string name="chain_saved_tick">Saved ✓</string>
+    <string name="chain_advanced">Advanced: config and libusque.so flags</string>
+    <string name="chain_config_title_warp1">WARP1 config.json</string>
+    <string name="chain_config_title_warp2">WARP2 config_exit.json</string>
+    <string name="chain_config_desc_warp1">Same identity file as simple WARP. Save restarts the chain if it is running.</string>
+    <string name="chain_config_desc_warp2">The exit identity (second registration). Save restarts the chain if it is running.</string>
+    <string name="chain_config_reloaded">%1$s reloaded</string>
+    <string name="chain_config_saved">%1$s saved</string>
+    <string name="chain_config_invalid">Invalid %1$s: needs a JSON object with private_key. Not saved.</string>
+    <string name="chain_args_title_warp1">WARP1 libusque.so flags</string>
+    <string name="chain_args_title_wg">wg0 libusque.so flags</string>
+    <string name="chain_args_title_warp2">WARP2 libusque.so flags</string>
+    <string name="chain_args_desc_warp1">Space-separated. {sni} is the SNI above. -m MTU, -i QUIC packet size, -P port, -k keepalive and -r reconnect delay (both also apply to WARP2), --http2-fallback-after N failed QUIC connects (0 = never).</string>
+    <string name="chain_args_desc_wg">Only --wg-* flags. --wg-mtu 0 uses the MTU from wg0.conf; usque always caps it to WARP1 MTU − 60 (− 80 for an IPv6 endpoint). --wg-keepalive applies when wg0.conf sets none.</string>
+    <string name="chain_args_desc_warp2">Only --exit-* flags. {exit_sni} is the exit SNI above. --exit-transport auto picks HTTP/2 inside wg0; --exit-mtu 1280–1500.</string>
+    <string name="chain_args_effective">Effective (next start):</string>
+    <string name="chain_args_saved">Flags saved</string>
+    <string name="chain_args_reset_done">Flags reset to the default</string>
+    <string name="chain_args_reloaded">Flags reloaded</string>
+    <string name="chain_args_err_core">Not saved: -b, -p, -u, -w, -c, --wg and --exit-config belong to the fixed core below</string>
+    <string name="chain_args_err_hop">Not saved: one of those flags belongs to another hop</string>
+    <string name="chain_args_err_sub">Not saved: leave out the chain subcommand, it is part of the core</string>
+    <string name="chain_cmd_title">libusque.so command</string>
+    <string name="chain_cmd_core_label">Fixed core (the VPN tunnel is routed to this SOCKS port):</string>
+    <string name="chain_cmd_full_label">Full command (next start):</string>
+    <string name="chain_restart_ok">Chain restarted with the new settings</string>
+    <string name="chain_restart_failed">Chain did not come back with the new settings: disconnected, see log</string>
 </resources>
