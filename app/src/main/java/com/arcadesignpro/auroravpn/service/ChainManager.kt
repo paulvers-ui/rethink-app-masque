@@ -6,6 +6,7 @@ import android.util.Log
 import java.io.File
 import java.io.StringWriter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
@@ -59,6 +60,10 @@ object ChainManager {
     private const val OUTPUT_DRAIN_JOIN_MS = 2_000L
     private const val LIVENESS_CONNECT_TIMEOUT_MS = 3_000
     private const val LIVENESS_READ_TIMEOUT_MS = 8_000
+    // The SOCKS port opens before the hops carry traffic, so the end-to-end
+    // probe is retried while WARP1, wg0 and WARP2 come up in series.
+    const val LIVENESS_WAIT_MS = 30_000L
+    private const val LIVENESS_RETRY_MS = 2_000L
 
     // SOCKS5 liveness probe: CONNECT to 1.1.1.1:80.
     private const val SOCKS5_VERSION: Byte = 5
@@ -392,6 +397,30 @@ object ChainManager {
                 }
             } finally { android.net.TrafficStats.clearThreadStatsTag() }
         } catch (_: Exception) { false }
+    }
+
+    /**
+     * The SOCKS port opens before the hops carry traffic: WARP1 connects, then
+     * wg0 must handshake inside it, then WARP2 connects inside wg0. Retry the
+     * end-to-end probe until it passes, the process dies, or timeoutMs elapses.
+     */
+    suspend fun awaitChainLiveness(ctx: Context, timeoutMs: Long = LIVENESS_WAIT_MS): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var attempt = 0
+        while (System.currentTimeMillis() < deadline) {
+            attempt++
+            if (probeChainLiveness()) {
+                dlog(ctx, "awaitChainLiveness: OK after $attempt attempts")
+                return true
+            }
+            if (process?.isAlive != true) {
+                dlog(ctx, "awaitChainLiveness: process died after $attempt attempts")
+                return false
+            }
+            delay(LIVENESS_RETRY_MS)
+        }
+        dlog(ctx, "awaitChainLiveness: no traffic through the chain after ${timeoutMs}ms / $attempt attempts")
+        return false
     }
 
     fun reattachIfPortAlive(ctx: Context): Boolean {
