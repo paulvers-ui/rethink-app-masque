@@ -418,9 +418,9 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
     // CHAIN_RESTART_MAX_INTERVAL_MS) until a probe passes: back-to-back restarts kill
     // WARP1 mid-reconnect, which is how a short outage turned into a long one.
     private suspend fun hardRestartChain(reason: String) {
-        Logger.w(LOG_TAG_VPN, "chain: $reason, restarting (next restart no sooner than ${chainRestartBackoffMs}ms)")
         chainLastRestartMs = System.currentTimeMillis()
         chainRestartBackoffMs = (chainRestartBackoffMs * 2).coerceAtMost(CHAIN_RESTART_MAX_INTERVAL_MS)
+        Logger.w(LOG_TAG_VPN, "chain: $reason, restarting (next restart no sooner than ${chainRestartBackoffMs}ms)")
         refreshResolvers()
         withContext(Dispatchers.IO) { ChainManager.stopChain() }
         // The user may have switched the chain off while it was being stopped.
