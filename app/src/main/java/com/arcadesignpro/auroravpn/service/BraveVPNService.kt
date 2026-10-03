@@ -207,6 +207,7 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
     // Chain mode (ChainManager) keep-alive, see startChainWatchdog()
     private var chainWatchdogJob: kotlinx.coroutines.Job? = null
     @Volatile private var chainLastRestartMs = 0L
+    @Volatile private var chainRestartBackoffMs = CHAIN_RESTART_MIN_INTERVAL_MS
     private val chainRestartLock = kotlinx.coroutines.sync.Mutex()
 
     // Sprint 20 Bug 1: Doze-proof alarm watchdog receiver and helpers.
@@ -380,6 +381,8 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
                 kotlinx.coroutines.delay(CHAIN_WATCHDOG_INTERVAL_MS)
                 val healthy = !persistentState.chainEnabled ||
                     (ChainManager.isRunning() && ChainManager.probeChainLiveness())
+                // Traffic flows again: the next outage starts from the shortest wait.
+                if (healthy) chainRestartBackoffMs = CHAIN_RESTART_MIN_INTERVAL_MS
                 failures = if (healthy) 0 else failures + 1
                 if (failures >= CHAIN_WATCHDOG_MAX_FAILURES) {
                     failures = 0
@@ -405,15 +408,19 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
     private fun chainRestartAllowed(): Boolean {
         val sinceLast = System.currentTimeMillis() - chainLastRestartMs
         return persistentState.chainEnabled && !ChainManager.isChainStarting() &&
-            sinceLast >= CHAIN_RESTART_MIN_INTERVAL_MS
+            sinceLast >= chainRestartBackoffMs
     }
 
     // A hard restart: startChain() is a no-op while the process lives and the port
     // answers, so a stalled-but-alive chain must be stopped first. stopChain() drops
     // the process ref before killing it, so this does not fire the death callback.
+    // Each restart doubles the wait before the next one (up to
+    // CHAIN_RESTART_MAX_INTERVAL_MS) until a probe passes: back-to-back restarts kill
+    // WARP1 mid-reconnect, which is how a short outage turned into a long one.
     private suspend fun hardRestartChain(reason: String) {
-        Logger.w(LOG_TAG_VPN, "chain: $reason, restarting")
+        Logger.w(LOG_TAG_VPN, "chain: $reason, restarting (next restart no sooner than ${chainRestartBackoffMs}ms)")
         chainLastRestartMs = System.currentTimeMillis()
+        chainRestartBackoffMs = (chainRestartBackoffMs * 2).coerceAtMost(CHAIN_RESTART_MAX_INTERVAL_MS)
         refreshResolvers()
         withContext(Dispatchers.IO) { ChainManager.stopChain() }
         // The user may have switched the chain off while it was being stopped.
@@ -437,9 +444,12 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         }
     }
 
+    // Only a dead process is restarted here. A live one whose probe fails is most
+    // likely re-dialing a hop (usque reconnects by itself, and WARP1 falls back to
+    // HTTP/2); the watchdog restarts it if that does not recover.
     private suspend fun checkChainAfterUnlock() {
         val running = withContext(Dispatchers.IO) { ChainManager.isRunning() }
-        if (!running || !ChainManager.probeChainLiveness()) restartChain("screen unlock: chain down")
+        if (!running) restartChain("screen unlock: chain process not running")
     }
 
     // flow/inflow/preflow are the three Bridge callbacks firestack wraps in a hard 5s
@@ -559,11 +569,13 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
         private const val USQUE_DOZE_WAKELOCK_TIMEOUT_MS = 30_000L
 
         // Chain mode keep-alive: probe every 20 s like usque, but restart only after
-        // two misses in a row (usque re-dials a dropped hop by itself; a restart
-        // rebuilds all three hops in series), and never twice within 10 s.
+        // three misses in a row (60 s: usque re-dials a dropped hop by itself and
+        // WARP1 moves to HTTP/2 after two failed QUIC connects; a restart rebuilds
+        // all three hops in series). Restarts back off from 10 s to 5 min.
         private const val CHAIN_WATCHDOG_INTERVAL_MS = 20_000L
-        private const val CHAIN_WATCHDOG_MAX_FAILURES = 2
+        private const val CHAIN_WATCHDOG_MAX_FAILURES = 3
         private const val CHAIN_RESTART_MIN_INTERVAL_MS = 10_000L
+        private const val CHAIN_RESTART_MAX_INTERVAL_MS = 5 * 60 * 1000L
 
         // WARP safety timer -- see PersistentState.warpAutoDisableEnabled's doc comment.
         const val ACTION_WARP_AUTO_DISABLE = "com.arcadesignpro.auroravpn.WARP_AUTO_DISABLE"

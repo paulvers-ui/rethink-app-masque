@@ -48,6 +48,8 @@ object ChainManager {
     const val WARP1_CONFIG = "config.json"
     const val EXIT_CONFIG = "config_exit.json"
     const val WG_CONFIG = "wg0.conf"
+    // The one field every usque config.json needs (the WARP identity's key).
+    private const val WARP_KEY_FIELD = "private_key"
 
     // Timeouts (ms). The chain brings up three tunnels in series, so it gets a
     // longer start window than the single-hop path.
@@ -181,12 +183,20 @@ object ChainManager {
         ""
     }
 
-    /** Atomically writes a config file after a light validity check. */
+    /**
+     * Atomically writes a WARP identity (config.json / config_exit.json) after
+     * checking it parses as a JSON object with the private_key usque needs, so a
+     * truncated paste is refused here instead of breaking the next start.
+     */
     fun writeConfigJson(ctx: Context, name: String, text: String): Boolean {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) { dlog(ctx, "writeConfigJson($name): empty"); return false }
-        val looksJson = trimmed.startsWith("{") && trimmed.endsWith("}")
-        if (!looksJson) { dlog(ctx, "writeConfigJson($name): not JSON"); return false }
+        val parsed = try { org.json.JSONObject(trimmed) } catch (_: org.json.JSONException) { null }
+        if (parsed == null) { dlog(ctx, "writeConfigJson($name): not a JSON object"); return false }
+        if (parsed.optString(WARP_KEY_FIELD).isBlank()) {
+            dlog(ctx, "writeConfigJson($name): no $WARP_KEY_FIELD")
+            return false
+        }
         return atomicWrite(ctx, name, trimmed)
     }
 
@@ -306,23 +316,11 @@ object ChainManager {
             if (!bin.exists() || !bin.canExecute()) {
                 dlog(ctx, "startChain: binary not ready"); return false
             }
-            val warp1 = File(ctx.filesDir, WARP1_CONFIG).absolutePath
-            val wg = File(ctx.filesDir, WG_CONFIG).absolutePath
-            val exit = File(ctx.filesDir, EXIT_CONFIG).absolutePath
-            val sni = runCatching {
-                org.koin.java.KoinJavaComponent.get<PersistentState>(PersistentState::class.java).warpSpoofedSni
-            }.getOrDefault(UsqueManager.DEFAULT_WARP_SNI).trim().ifEmpty { UsqueManager.DEFAULT_WARP_SNI }
-
-            val cmd = mutableListOf(
-                bin.absolutePath, "chain",
-                "-b", SOCKS_HOST, "-p", SOCKS_PORT.toString(),
-                "-c", warp1,
-                "--wg", wg,
-                "--exit-config", exit,
-                "--exit-transport", "auto", // QUIC does not fit through wg0; auto picks HTTP/2
-                "-s", sni,                  // WARP1 SNI — the only hop the ISP sees
-                "-i", "1350",               // Cloudflare-sized QUIC packets for WARP1
-            )
+            // Fixed core + the per-hop flags from the chain screen (see ChainArgs).
+            val ps = runCatching {
+                org.koin.java.KoinJavaComponent.get<PersistentState>(PersistentState::class.java)
+            }.getOrNull()
+            val cmd = listOf(bin.absolutePath) + ChainArgs.build(ctx, ps)
             dlog(ctx, "startChain: cmd=${cmd.joinToString(" ")}")
             val pb = ProcessBuilder(cmd).redirectErrorStream(false)
             pb.environment()["GODEBUG"] = "vgetrandom=off"
@@ -358,6 +356,8 @@ object ChainManager {
                 // wg0 hostname lookup): kill it, or it would bind :40001 later as an
                 // orphan that stopChain() can no longer reach.
                 if (proc.isAlive) proc.destroyForcibly()
+                // Wait for the kill to land so the log shows the real exit code (not -1).
+                proc.waitFor(STOP_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
                 outThread.join(OUTPUT_DRAIN_JOIN_MS); errThread.join(OUTPUT_DRAIN_JOIN_MS)
                 val code = try { proc.exitValue() } catch (_: Exception) { -1 }
                 dlog(ctx, "startChain: exit=$code")
