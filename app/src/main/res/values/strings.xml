@@ -2038,7 +2038,8 @@
     <string name="chain_connect">Connect chain</string>
     <string name="chain_disconnect">Disconnect</string>
     <string name="chain_connecting">Connecting the three hops…</string>
-    <string name="chain_connected">Chain connected (apps → WARP2 → wg0 → WARP1)</string>
+    <string name="chain_connected">Chain connected: the VPN now exits via WARP2 (apps → WARP2 → wg0 → WARP1)</string>
+    <string name="chain_tunnel_title">WARP chain (WARP1 → wg0 → WARP2)</string>
     <string name="chain_connect_failed">Chain failed to start — see log</string>
     <string name="chain_not_ready">Finish steps 1–3 first</string>
     <string name="chain_status_connected">Connected</string>
@@ -2052,4 +2053,26 @@
     <string name="chain_log_title">Verbose log (chain_debug.txt)</string>
     <string name="chain_log_refresh">Refresh</string>
     <string name="chain_log_clear">Clear</string>
-    <string name="chain_log_share">Share</string></resources>
+    <string name="chain_log_share">Share</string>
+    <!-- Chain mode, step 5: exit-IP check (Cloudflare /cdn-cgi/trace through the local SOCKS5) -->
+    <string name="chain_step5_title">5. Verify the exit IP</string>
+    <string name="chain_exit_desc">Asks Cloudflare what it sees through the chain, and through simple WARP if it is running. A different colo (Cloudflare data center) proves the chain exits via WARP2.</string>
+    <string name="chain_exit_check_btn">Check exit IP</string>
+    <string name="chain_exit_not_checked">Not checked yet</string>
+    <string name="chain_exit_checking">Asking Cloudflare through each SOCKS port…</string>
+    <string name="chain_exit_need_connect">Connect the chain first</string>
+    <string name="chain_exit_label_chain">Chain exit (WARP2, port %1$d):</string>
+    <string name="chain_exit_label_warp">Simple WARP (port %1$d, same identity as WARP1):</string>
+    <string name="chain_exit_trace_ok">• ip %1$s · loc %2$s · colo %3$s · warp=%4$s</string>
+    <string name="chain_exit_trace_failed">• failed: %1$s</string>
+    <string name="chain_exit_verdict_different">PASS: different Cloudflare colo than simple WARP, so traffic through the chain exits via WARP2.</string>
+    <string name="chain_exit_verdict_same_colo">PARTLY: different IP but the same colo. WARP2 is the exit, but the wg0 server reaches the same Cloudflare data center as your phone, so the location barely changes.</string>
+    <string name="chain_exit_verdict_same_ip">FAIL: same exit IP as simple WARP. The chain is not changing your exit; share the log.</string>
+    <string name="chain_exit_verdict_no_compare">Simple WARP is not running, so there is nothing to compare. colo and loc above should match the wg0 server location, not yours.</string>
+    <string name="chain_exit_verdict_chain_failed">FAIL: the chain did not return a Cloudflare trace. See the log.</string>
+    <string name="chain_exit_vpn_route">VPN tunnel (all other apps) is set to SOCKS5 %1$s: %2$s</string>
+    <string name="chain_exit_vpn_is_chain">the chain, so apps exit via WARP2.</string>
+    <string name="chain_exit_vpn_is_warp">simple WARP, NOT the chain. Browsers and apps show the simple-WARP IP until the VPN is pointed at the chain port.</string>
+    <string name="chain_exit_vpn_is_other">not the chain.</string>
+    <string name="chain_exit_vpn_no_socks">VPN tunnel (all other apps) is not using a custom SOCKS5 proxy, so it does not go through the chain.</string>
+</resources>
