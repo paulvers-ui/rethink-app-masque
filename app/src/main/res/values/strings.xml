@@ -2102,7 +2102,7 @@
     <string name="chain_args_title_wg">wg0 libusque.so flags</string>
     <string name="chain_args_title_warp2">WARP2 libusque.so flags</string>
     <string name="chain_args_desc_warp1">Space-separated. {sni} is the SNI above. -m MTU, -i QUIC packet size, -P port, -k keepalive and -r reconnect delay (both also apply to WARP2), --http2-fallback-after N failed QUIC connects (0 = never).</string>
-    <string name="chain_args_desc_wg">Only --wg-* flags. --wg-mtu 0 uses wg0.conf's MTU; usque always caps it to WARP1 MTU − 60 (− 80 for an IPv6 endpoint). --wg-keepalive applies when wg0.conf sets none.</string>
+    <string name="chain_args_desc_wg">Only --wg-* flags. --wg-mtu 0 uses the MTU from wg0.conf; usque always caps it to WARP1 MTU − 60 (− 80 for an IPv6 endpoint). --wg-keepalive applies when wg0.conf sets none.</string>
     <string name="chain_args_desc_warp2">Only --exit-* flags. {exit_sni} is the exit SNI above. --exit-transport auto picks HTTP/2 inside wg0; --exit-mtu 1280–1500.</string>
     <string name="chain_args_effective">Effective (next start):</string>
     <string name="chain_args_saved">Flags saved</string>
