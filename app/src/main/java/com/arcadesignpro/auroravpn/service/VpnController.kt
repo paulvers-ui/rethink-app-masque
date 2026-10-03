@@ -394,6 +394,13 @@ object VpnController : KoinComponent {
         braveVpnService?.cancelWarpAutoDisable()
     }
 
+    // Chain mode <-> simple WARP swap the loopback SOCKS5 port; see
+    // BraveVPNService.reapplyLoopbackSocks5. No-op while the VPN is off: the
+    // tunnel reads the stored proxy row when it starts.
+    suspend fun reapplyLoopbackSocks5(reason: String) {
+        braveVpnService?.reapplyLoopbackSocks5(reason)
+    }
+
     fun closeConnectionsIfNeeded(uid: Int = INVALID_UID, reason: String) {
         braveVpnService?.closeConnectionsIfNeeded(uid, reason)
     }
