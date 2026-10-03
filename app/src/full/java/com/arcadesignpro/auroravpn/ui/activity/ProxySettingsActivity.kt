@@ -51,6 +51,7 @@ import com.arcadesignpro.auroravpn.database.Severity
 import com.arcadesignpro.auroravpn.databinding.DialogSetProxyBinding
 import com.arcadesignpro.auroravpn.databinding.FragmentProxyConfigureBinding
 import com.arcadesignpro.auroravpn.net.doh.Transaction
+import com.arcadesignpro.auroravpn.service.ChainManager
 import com.arcadesignpro.auroravpn.service.EventLogger
 import com.arcadesignpro.auroravpn.service.FirewallManager
 import com.arcadesignpro.auroravpn.service.PersistentState
@@ -151,7 +152,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
         displayWireguardUi()
         // If WARP was enabled but the process died (app killed, VPN restarted),
         // attempt a silent restart so the switch shows the correct state.
-        if (persistentState.usqueEnabled && !UsqueManager.isRunning()) {
+        if (persistentState.usqueEnabled && !persistentState.chainEnabled && !UsqueManager.isRunning()) {
             // Process reference lost (e.g. after navigation) — check if port is still alive
             // before doing a full restart. If the proxy is already listening, just refresh UI.
             //
@@ -214,6 +215,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
             _: CompoundButton,
             checked: Boolean ->
             if (!checked) {
+                releaseChainForManualProxy()
                 appConfig.removeProxy(AppConfig.ProxyType.SOCKS5, AppConfig.ProxyProvider.CUSTOM)
                 b.settingsActivitySocks5Desc.text =
                     getString(R.string.settings_socks_forwarding_default_desc)
@@ -588,6 +590,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
                 val warpProxyName = getString(R.string.warp_tunnel_title)
                 isWarpStarting = true
                 io {
+                    val chainWasOn = stopChainForWarp()
                     val started = UsqueManager.startSocksProxy(this@ProxySettingsActivity)
                     if (started) {
                         // Set usqueEnabled = true BEFORE updateCustomSocks5Proxy so that any
@@ -616,6 +619,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
                             latency = 0
                         )
                         appConfig.updateCustomSocks5Proxy(warpProxy)
+                        reapplyIfChainWasOn(chainWasOn)
                         // Bug: on the very first enable, the switch flipped back to OFF even
                         // though WARP genuinely connected a moment later - it also stayed wrong
                         // until a second tap re-checked it. updateCustomSocks5Proxy() can trigger
@@ -630,6 +634,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
                             waitedMs += WARP_SETTLE_POLL_MS
                         }
                     }
+                    dropChainRowIfWarpFailed(started, chainWasOn)
                     uiCtx {
                         isWarpStarting = false
                         if (started) {
@@ -647,7 +652,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
                 }
             } else {
                 UsqueManager.stopSocksProxy()
-                appConfig.removeProxy(AppConfig.ProxyType.SOCKS5, AppConfig.ProxyProvider.CUSTOM)
+                removeWarpProxyUnlessChain()
                 persistentState.usqueEnabled = false
                 VpnController.cancelWarpAutoDisable()
                 updateWarpUi()
@@ -1257,6 +1262,7 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
         password: String,
         isUDPBlock: Boolean
     ) {
+        releaseChainForManualProxy()
         b.settingsActivitySocks5Switch.isEnabled = false
         b.settingsActivitySocks5Switch.visibility = View.GONE
         b.settingsActivitySocks5Progress.visibility = View.VISIBLE
@@ -1341,6 +1347,46 @@ class ProxySettingsActivity : AppCompatActivity(R.layout.fragment_proxy_configur
 
     private fun logEvent(msg: String, details: String) {
         eventLogger.log(EventType.PROXY_SWITCH, Severity.LOW, msg, EventSource.UI, false, details)
+    }
+
+    // Chain mode (ChainSettingsActivity) and simple WARP share the WARP proxy row and
+    // the config.json identity, so only one of them is the tunnel's upstream. Turning
+    // simple WARP on hands the tunnel back from the chain; returns whether it was on.
+    private fun stopChainForWarp(): Boolean {
+        if (!persistentState.chainEnabled) return false
+        persistentState.chainEnabled = false
+        ChainManager.stopChain()
+        return true
+    }
+
+    // The user takes the SOCKS5 slot over by hand (switch off, or saves their own
+    // proxy into the same row): chain mode no longer owns the tunnel's route.
+    private fun releaseChainForManualProxy() {
+        if (!persistentState.chainEnabled) return
+        persistentState.chainEnabled = false
+        io { ChainManager.stopChain() }
+    }
+
+    // The proxy type stays SOCKS5 when the port changes from the chain's to WARP's,
+    // so the VPN service is not notified by the pref listener; re-apply explicitly.
+    private suspend fun reapplyIfChainWasOn(chainWasOn: Boolean) {
+        if (chainWasOn) VpnController.reapplyLoopbackSocks5("simple WARP replaces chain")
+    }
+
+    // WARP failed to start after the chain was stopped: the row still points at the
+    // chain's (now closed) port, so drop it like the WARP-off path does.
+    private fun dropChainRowIfWarpFailed(started: Boolean, chainWasOn: Boolean) {
+        if (chainWasOn && !started) {
+            appConfig.removeProxy(AppConfig.ProxyType.SOCKS5, AppConfig.ProxyProvider.CUSTOM)
+        }
+    }
+
+    // While chain mode is the upstream, the WARP proxy row points at the chain; turning
+    // the (already stopped) simple WARP off must not take the chain's route away.
+    private fun removeWarpProxyUnlessChain() {
+        if (!persistentState.chainEnabled) {
+            appConfig.removeProxy(AppConfig.ProxyType.SOCKS5, AppConfig.ProxyProvider.CUSTOM)
+        }
     }
 
     private fun io(f: suspend () -> Unit) {
