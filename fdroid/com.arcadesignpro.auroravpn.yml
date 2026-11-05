@@ -1,100 +1,71 @@
-# Placeholders filled with real, verified values (commit v1.0.0, srclib
-# SHAs, NDK version). What's NOT been done yet: running `fdroid build` on
-# the buildserver -- see step 4 of fdroid/GUIA-FDROID.md. Without that,
-# there's no guarantee prebuild: actually compiles -- it's the step that
-# usually needs adjusting with gomobile. Test it before opening the MR.
-#
-# Final destination: metadata/com.arcadesignpro.auroravpn.yml inside your
-# fork of gitlab.com/fdroid/fdroiddata
-
+AntiFeatures:
+  NonFreeNet:
+    en-US: The WARP feature connects to Cloudflare's proprietary WARP service.
 Categories:
+  - DNS & Hosts
   - Security
-  - Internet
+  - VPN & Proxy
 License: Apache-2.0
-AuthorName: paulvers-ui
-SourceCode: https://github.com/paulvers-ui/rethink-app-masque
-IssueTracker: https://github.com/paulvers-ui/rethink-app-masque/issues
+AuthorName: paulvers-ui2
+SourceCode: https://github.com/paulvers-ui2/rethink-app-masque
+IssueTracker: https://github.com/paulvers-ui2/rethink-app-masque/issues
+Changelog: https://github.com/paulvers-ui2/rethink-app-masque/releases
 
 AutoName: AuroraVPN
-Summary: Encrypted DNS client, firewall, and WireGuard proxy
-
-Description: |-
-    Fork of Rethink DNS + Firewall + VPN with these changes from the original:
-
-    * Own package ID (com.arcadesignpro.auroravpn), coexists with the original.
-    * A single theme, Dark Plus -- every other option was removed from the
-      picker.
-    * Sound alerts when network status changes (tunnel down, unhealthy
-      proxy, interface switch), debounced so a burst doesn't repeat; the
-      sound is picked from the system's own notification picker.
-    * WARP is served over MASQUE via usque
-      (github.com/paulvers-ui/usque, a fork of Diniboy1123/usque) instead
-      of Cloudflare's official WireGuard client.
-    * Own sponsor link (ko-fi) instead of RethinkDNS's.
-    * Fallback DNS: RethinkDNS removed from the list, Cloudflare by
-      default.
 
 RepoType: git
-Repo: https://github.com/paulvers-ui/rethink-app-masque.git
+Repo: https://github.com/paulvers-ui2/rethink-app-masque.git
 
 Builds:
-  - versionName: 1.0.0
+  - versionName: v1.11.19
     versionCode: 54
-    commit: v1.0.0
+    commit: f5809ccaa7b4c64dfb88e296649e6853608fe290
     subdir: app
+    sudo:
+      - apt-get update
+      - apt-get install -y curl make
+      - curl -Lso /tmp/go.tar.gz https://go.dev/dl/go1.26.3.linux-amd64.tar.gz
+      - echo "2b2cfc7148493da5e73981bffbf3353af381d5f93e789c82c79aff64962eb556  /tmp/go.tar.gz"
+        | sha256sum -c -
+      - tar -C /usr/local -xzf /tmp/go.tar.gz
+      - rm /tmp/go.tar.gz
     gradle:
       - fdroidFull
-
-    # ── The core of it ──────────────────────────────────────────────────
-    # F-Droid builds everything from source and rejects prebuilt binaries.
-    # These two live in the repo and have to be deleted and rebuilt here.
-    # firestack@<sha> has to come from this fork's n2 branch -- it's the
-    # only one with the API this app's Kotlin expects (3-arg OnQuery,
-    # Gostr/Gobyte). Confirm the real HEAD before pinning the sha:
-    #   git ls-remote https://github.com/paulvers-ui/usque.git main
-    #   git ls-remote https://github.com/paulvers-ui/firestack.git n2
     srclibs:
-      - usque@f1dab654cc5882572900f74196e11aa2aac0f413
-      - firestack@0159488a03e052fed4d62cd62f3ddc8142f8f70f
-
+      - AuroraUsque@97795bc6a85071a73eff76fe58b3f1b06d460cfa
+      - AuroraFirestack@05a664580caca8e30a912b75f2ffe480560e70ae
     rm:
       - app/src/main/jniLibs/arm64-v8a/libusque.so
+      - app/src/main/jniLibs/arm64-v8a/libusque.so.bak
+      - app/src/main/jniLibs/arm64-v8a/libusque.so.prev
+      - app/src/main/jniLibs/arm64-v8a/libusque.so.doh10aug.26
       - app/src/main/jniLibs/arm64-v8a/libusque.so.working.sha256
-      - app/libs/firestack.aar
-
     prebuild:
-      # 1) usque -> jniLibs/arm64-v8a/libusque.so
-      #    It's a Go PIE executable, not a library. It has to be named
-      #    lib*.so so Android extracts it to nativeLibraryDir and can
-      #    execute it -- hence the name, even though it isn't a real .so.
-      #
-      #    No NDK or CC needed: this fork's goreleaser.yml builds with
-      #    CGO_ENABLED=0 -- pure Go cross-compiled to android/arm64, no cgo.
-      - pushd $$usque$$
-      - GOOS=android GOARCH=arm64 CGO_ENABLED=0
-        go build -buildmode=pie -trimpath -ldflags="-s -w" -o libusque.so .
+      - sed -i -e 's/^org.gradle.unsafe.configuration-cache=true/org.gradle.unsafe.configuration-cache=false/'
+        -e 's/-Xmx2048m/-Xmx4g/' -e 's/^firestackRepo=.*/firestackRepo=local/' ../gradle.properties
+      - sed -i -e '/com.google.gms/d' -e '/com.google.firebase/d' -e '/firestackRepo
+        == "github"/,/^ *} else {/{/^ *} else {/!d}' ../build.gradle
+      - sed -i -e '/com.google.gms/d' -e '/[Ff]irebase/d' -e '/[Cc]rashlytics/d' build.gradle
+    build:
+      - export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
+      - pushd $$AuroraUsque$$
+      - GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"
+        -o libusque.so .
       - popd
-      - mkdir -p app/src/main/jniLibs/arm64-v8a
-      - cp $$usque$$/libusque.so app/src/main/jniLibs/arm64-v8a/libusque.so
-
-      # 2) firestack -> app/libs/firestack.aar
-      #    make-aar runs `make clean && make intra`; see BUILD.md in that repo.
-      #    This one DOES need the NDK (gomobile bind), hence ndk: below.
-      - pushd $$firestack$$
+      - mkdir -p src/main/jniLibs/arm64-v8a
+      - cp $$AuroraUsque$$/libusque.so src/main/jniLibs/arm64-v8a/libusque.so
+      - (cd src/main/jniLibs/arm64-v8a && sha256sum libusque.so > libusque.so.working.sha256)
+      - pushd $$AuroraFirestack$$
       - ./make-aar nogo nodebug
       - popd
-      - mkdir -p app/libs
-      - cp $$firestack$$/firestack.aar app/libs/firestack.aar
+      - mkdir -p libs
+      - cp $$AuroraFirestack$$/firestack.aar libs/firestack-local.aar
+    ndk: 28.2.13676358
+    gradleprops:
+      - firestackRepo=local
 
-      # 3) resolve firestack from the local aar, not from JitPack.
-      #    JitPack isn't on F-Droid's list of allowed dependency repos.
-      - sed -i -e 's/^firestackRepo=.*/firestackRepo=local/' ../gradle.properties
-
-    # gomobile needs the NDK; the version must match the one in firestack's
-    # own BUILD.md.
-    ndk: "28.2.13676358"
-
-AutoUpdateMode: None
-UpdateCheckMode: Tags
-CurrentVersion: "1.0.0"
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+$
+UpdateCheckData: gradle.properties|VERSION_CODE=(\d+)||
+CurrentVersion: v1.11.19
 CurrentVersionCode: 54
