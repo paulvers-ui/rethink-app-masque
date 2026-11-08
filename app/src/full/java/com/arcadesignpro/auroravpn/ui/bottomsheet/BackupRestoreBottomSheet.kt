@@ -54,7 +54,10 @@ import com.arcadesignpro.auroravpn.backup.BackupHelper.Companion.INTENT_TYPE_XZI
 import com.arcadesignpro.auroravpn.backup.RestoreAgent
 import com.arcadesignpro.auroravpn.databinding.ActivityBackupRestoreBinding
 import com.arcadesignpro.auroravpn.service.PersistentState
+import com.arcadesignpro.auroravpn.util.BackupText
+import com.arcadesignpro.auroravpn.util.TextTransferDialogs
 import com.arcadesignpro.auroravpn.util.Themes
+import com.arcadesignpro.auroravpn.util.TransferResult
 import com.arcadesignpro.auroravpn.util.Utilities
 import com.arcadesignpro.auroravpn.util.Utilities.delay
 import com.arcadesignpro.auroravpn.util.Utilities.isAtleastQ
@@ -62,12 +65,25 @@ import com.arcadesignpro.auroravpn.util.useTransparentNoDimBackground
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.koin.android.ext.android.inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class BackupRestoreBottomSheet : BottomSheetDialogFragment() {
+    // Set while a "copy as text" backup is running: the worker writes the .rbk
+    // here (app-private cache), and the success handler turns it into text.
+    private var pendingTextExport: File? = null
+
+    private companion object TextTransfer {
+        // App-private; never visible to other apps, cleared after each use.
+        const val TEXT_TRANSFER_DIR = "text-transfer"
+    }
+
     private var _binding: ActivityBackupRestoreBinding? = null
 
     // This property is only valid between onCreateView and
@@ -206,10 +222,12 @@ class BackupRestoreBottomSheet : BottomSheetDialogFragment() {
             )
             when (workInfo.state) {
                 WorkInfo.State.SUCCEEDED -> {
-                    showBackupSuccessUi()
+                    if (pendingTextExport != null) showBackupAsText() else showBackupSuccessUi()
                     workManager.pruneWork()
                 }
                 WorkInfo.State.CANCELLED, WorkInfo.State.FAILED -> {
+                    pendingTextExport = null
+                    clearTextTransferDir()
                     showBackupFailureDialog()
                     workManager.pruneWork()
                     workManager.cancelAllWorkByTag(BackupAgent.TAG)
@@ -233,12 +251,14 @@ class BackupRestoreBottomSheet : BottomSheetDialogFragment() {
                 "WorkManager state: ${workInfo.state} for ${RestoreAgent.TAG}"
             )
             if (WorkInfo.State.SUCCEEDED == workInfo.state) {
+                clearTextTransferDir()
                 showRestoreSuccessUi()
                 workManager.pruneWork()
             } else if (
                 WorkInfo.State.CANCELLED == workInfo.state ||
                     WorkInfo.State.FAILED == workInfo.state
             ) {
+                clearTextTransferDir()
                 showRestoreFailureDialog()
                 workManager.pruneWork()
                 workManager.cancelAllWorkByTag(RestoreAgent.TAG)
@@ -372,6 +392,84 @@ class BackupRestoreBottomSheet : BottomSheetDialogFragment() {
         WorkManager.getInstance(requireContext()).beginWith(downloadWatcher).enqueue()
     }
 
+    // ── copy/paste as text (no file picker, no file left in shared storage) ──
+
+    private fun textTransferDir(): File =
+        File(requireContext().cacheDir, TEXT_TRANSFER_DIR).apply { mkdirs() }
+
+    private fun clearTextTransferDir() {
+        try {
+            File(requireContext().applicationContext.cacheDir, TEXT_TRANSFER_DIR)
+                .listFiles()?.forEach { it.delete() }
+        } catch (e: Exception) {
+            Logger.w(LOG_TAG_BACKUP_RESTORE, "text transfer cleanup failed: ${e.message}")
+        }
+    }
+
+    /** Runs the normal backup into an app-private file, then shows it as text. */
+    private fun backupAsText() {
+        clearTextTransferDir() // leftovers from an interrupted run
+        val file = File(textTransferDir(), "backup-${System.currentTimeMillis()}$BACKUP_FILE_EXTN")
+        pendingTextExport = file
+        startBackupProcess(Uri.fromFile(file))
+    }
+
+    private fun showBackupAsText() {
+        val file = pendingTextExport ?: return
+        pendingTextExport = null
+        val ctx = context ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                try {
+                    val len = file.length()
+                    if (len in 1..BackupText.MAX_BACKUP_BYTES.toLong()) BackupText.encode(file.readBytes()) else null
+                } catch (e: Exception) {
+                    Logger.e(LOG_TAG_BACKUP_RESTORE, "backup as text: read failed: ${e.message}", e)
+                    null
+                } finally {
+                    file.delete()
+                }
+            }
+            if (!isAdded) return@launch
+            if (text == null) {
+                Utilities.showToastUiCentered(
+                    ctx, getString(R.string.brbs_backup_text_too_large), Toast.LENGTH_LONG
+                )
+                return@launch
+            }
+            TextTransferDialogs.showExport(ctx, getString(R.string.brbs_backup_text_title), text)
+        }
+    }
+
+    /** Validates pasted text fully before anything touches the restore pipeline. */
+    private fun restoreFromText() {
+        val ctx = context ?: return
+        TextTransferDialogs.showImport(
+            ctx,
+            getString(R.string.brbs_restore_text_title),
+            getString(R.string.brbs_restore_text_hint),
+            BackupText.MAX_CLIPBOARD_CHARS
+        ) { pasted ->
+            when (val r = BackupText.decode(pasted)) {
+                is TransferResult.Err -> TextTransferDialogs.message(ctx, r.error)
+                is TransferResult.Ok -> {
+                    clearTextTransferDir()
+                    val file = File(textTransferDir(), "restore-${System.currentTimeMillis()}$BACKUP_FILE_EXTN")
+                    try {
+                        file.writeBytes(r.value)
+                        observeRestoreWorker()
+                        startRestoreProcess(Uri.fromFile(file))
+                        null
+                    } catch (e: Exception) {
+                        Logger.e(LOG_TAG_BACKUP_RESTORE, "restore from text: write failed: ${e.message}", e)
+                        file.delete()
+                        getString(R.string.text_transfer_err_generic)
+                    }
+                }
+            }
+        }
+    }
+
     private fun showBackupFailureDialog() {
         val builder = MaterialAlertDialogBuilder(requireContext(), R.style.App_Dialog_NoDim)
         builder.setTitle(R.string.brbs_backup_dialog_failure_title)
@@ -448,6 +546,9 @@ class BackupRestoreBottomSheet : BottomSheetDialogFragment() {
             restore()
             observeRestoreWorker()
         }
+        builder.setNeutralButton(getString(R.string.brbs_restore_text_btn)) { _, _ ->
+            restoreFromText()
+        }
 
         builder.setNegativeButton(getString(R.string.lbl_cancel)) { _, _ ->
             // no-op
@@ -463,6 +564,10 @@ class BackupRestoreBottomSheet : BottomSheetDialogFragment() {
         builder.setMessage(R.string.brbs_backup_dialog_message)
         builder.setPositiveButton(getString(R.string.brbs_backup_dialog_positive)) { _, _ ->
             backup()
+            observeBackupWorker()
+        }
+        builder.setNeutralButton(getString(R.string.brbs_backup_text_btn)) { _, _ ->
+            backupAsText()
             observeBackupWorker()
         }
 

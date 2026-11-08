@@ -15,6 +15,9 @@
  */
 package com.arcadesignpro.auroravpn.ui.activity
 
+import com.arcadesignpro.auroravpn.util.WgConfigText
+import com.arcadesignpro.auroravpn.util.TransferResult
+import com.arcadesignpro.auroravpn.util.TextTransferDialogs
 import Logger
 import Logger.LOG_TAG_PROXY
 import android.content.ActivityNotFoundException
@@ -356,6 +359,53 @@ class WgMainActivity :
             }
         }
         b.importFab.setOnClickListener {
+            TextTransferDialogs.showSourceChooser(
+                this,
+                getString(R.string.wg_import_choose_title),
+                onPaste = { showWgPasteDialog() },
+                onFile = { launchWgFileImport() }
+            )
+        }
+        b.qrCodeFab.setOnClickListener {
+            launchQrImport()
+        }
+        b.downloadFab.setOnClickListener {
+            launchConfigsDownload()
+        }
+        b.createFab.setOnClickListener { openTunnelEditorActivity() }
+        setupToggleListeners()
+    }
+
+    /** Paste a config as text: wg-quick text, an AuroraVPN text block, or Base64. */
+    private fun showWgPasteDialog() {
+        TextTransferDialogs.showImport(
+            this,
+            getString(R.string.wg_import_text_title),
+            getString(R.string.wg_import_text_hint),
+            WgConfigText.MAX_CHARS
+        ) { pasted ->
+            when (val r = WgConfigText.prepare(pasted)) {
+                is TransferResult.Err -> TextTransferDialogs.message(this, r.error)
+                is TransferResult.Ok -> {
+                    lifecycleScope.launch {
+                        val ok = TunnelImporter.importTunnel(r.value) {
+                            Utilities.showToastUiCentered(this@WgMainActivity, it.toString(), Toast.LENGTH_LONG)
+                        }
+                        if (ok) {
+                            Utilities.showToastUiCentered(
+                                this@WgMainActivity,
+                                getString(R.string.wg_import_text_success),
+                                Toast.LENGTH_SHORT
+                            )
+                        }
+                    }
+                    null
+                }
+            }
+        }
+    }
+
+    private fun launchWgFileImport() {
             try {
                 tunnelFileImportResultLauncher.launch(IMPORT_LAUNCH_INPUT)
             } catch (e: ActivityNotFoundException) {
@@ -365,8 +415,9 @@ class WgMainActivity :
                 Logger.e(LOG_TAG_PROXY, "err while launching file import: ${e.message}", e)
                 Utilities.showToastUiCentered(this, getString(R.string.blocklist_update_check_failure), Toast.LENGTH_SHORT)
             }
-        }
-        b.qrCodeFab.setOnClickListener {
+    }
+
+    private fun launchQrImport() {
             try {
                 qrImportResultLauncher.launch(
                     ScanOptions()
@@ -381,8 +432,9 @@ class WgMainActivity :
                 Logger.e(LOG_TAG_PROXY, "err while launching QR scanner: ${e.message}", e)
                 Utilities.showToastUiCentered(this, getString(R.string.blocklist_update_check_failure), Toast.LENGTH_SHORT)
             }
-        }
-        b.downloadFab.setOnClickListener {
+    }
+
+    private fun launchConfigsDownload() {
             try {
                 val fileName = "wireguard-configs-${System.currentTimeMillis()}.zip"
                 downloadConfigsLauncher.launch(fileName)
@@ -390,9 +442,9 @@ class WgMainActivity :
                 Logger.e(LOG_TAG_PROXY, "download wg zip failed: ${e.message}", e)
                 Utilities.showToastUiCentered(this, getString(R.string.wireguard_download_failure), Toast.LENGTH_SHORT)
             }
-        }
-        b.createFab.setOnClickListener { openTunnelEditorActivity() }
+    }
 
+    private fun setupToggleListeners() {
         b.wgGeneralToggleBtn.setOnClickListener {
             if (WireguardManager.oneWireGuardEnabled()) {
                 showDisableDialog(isOneWgToggle = false)

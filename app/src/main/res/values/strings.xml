@@ -2154,4 +2154,37 @@
     <string name="chain_cmd_full_label">Full command (next start):</string>
     <string name="chain_restart_ok">Chain restarted with the new settings</string>
     <string name="chain_restart_failed">Chain did not come back with the new settings: disconnected, see log</string>
+
+    <!-- Copy/paste transfer of backups and WireGuard configs (SecureTextTransfer.kt) -->
+    <string name="text_transfer_copy" translatable="true">Copy</string>
+    <string name="text_transfer_share" translatable="true">Share</string>
+    <string name="text_transfer_import" translatable="true">Import</string>
+    <string name="text_transfer_paste" translatable="true">Paste</string>
+    <string name="text_transfer_source_paste" translatable="true">Paste text</string>
+    <string name="text_transfer_source_file" translatable="true">Choose a file</string>
+    <string name="text_transfer_export_info" translatable="true">%1$d characters. Anyone with this text can restore it, so keep it as private as a password.</string>
+    <string name="text_transfer_copied" translatable="true">Copied. The clipboard will be cleared in %1$d seconds.</string>
+    <string name="text_transfer_clipboard_empty" translatable="true">The clipboard is empty.</string>
+    <string name="text_transfer_err_empty" translatable="true">Nothing to import. Paste the text first.</string>
+    <string name="text_transfer_err_too_large" translatable="true">This text is too large.</string>
+    <string name="text_transfer_err_too_large_for_clipboard" translatable="true">Too large for copy and paste. Use the file option instead.</string>
+    <string name="text_transfer_err_control" translatable="true">The text contains invalid characters.</string>
+    <string name="text_transfer_err_not_base64" translatable="true">This is not valid AuroraVPN text. Copy it again in full.</string>
+    <string name="text_transfer_err_wrong_kind" translatable="true">This text is a different kind of export.</string>
+    <string name="text_transfer_err_truncated" translatable="true">The text is incomplete. Copy it again, including the BEGIN and END lines.</string>
+    <string name="text_transfer_err_checksum" translatable="true">The text was changed or damaged in transit (checksum mismatch).</string>
+    <string name="text_transfer_err_not_backup" translatable="true">This text is not an AuroraVPN backup.</string>
+    <string name="text_transfer_err_not_wireguard" translatable="true">This is not a WireGuard config. It must contain an [Interface] section.</string>
+    <string name="text_transfer_err_generic" translatable="true">Something went wrong. Please try again.</string>
+    <string name="brbs_backup_text_btn" translatable="true">Copy as text</string>
+    <string name="brbs_restore_text_btn" translatable="true">Paste text</string>
+    <string name="brbs_backup_text_title" translatable="true">Backup as text</string>
+    <string name="brbs_backup_text_too_large" translatable="true">This backup is too large for text. Use the file option instead.</string>
+    <string name="brbs_restore_text_title" translatable="true">Restore from text</string>
+    <string name="brbs_restore_text_hint" translatable="true">Paste the text that starts with -----BEGIN AURORAVPN BACKUP-----</string>
+    <string name="wg_import_choose_title" translatable="true">Import WireGuard config</string>
+    <string name="wg_import_text_title" translatable="true">Paste WireGuard config</string>
+    <string name="wg_import_text_hint" translatable="true">[Interface] … or an AuroraVPN text block</string>
+    <string name="wg_import_text_success" translatable="true">WireGuard config imported.</string>
+    <string name="chain_wg_import_choose_title" translatable="true">Import wg0 config</string>
 </resources>

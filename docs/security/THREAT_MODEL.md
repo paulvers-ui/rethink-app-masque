@@ -82,6 +82,8 @@ process (usque); **TB5** repo/CI ↔ users' devices.
 | T20 | Website | **T** | APK link or QR swapped to a malicious build | GitHub Pages over HTTPS | publish SHA-256 next to each download; ZAP monthly |
 | T21 | Exported components | **E** | Other apps start activities/services with crafted intents | 2 exported components | MobSF review each release; validate all intent extras |
 | T22 | Logging | **I** | Tokens or keys in logcat / bug reports | Semgrep `aurora-log-sensitive` | — |
+| T23 | Text transfer (backup / WireGuard paste) | **T**, **I**, **D** | Malformed or hostile pasted text; truncated or altered exports; secrets lingering in clipboard, screenshots or keyboard learning | Pure parser with typed errors and size caps (fuzzed in `SecureTextTransferTest`); SHA-256 + byte count in the armor; ZIP check before restore, then existing zip-slip/zip-bomb checks; `FLAG_SECURE`, sensitive clip flag, 60 s clipboard clear, no-learning/no-autofill input | The armor is integrity, **not encryption**: treat the text like the `.rbk` file |
+| T24 | WireGuard text import | **I** | Full config incl. private key written to logs | Fixed: `TunnelImporter.importTunnel(text)` no longer logs the config | — |
 
 STRIDE key: **S**poofing, **T**ampering, **R**epudiation, **I**nformation
 disclosure, **D**enial of service, **E**levation of privilege.
