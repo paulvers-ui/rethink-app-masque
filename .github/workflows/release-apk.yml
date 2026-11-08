@@ -3,20 +3,13 @@
 #
 #   1. auto-tag     bumps the version from the commits (fix: -> patch,
 #                   feat: -> minor, BREAKING CHANGE -> major; default patch)
-#   2. build        builds the fdroidFull APKs:
-#                     - signed release APK, when the four RELEASE_* secrets
-#                       exist (same key as earlier releases, so it updates
-#                       an installed app)
-#                     - unsigned/debug APK (debug-keystore-signed), always
-#   3. publish      one GitHub Release for the tag with both APKs and their
-#                   SHA-256 files; Obtainium picks it up
+#   2. build        builds the fdroidFull DEBUG APK only (debug-keystore-signed).
+#                   No release build, no signing secrets are read here.
+#   3. publish      one GitHub Release for the tag with the debug APK and its
+#                   SHA-256 file; Obtainium picks it up
 #
-# Without the signing secrets the release still happens, with the debug APK
-# only and a warning. Never generate a new key to fill them: Android refuses
-# an update signed by a different key. Copy the four secrets the earlier
-# releases used (RELEASE_KEYSTORE_BASE64, RELEASE_KEYSTORE_PASSWORD,
-# RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD) into Settings > Secrets and
-# variables > Actions; "🔑 Generate release keystore" is only for a first key.
+# A signed release APK is no longer attached here. If one is ever needed,
+# run the manual "Signed release APK" workflow (release-signed.yml).
 #
 # Pull requests do not come here (fork PRs get no secrets): android.yml builds
 # and tests them, and auto-build.yml attaches a debug APK.
@@ -78,7 +71,7 @@ jobs:
           tag_prefix: v
 
   build-and-release:
-    name: 📦 Build signed + unsigned APKs and release
+    name: 📦 Build debug APK and release
     runs-on: ubuntu-latest
     timeout-minutes: 75
     needs: [auto-tag]
@@ -103,27 +96,6 @@ jobs:
         with:
           ref: ${{ env.VER }}
           fetch-depth: 0
-
-      - name: 🔎 Signing secrets present?
-        id: signing
-        env:
-          KS: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          KS_PASS: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: |
-          missing=""
-          [ -z "$KS" ] && missing="$missing RELEASE_KEYSTORE_BASE64"
-          [ -z "$KS_PASS" ] && missing="$missing RELEASE_KEYSTORE_PASSWORD"
-          [ -z "$KEY_ALIAS" ] && missing="$missing RELEASE_KEY_ALIAS"
-          [ -z "$KEY_PASS" ] && missing="$missing RELEASE_KEY_PASSWORD"
-          if [ -n "$missing" ]; then
-            echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No signed APK in $VER: missing secrets:$missing. Copy the four RELEASE_* secrets from the repo that signed earlier releases; a new key would not update installed apps."
-          else
-            echo "signed=true" >> "$GITHUB_OUTPUT"
-          fi
-        shell: bash
 
       - uses: actions/setup-java@v5
         with:
@@ -188,36 +160,16 @@ jobs:
           cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack-local.aar
         shell: bash
 
-      - name: 🔑 Decode the keystore
-        if: steps.signing.outputs.signed == 'true'
-        env:
-          KS: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-        run: |
-          set -eu
-          # Whitespace (line breaks from copy-paste) breaks base64 -d.
-          printf '%s' "$KS" | tr -d ' \r\n\t' | base64 -d > "${RUNNER_TEMP}/release.keystore"
-          test -s "${RUNNER_TEMP}/release.keystore" || { echo "::error::RELEASE_KEYSTORE_BASE64 decoded to nothing"; exit 1; }
-          echo "RELEASE_KEYSTORE_PATH=${RUNNER_TEMP}/release.keystore" >> "$GITHUB_ENV"
-        shell: bash
-
       - name: ⚙️ gradlew permissions
         run: chmod +x gradlew
 
-      - name: 🚂 Build APKs (fdroidFull)
-        env:
-          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          SIGNED: ${{ steps.signing.outputs.signed }}
+      - name: 🚂 Build debug APK (fdroidFull)
         run: |
           set -u
           log="$RUNNER_TEMP/gradle.log"
           : > "$log"
-          # gradle.properties caps the Gradle/Kotlin heap at 2 GB, which runs out of
-          # memory compiling release and debug in one invocation ("Not enough memory
-          # to run compilation", GC overhead limit exceeded in
-          # compileFdroidFullDebugKotlin). Same fix as release-signed.yml: a bigger
-          # heap, and one variant per invocation with the daemon stopped in between.
+          # gradle.properties caps the Gradle/Kotlin heap at 2 GB, which has run
+          # out of memory in compileFdroidFullDebugKotlin; give it a bigger heap.
           run_gradle() {
             ./gradlew "$@" -PfirestackRepo=local --no-configuration-cache --warning-mode all \
               "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8" \
@@ -225,13 +177,7 @@ jobs:
             return "${PIPESTATUS[0]}"
           }
           rc=0
-          if [ "$SIGNED" = true ]; then
-            run_gradle assembleFdroidFullRelease || rc=$?
-            ./gradlew --stop > /dev/null 2>&1 || true
-          fi
-          if [ "$rc" -eq 0 ]; then
-            run_gradle assembleFdroidFullDebug || rc=$?
-          fi
+          run_gradle assembleFdroidFullDebug || rc=$?
           if [ "$rc" -ne 0 ]; then
             # Surface the real reason as an annotation and in the job summary.
             why=$({ grep -A12 -m1 'What went wrong' "$log"; grep -m8 -E '^e: |error: |FAILED' "$log"; } | cut -c1-300 | head -20)
@@ -242,18 +188,15 @@ jobs:
         shell: bash
 
       # app/build.gradle disables splits.abi and pins abiFilters to 'arm64-v8a',
-      # so each build type gives exactly ONE apk. Both are inspected with aapt
+      # so the debug build gives exactly ONE apk. It is inspected with aapt
       # rather than trusted by file name: applicationId must be right and the
       # native code arm64-only (libusque.so has no 32-bit build), so an abi
       # regression fails the release instead of shipping an APK without WARP.
-      - name: 🔎 Verify and name the APKs
+      - name: 🔎 Verify and name the debug APK
         id: apks
-        env:
-          SIGNED: ${{ steps.signing.outputs.signed }}
         run: |
           set -eu
           AAPT="$ANDROID_HOME/build-tools/${SDKVER}.0.0/aapt"
-          APKSIGNER="$ANDROID_HOME/build-tools/${SDKVER}.0.0/apksigner"
 
           check() { # check <apk>: applicationId and arm64-only native code
             local f="$1" appid natives
@@ -277,17 +220,6 @@ jobs:
           }
 
           files=()
-          signed_apk=""
-          if [ "$SIGNED" = true ]; then
-            src=$(one app/build/outputs/apk/fdroidFull/release)
-            "$APKSIGNER" verify "$src" > /dev/null 2>&1 || { echo "::error::$src failed signature verification; check the RELEASE_KEY* secrets"; exit 1; }
-            check "$src"
-            signed_apk="AuroraVPN-${VER}.apk"
-            cp "$src" "$signed_apk"
-            sha256sum "$signed_apk" > "$signed_apk.sha256"
-            files+=("$signed_apk" "$signed_apk.sha256")
-          fi
-
           src=$(one app/build/outputs/apk/fdroidFull/debug)
           check "$src"
           debug_apk="AuroraVPN-${VER}-debug.apk"
@@ -295,10 +227,9 @@ jobs:
           sha256sum "$debug_apk" > "$debug_apk.sha256"
           files+=("$debug_apk" "$debug_apk.sha256")
 
-          main_apk="${signed_apk:-$debug_apk}"
-          versionName=$("$AAPT" dump badging "$main_apk" | grep -oP "versionName='\K[^']+")
-          versionCode=$("$AAPT" dump badging "$main_apk" | grep -oP "versionCode='\K[^']+")
-          echo "$VER: signed=$SIGNED versionName=$versionName versionCode=$versionCode"
+          versionName=$("$AAPT" dump badging "$debug_apk" | grep -oP "versionName='\K[^']+")
+          versionCode=$("$AAPT" dump badging "$debug_apk" | grep -oP "versionCode='\K[^']+")
+          echo "$VER: debug only, versionName=$versionName versionCode=$versionCode"
           {
             echo "files<<APKEOF"
             printf '%s\n' "${files[@]}"
@@ -343,8 +274,7 @@ jobs:
             Built and released automatically from this commit.
             versionName `${{ steps.apks.outputs.version_name }}`, versionCode `${{ steps.apks.outputs.version_code }}`.
 
-            ${{ steps.signing.outputs.signed == 'true' && '- `AuroraVPN-<version>.apk`: **signed** release build. Install this one; it updates an installed AuroraVPN.' || '- No signed APK in this release (the signing secrets are not set in this repository).' }}
-            - `AuroraVPN-<version>-debug.apk`: unsigned (debug-keystore) build for testing. Android will not install it over the signed app, or the other way round.
+            - `AuroraVPN-<version>-debug.apk`: debug build (debug-keystore-signed). This is the only APK in this release. Android will not install it over a previously installed signed build, or the other way round.
 
             **Requires a 64-bit ARM (arm64-v8a) device.** `libusque.so` (WARP) has no 32-bit build.
 
