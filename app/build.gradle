@@ -290,7 +290,7 @@ def verifyLibusque = tasks.register("verifyLibusque") {
 }
 tasks.named("preBuild").configure { dependsOn(verifyLibusque) }
 
-def firestackRepo = project.findProperty("firestackRepo") ?: "ossrh"
+def firestackRepo = project.findProperty("firestackRepo") ?: "local"
 def firestackCommit = project.findProperty("firestackCommit") ?: "0.5.5"
 
 def firestackDependency = { suffix = ":debug" ->
