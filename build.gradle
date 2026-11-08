@@ -43,7 +43,7 @@ allprojects {
         google()
         mavenCentral()
 
-        def firestackRepo = project.findProperty("firestackRepo") ?: "github"
+        def firestackRepo = project.findProperty("firestackRepo") ?: "local"
 
         if (firestackRepo == "local") {
             // Pre-built AAR in app/libs/; flatDir resolves name-version.aar convention.
@@ -71,4 +71,3 @@ allprojects {
 tasks.register('clean', Delete) {
     delete rootProject.buildDir
 }
-
