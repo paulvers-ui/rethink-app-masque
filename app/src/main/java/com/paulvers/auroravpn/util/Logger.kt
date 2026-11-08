@@ -40,8 +40,8 @@ object Logger : KoinComponent {
             _logLevel = value
         }
 
-    // Level shown in Logs > App logs. Defaults to VERBOSE and is persisted, so the level
-    // picked there survives restarts instead of falling back to ERROR on every launch.
+    // Level shown in Logs > App logs. Defaults to ERROR and is persisted, so a level
+    // picked there survives restarts.
     @Volatile private var _uiLogLevel: Long? = null
     var uiLogLevel: Long
         get() {
@@ -50,7 +50,7 @@ object Logger : KoinComponent {
                 persistentState.consoleLogLevel
             } catch (_: Exception) {
                 // Fallback for tests or when Koin is not initialized
-                LoggerLevel.VERBOSE.id
+                LoggerLevel.ERROR.id
             }
             _uiLogLevel = level
             return level
