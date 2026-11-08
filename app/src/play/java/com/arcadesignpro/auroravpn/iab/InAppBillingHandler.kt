@@ -403,7 +403,7 @@ object InAppBillingHandler : KoinComponent {
         if (purchasesList == null || purchasesList.isEmpty()) {
             loge(mname, "purchases list is null")
             Result.setResultState(ResultState.PURCHASING_NO_PURCHASES_FOUND)
-            // TODO: no purchases found, handle this case. Either should be in cancelled state or expired
+    
             try {
                 if (subscriptionStateMachine.getCurrentState() is SubscriptionStateMachineV2.SubscriptionState.Active) {
                     val billingExpiry = subscriptionStateMachine.getSubscriptionData()?.subscriptionStatus?.billingExpiry
