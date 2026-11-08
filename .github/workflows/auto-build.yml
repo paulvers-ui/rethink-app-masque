@@ -42,7 +42,7 @@ jobs:
       # importantly, the SAME cache key below, so this workflow normally
       # reuses whichever of the three already built firestack.aar today
       # instead of paying for gomobile again.
-      FIRESTACK_COMMIT: "498ae19f23399f651254e55d4b2c0cb047808061"
+      FIRESTACK_COMMIT: "c3e672cfdf3949e377adb47a0ec48efa997a5096"
 
     steps:
       - uses: actions/checkout@v6
