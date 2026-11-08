@@ -725,6 +725,14 @@
 
     <string name="dns_card_latency_active" translatable="true">%1$sms</string>
     <string name="dns_card_latency_inactive" translatable="true">Enable DNS mode.</string>
+    <!-- DNSSEC status line on the home-screen DNS card -->
+    <string name="dnssec_card_validating" translatable="true">DNSSEC ✓ validated</string>
+    <string name="dnssec_card_checking" translatable="true">DNSSEC: checking…</string>
+    <string name="dnssec_card_degraded" translatable="true">DNSSEC: partial</string>
+    <string name="dnssec_card_unreachable" translatable="true">DNSSEC: blocked on this network</string>
+    <string name="dnssec_card_broken" translatable="true">DNSSEC ✗ check failed</string>
+    <string name="dnssec_card_unknown" translatable="true">DNSSEC: tap to check</string>
+    <string name="dnssec_card_cd" translatable="true">DNSSEC status: %1$s. Double-tap to re-check.</string>
 
     <string name="firewall_card_universal_rules" translatable="true">%1$s universal rule(s)</string>
     <string name="rules_card_domain_count" translatable="true">%1$s domain rule(s)</string>

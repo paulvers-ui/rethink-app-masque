@@ -23,7 +23,7 @@ env:
   # Same values and cache key as android.yml / release-apk.yml, so the
   # firestack.aar those workflows built is normally restored from the cache.
   NDKVER: "28.2.13676358"
-  FIRESTACK_COMMIT: "05a664580caca8e30a912b75f2ffe480560e70ae"
+  FIRESTACK_COMMIT: "498ae19f23399f651254e55d4b2c0cb047808061"
 
 jobs:
   test:

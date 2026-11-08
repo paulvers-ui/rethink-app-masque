@@ -62,6 +62,7 @@ import com.arcadesignpro.auroravpn.net.doh.Transaction
 import com.arcadesignpro.auroravpn.scheduler.WorkScheduler
 import com.arcadesignpro.auroravpn.service.BraveVPNService
 import com.arcadesignpro.auroravpn.service.DnsLogTracker
+import com.arcadesignpro.auroravpn.service.DnssecManager
 import com.arcadesignpro.auroravpn.service.DomainRulesManager
 import com.arcadesignpro.auroravpn.service.EventLogger
 import com.arcadesignpro.auroravpn.service.FirewallManager
@@ -985,6 +986,7 @@ class HomeScreenFragment : Fragment(R.layout.fragment_home_screen) {
         b.fhsCardDnsLatency.text = getString(R.string.dns_card_latency_inactive)
         b.fhsCardDnsConnectedDns.text = getString(R.string.lbl_disabled)
         b.fhsCardDnsConnectedDns.isSelected = true
+        b.fhsCardDnssecStatus.visibility = View.GONE
     }
 
     private fun disableAppsCard() {
@@ -1069,6 +1071,41 @@ class HomeScreenFragment : Fragment(R.layout.fragment_home_screen) {
                 b.fhsCardRegion.text = it.uppercase()
             }
         }
+    
+        observeDnssec()
+    }
+
+    /**
+     * Shows the local DNSSEC validator's self-test verdict on the DNS card.
+     * Green only for VALIDATING (a signed zone validated AND a forged zone was
+     * rejected); BROKEN means the validator accepted forged data.
+     * Tap the line to re-run the test (rate limit bypassed).
+     */
+    private fun observeDnssec() {
+        b.fhsCardDnssecStatus.visibility = View.VISIBLE
+        b.fhsCardDnssecStatus.setOnClickListener {
+            Logger.v(LOG_TAG_UI, "$TAG: dnssec status tapped, forcing self-test")
+            DnssecManager.refresh(force = true)
+        }
+        DnssecManager.state.observe(viewLifecycleOwner) { renderDnssec(it) }
+        DnssecManager.refresh() // no-op if a test ran in the last 10 minutes
+    }
+
+    private fun renderDnssec(st: DnssecManager.State) {
+        if (view == null || !isAdded) return
+        val ctx = requireContext()
+        val (textRes, colorAttr) = when (st.health) {
+            DnssecManager.Health.VALIDATING -> R.string.dnssec_card_validating to R.attr.accentGood
+            DnssecManager.Health.CHECKING -> R.string.dnssec_card_checking to R.attr.primaryLightColorText
+            DnssecManager.Health.DEGRADED -> R.string.dnssec_card_degraded to R.attr.chipTextNeutral
+            DnssecManager.Health.UNREACHABLE -> R.string.dnssec_card_unreachable to R.attr.chipTextNeutral
+            DnssecManager.Health.BROKEN -> R.string.dnssec_card_broken to R.attr.accentBad
+            DnssecManager.Health.UNKNOWN -> R.string.dnssec_card_unknown to R.attr.primaryLightColorText
+        }
+        b.fhsCardDnssecStatus.text = getString(textRes)
+        b.fhsCardDnssecStatus.setTextColor(UIUtils.fetchColor(ctx, colorAttr))
+        b.fhsCardDnssecStatus.contentDescription = getString(R.string.dnssec_card_cd, getString(textRes))
+        b.fhsCardDnssecStatus.isSelected = true // marquee
     }
 
     private fun updateUiWithDnsStates(dnsName: String) {
@@ -1185,6 +1222,7 @@ class HomeScreenFragment : Fragment(R.layout.fragment_home_screen) {
     // unregister all dns related observers
     private fun unobserveDnsStates() {
         appConfig.getConnectedDnsObservable().removeObservers(viewLifecycleOwner)
+        DnssecManager.state.removeObservers(viewLifecycleOwner)
         VpnController.getRegionLiveData().removeObservers(viewLifecycleOwner)
     }
 

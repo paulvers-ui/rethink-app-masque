@@ -1,0 +1,10 @@
+# Security-sensitive paths need the maintainer's review (NIST SSDF PO.2).
+# Replace the handle if the maintainer account changes.
+/.github/                         @paulvers-ui2
+/app/build.gradle                 @paulvers-ui2
+/app/src/main/jniLibs/            @paulvers-ui2
+/app/src/main/AndroidManifest.xml @paulvers-ui2
+/app/src/main/res/xml/            @paulvers-ui2
+/docs/security/                   @paulvers-ui2
+/.semgrep/                        @paulvers-ui2
+/SECURITY.md                      @paulvers-ui2
