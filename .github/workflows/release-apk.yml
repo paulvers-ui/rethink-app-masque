@@ -258,8 +258,8 @@ jobs:
           check() { # check <apk>: applicationId and arm64-only native code
             local f="$1" appid natives
             appid=$("$AAPT" dump badging "$f" | grep -oP "package: name='\K[^']+")
-            if [ "$appid" != "com.arcadesignpro.auroravpn" ]; then
-              echo "::error::$f has applicationId '$appid', expected com.arcadesignpro.auroravpn"
+            if [ "$appid" != "com.paulvers.auroravpn" ]; then
+              echo "::error::$f has applicationId '$appid', expected com.paulvers.auroravpn"
               exit 1
             fi
             natives=$("$AAPT" dump badging "$f" | grep "native-code" || echo "native-code: (none)")

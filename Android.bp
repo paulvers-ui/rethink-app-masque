@@ -39,8 +39,8 @@ android_app {
     ],
 
     required: [
-        "privapp_whitelist_com.arcadesignpro.auroravpn",
-        "com.arcadesignpro.auroravpn_whitelist",
+        "privapp_whitelist_com.paulvers.auroravpn",
+        "com.paulvers.auroravpn_whitelist",
     ],
 
     static_libs: [
@@ -91,17 +91,17 @@ java_import {
 }
 
 prebuilt_etc {
-    name: "privapp_whitelist_com.arcadesignpro.auroravpn",
+    name: "privapp_whitelist_com.paulvers.auroravpn",
     system_ext_specific: true,
     sub_dir: "permissions",
-    src: "com.arcadesignpro.auroravpn.xml",
+    src: "com.paulvers.auroravpn.xml",
     filename_from_src: true,
 }
 
 prebuilt_etc {
-    name: "com.arcadesignpro.auroravpn_whitelist",
+    name: "com.paulvers.auroravpn_whitelist",
     system_ext_specific: true,
     sub_dir: "sysconfig",
-    src: "com.arcadesignpro.auroravpn_whitelist.xml",
+    src: "com.paulvers.auroravpn_whitelist.xml",
     filename_from_src: true,
 }
