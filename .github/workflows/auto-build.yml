@@ -4,8 +4,8 @@
 # merged. It needs no secrets.
 #
 # Real releases are not made here: "Final release ultimate" (release-apk.yml)
-# tags every push to main and attaches both the signed APK and this same
-# unsigned/debug APK to that release. This workflow used to react to
+# tags every push to main and attaches this same unsigned/debug APK (only)
+# to that release. This workflow used to react to
 # `release: published` for that, but a release created with GITHUB_TOKEN does
 # not start other workflows, so it never ran for the automatic releases.
 #
