@@ -1,0 +1,44 @@
+name: 🕷️ DAST — ZAP baseline (website)
+
+# Dynamic testing for the part of the project that is a web app: the download
+# page that serves APKs. A passive baseline scan only (no attack traffic), so
+# it is safe to run against production. The Android app itself is covered by
+# MobSF (mobsf.yml) and the manual MASTG checks in docs/security/MASVS_ASVS_MAPPING.md.
+on:
+  schedule:
+    - cron: '7 6 1 * *' # monthly
+  workflow_dispatch:
+    inputs:
+      target:
+        description: URL to scan (must be a site you own)
+        required: true
+        default: https://paulvers-ui.github.io/rethink/
+
+permissions:
+  contents: read
+
+jobs:
+  zap-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET: ${{ github.event.inputs.target || 'https://paulvers-ui.github.io/rethink/' }}
+    steps:
+      - name: Run ZAP baseline
+        # Exit codes: 0 pass, 1 FAIL alerts, 2 WARN alerts only, 3 error.
+        # Fail the job only on FAIL-level alerts.
+        run: |
+          mkdir -p zap && chmod 777 zap
+          set +e
+          docker run --rm -v "$PWD/zap:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:2.17.0 \
+            zap-baseline.py -t "$TARGET" -m 3 -J zap.json -r zap.html -I
+          rc=$?
+          echo "zap exit code: $rc"
+          [ "$rc" -le 2 ]
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: zap-report
+          path: zap/
+          retention-days: 30
+          if-no-files-found: warn

@@ -133,6 +133,22 @@
                                 android:singleLine="true"
                                 android:textSize="@dimen/default_font_text_view" />
 
+                            <!-- Local DNSSEC validator self-test (DnssecManager). -->
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:id="@+id/fhs_card_dnssec_status"
+                                style="@style/TextAppearance.Widget.HomeScreen.Desc"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_below="@id/fhs_card_region"
+                                android:layout_marginStart="7dp"
+                                android:layout_marginTop="4dp"
+                                android:background="?attr/selectableItemBackground"
+                                android:ellipsize="marquee"
+                                android:marqueeRepeatLimit="marquee_forever"
+                                android:singleLine="true"
+                                android:textSize="@dimen/default_font_text_view"
+                                android:visibility="gone" />
+
                             <androidx.appcompat.widget.AppCompatTextView
                                 android:id="@+id/fhs_card_dns_connected_dns"
                                 style="@style/TextAppearance.Widget.HomeScreen.Desc"

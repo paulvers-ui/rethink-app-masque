@@ -1,0 +1,74 @@
+# Project-specific Semgrep rules (docs/security/SECURE_CODING.md).
+# Run locally:  semgrep --metrics=off --config .semgrep/ app/src
+# Silence a reviewed finding with:  // nosemgrep: <rule-id> -- <reason>
+rules:
+  - id: aurora-sql-string-interpolation
+    languages: [kotlin]
+    severity: WARNING
+    message: >-
+      SQL built with string interpolation. Use Room @Query bind parameters or
+      SQLite '?' placeholders (OWASP: injection; CERT IDS00-J). Interpolate only
+      compile-time constants such as table names, and say so in a nosemgrep note.
+    # Interpolating SCREAMING_CASE constants (table names) is not flagged.
+    pattern-regex: '(execSQL|rawQuery|SimpleSQLiteQuery)\(\s*"[^"]*\$\{?(?![A-Z][A-Z0-9_]*\b)[a-zA-Z_]'
+    metadata: { cwe: "CWE-89", owasp_masvs: "MASVS-CODE-4" }
+
+  - id: aurora-log-sensitive
+    languages: [kotlin]
+    severity: WARNING
+    message: >-
+      Possible secret in a log line. Never log keys, tokens, passwords, PSKs or
+      full WireGuard/WARP configs (MASVS-STORAGE-2; CERT FIO13-J).
+    # Fires when an interpolated value's name looks secret, e.g. "$token", "${cfg.privateKey}".
+    pattern-regex: '(Logger|Log)\.[vdiwe]\([^\n]*\$\{?[a-zA-Z_.]*(?i:privatekey|private_key|password|passwd|secret|token|presharedkey|psk)[a-zA-Z_]*\}?'
+    metadata: { cwe: "CWE-532", owasp_masvs: "MASVS-STORAGE-2" }
+
+  - id: aurora-webview-js-bridge
+    languages: [kotlin]
+    severity: ERROR
+    message: >-
+      WebView JavaScript bridge / JavaScript enabled. Any page that loads can
+      call into the app. Avoid, or restrict to bundled assets and review.
+    pattern-regex: '(addJavascriptInterface\(|javaScriptEnabled\s*=\s*true|setJavaScriptEnabled\(\s*true)'
+    metadata: { cwe: "CWE-749", owasp_masvs: "MASVS-PLATFORM-2" }
+
+  - id: aurora-trust-all-tls
+    languages: [kotlin]
+    severity: ERROR
+    message: >-
+      TLS certificate or hostname verification disabled. Never ship this, not
+      even for "debug" builds; use network_security_config debug-overrides.
+    pattern-either:
+      - pattern-regex: 'override\s+fun\s+checkServerTrusted\([^)]*\)\s*(\{\s*\}|=\s*Unit)'
+      - pattern-regex: 'HostnameVerifier\s*\{\s*_\s*,\s*_\s*->\s*true\s*\}'
+      - pattern-regex: 'ALLOW_ALL_HOSTNAME_VERIFIER'
+    metadata: { cwe: "CWE-295", owasp_masvs: "MASVS-NETWORK-1" }
+
+  - id: aurora-world-accessible-files
+    languages: [kotlin]
+    severity: ERROR
+    message: World-readable/writable file mode. Keep app data private (MASVS-STORAGE-1).
+    pattern-regex: 'MODE_WORLD_(READABLE|WRITEABLE)'
+    metadata: { cwe: "CWE-276", owasp_masvs: "MASVS-STORAGE-1" }
+
+  # PendingIntent mutability: enforced by Android Lint (UnspecifiedImmutableFlag),
+  # which tracks flags held in variables; a regex rule here was all noise.
+
+  - id: aurora-html-from-untrusted
+    languages: [kotlin]
+    severity: INFO
+    message: >-
+      String rendered as HTML. If any argument comes from DNS answers, logs,
+      blocklist metadata, configs or the network, wrap it in
+      TextUtils.htmlEncode() first (OWASP: output encoding).
+    pattern-regex: 'htmlToSpannedText\(\s*(?!getString)[a-zA-Z_]'
+    metadata: { cwe: "CWE-79", owasp_masvs: "MASVS-PLATFORM-2" }
+
+  - id: aurora-insecure-random-for-secrets
+    languages: [kotlin]
+    severity: WARNING
+    message: >-
+      java.util.Random / kotlin.random is predictable. Use SecureRandom for
+      keys, nonces, tokens and IDs that must not be guessed (CERT MSC02-J).
+    pattern-regex: '(java\.util\.Random\(|kotlin\.random\.Random\.next(Bytes|Long)\()'
+    metadata: { cwe: "CWE-338", owasp_masvs: "MASVS-CRYPTO-1" }

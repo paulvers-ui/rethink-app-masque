@@ -530,7 +530,7 @@ class DnsBlocklistBottomSheet : BottomSheetDialogFragment() {
 
         list.forEach {
             text +=
-                getString(R.string.dns_btm_sheet_dialog_ips, Utilities.getFlag(it.slice(0..2)), it)
+                getString(R.string.dns_btm_sheet_dialog_ips, Utilities.getFlag(it.slice(0..2)), TextUtils.htmlEncode(it))
         }
         return htmlToSpannedText(text)
     }
@@ -545,9 +545,11 @@ class DnsBlocklistBottomSheet : BottomSheetDialogFragment() {
             text +=
                 getString(
                     R.string.dns_btm_sheet_dialog_message,
-                    heading,
+                    // Blocklist names come from downloaded metadata: escape before
+                    // the string is parsed as HTML (docs/security/SECURE_CODING.md K3).
+                    TextUtils.htmlEncode(heading),
                     groupNames.get(it).count().toString(),
-                    TextUtils.join(", ", groupNames.get(it))
+                    TextUtils.htmlEncode(TextUtils.join(", ", groupNames.get(it)))
                 )
         }
         text = text.replace(",", ", ")
@@ -598,7 +600,12 @@ class DnsBlocklistBottomSheet : BottomSheetDialogFragment() {
             val p = currentLog.relayIP.ifEmpty {
                 currentLog.proxyId
             }
-            val text = getString(R.string.dns_btm_resolved_crypt, uptime, currentLog.serverIP, p)
+            val text = getString(
+                R.string.dns_btm_resolved_crypt,
+                uptime,
+                TextUtils.htmlEncode(currentLog.serverIP),
+                TextUtils.htmlEncode(p)
+            )
             b.dnsBlockBlockedDesc.text = htmlToSpannedText(text)
         } else if (currentLog.isLocallyAnswered()) { // usually happens when there is a network failure
             b.dnsBlockBlockedDesc.text = getString(R.string.dns_btm_resolved_doh_no_server, uptime)

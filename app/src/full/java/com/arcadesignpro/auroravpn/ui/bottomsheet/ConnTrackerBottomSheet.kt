@@ -720,9 +720,11 @@ class ConnTrackerBottomSheet : BottomSheetDialogFragment(), KoinComponent {
             text +=
                 getString(
                     R.string.dns_btm_sheet_dialog_message,
-                    heading,
+                    // Blocklist names come from downloaded metadata: escape before
+                    // the string is parsed as HTML (docs/security/SECURE_CODING.md K3).
+                    TextUtils.htmlEncode(heading),
                     groupNames.get(it).count().toString(),
-                    TextUtils.join(", ", groupNames.get(it))
+                    TextUtils.htmlEncode(TextUtils.join(", ", groupNames.get(it)))
                 )
         }
         text = text.replace(",", ", ")

@@ -3910,6 +3910,8 @@ class BraveVPNService : VpnService(), ConnectionMonitor.NetworkListener, Bridge,
 
     override suspend fun onNetworkChange(networks: ConnectionMonitor.UnderlyingNetworks) {
         withContext(serializer) {
+            // DNSSEC validator caches & IPv6 probe are tied to the old path.
+            DnssecManager.onNetworkChanged()
             val prev = underlyingNetworks
             // no need to handle nw change when last updated time is stale
             if ((prev?.lastUpdated ?: 0L) > networks.lastUpdated) {
