@@ -1,5 +1,8 @@
 package com.arcadesignpro.auroravpn.ui.activity
 
+import com.arcadesignpro.auroravpn.util.WgConfigText
+import com.arcadesignpro.auroravpn.util.TransferResult
+import com.arcadesignpro.auroravpn.util.TextTransferDialogs
 import Logger
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
@@ -198,7 +201,14 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
 
     private fun wireWgCard() {
         b.wgSwitch.setOnCheckedChangeListener { _, isChecked -> onHopSwitch(ChainArgs.Hop.WG, isChecked) }
-        b.wgImportBtn.setOnClickListener { importWgLauncher.launch("*/*") }
+        b.wgImportBtn.setOnClickListener {
+            TextTransferDialogs.showSourceChooser(
+                this,
+                getString(R.string.chain_wg_import_choose_title),
+                onPaste = { showChainWgPasteDialog() },
+                onFile = { importWgLauncher.launch("*/*") }
+            )
+        }
         b.wgReloadBtn.setOnClickListener {
             b.wgConfigEdit.setText(ChainManager.readFile(this, ChainManager.WG_CONFIG))
             toast(getString(R.string.chain_config_reloaded, ChainManager.WG_CONFIG))
@@ -359,20 +369,52 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
         }
     }
 
+    private fun showChainWgPasteDialog() {
+        TextTransferDialogs.showImport(
+            this,
+            getString(R.string.wg_import_text_title),
+            getString(R.string.wg_import_text_hint),
+            WgConfigText.MAX_CHARS
+        ) { pasted ->
+            when (val r = WgConfigText.prepare(pasted)) {
+                is TransferResult.Err -> TextTransferDialogs.message(this, r.error)
+                is TransferResult.Ok -> { applyChainWg(r.value); null }
+            }
+        }
+    }
+
+    @Suppress("MagicNumber") // read-buffer size and UTF-8 worst-case factor
     private fun importWgFrom(uri: Uri) {
         lifecycleScope.launch {
-            val text = withContext(Dispatchers.IO) {
+            val raw = withContext(Dispatchers.IO) {
                 try {
-                    contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+                    // Bounded read: a huge file must not exhaust memory.
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        val limit = WgConfigText.MAX_CHARS * 4 // UTF-8 worst case
+                        val buf = java.io.ByteArrayOutputStream()
+                        val chunk = ByteArray(8192)
+                        while (true) {
+                            val n = input.read(chunk)
+                            if (n < 0) break
+                            buf.write(chunk, 0, n)
+                            if (buf.size() > limit) return@use null
+                        }
+                        buf.toByteArray().toString(Charsets.UTF_8)
+                    }
                 } catch (e: Exception) {
                     Logger.e(Logger.LOG_TAG_PROXY, "chain wg import read failed: ${e.message}", e)
                     null
                 }
             }
-            if (text.isNullOrBlank()) {
-                toast(getString(R.string.chain_wg_import_failed))
-                return@launch
+            when (val r = WgConfigText.prepare(raw)) {
+                is TransferResult.Err -> toast(TextTransferDialogs.message(this@ChainSettingsActivity, r.error))
+                is TransferResult.Ok -> applyChainWg(r.value)
             }
+        }
+    }
+
+    private fun applyChainWg(text: String) {
+        lifecycleScope.launch {
             b.wgConfigEdit.setText(text)
             val ok = ChainManager.writeWgConfig(this@ChainSettingsActivity, text)
             toast(getString(if (ok) R.string.chain_wg_imported else R.string.chain_wg_invalid))

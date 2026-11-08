@@ -147,20 +147,29 @@ object TunnelImporter : KoinComponent {
             }
         }
 
-    suspend fun importTunnel(configText: String, messageCallback: (CharSequence) -> Unit) {
+    /**
+     * Imports a config from text (QR code or paste). Returns true on success.
+     * SECURITY: never log [configText]; it contains the interface private key.
+     * (It used to be logged in full at debug level.)
+     */
+    suspend fun importTunnel(configText: String, messageCallback: (CharSequence) -> Unit): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                Logger.d(LOG_TAG_PROXY, "Importing tunnel: $configText")
+                Logger.d(LOG_TAG_PROXY, "Importing tunnel from text (${configText.length} chars)")
                 val config =
                     Config.parse(
                         ByteArrayInputStream(configText.toByteArray(StandardCharsets.UTF_8))
                     )
                 WireguardManager.addConfig(config)
+                true
             } catch (e: Throwable) {
-                onTunnelImportFinished(listOf(e), messageCallback)
+                // The callback shows a toast: it must run on the main thread.
+                withContext(Dispatchers.Main.immediate) {
+                    onTunnelImportFinished(listOf(e), messageCallback)
+                }
+                false
             }
         }
-    }
 
     private fun onTunnelImportFinished(
         throwables: Collection<Throwable>,
