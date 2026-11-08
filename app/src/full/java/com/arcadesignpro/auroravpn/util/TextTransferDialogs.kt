@@ -172,19 +172,6 @@ object TextTransferDialogs {
         dialog.show()
     }
 
-    /** Lets the user pick between pasting text and choosing a file. */
-    fun showSourceChooser(ctx: Context, title: String, onPaste: () -> Unit, onFile: () -> Unit) {
-        val items = arrayOf(
-            ctx.getString(R.string.text_transfer_source_paste),
-            ctx.getString(R.string.text_transfer_source_file)
-        )
-        MaterialAlertDialogBuilder(ctx, R.style.App_Dialog_NoDim)
-            .setTitle(title)
-            .setItems(items) { _, which -> if (which == 0) onPaste() else onFile() }
-            .setNegativeButton(R.string.lbl_cancel, null)
-            .show()
-    }
-
     /** Maps a parse failure to a user-facing message. */
     fun message(ctx: Context, error: TransferError): String = ctx.getString(
         when (error) {

@@ -8,7 +8,6 @@ import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.res.Configuration
-import android.net.Uri
 import android.os.Bundle
 import android.transition.AutoTransition
 import android.transition.TransitionManager
@@ -18,7 +17,6 @@ import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
@@ -80,12 +78,6 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
     private val warp1 by lazy { WarpCard(ChainArgs.Hop.WARP1) }
     private val warp2 by lazy { WarpCard(ChainArgs.Hop.WARP2) }
     private val argsEditors by lazy { ChainArgs.Hop.entries.map { ArgsEditor(it) } }
-
-    private val importWgLauncher =
-        registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            if (uri == null) return@registerForActivityResult
-            importWgFrom(uri)
-        }
 
     /** The views and settings of one WARP card; WARP1 and WARP2 share all the code. */
     private inner class WarpCard(val hop: ChainArgs.Hop) {
@@ -201,14 +193,8 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
 
     private fun wireWgCard() {
         b.wgSwitch.setOnCheckedChangeListener { _, isChecked -> onHopSwitch(ChainArgs.Hop.WG, isChecked) }
-        b.wgImportBtn.setOnClickListener {
-            TextTransferDialogs.showSourceChooser(
-                this,
-                getString(R.string.chain_wg_import_choose_title),
-                onPaste = { showChainWgPasteDialog() },
-                onFile = { importWgLauncher.launch("*/*") }
-            )
-        }
+        // Paste only: the wg0 config arrives as .conf text, never as a file.
+        b.wgImportBtn.setOnClickListener { showChainWgPasteDialog() }
         b.wgReloadBtn.setOnClickListener {
             b.wgConfigEdit.setText(ChainManager.readFile(this, ChainManager.WG_CONFIG))
             toast(getString(R.string.chain_config_reloaded, ChainManager.WG_CONFIG))
@@ -379,36 +365,6 @@ class ChainSettingsActivity : AppCompatActivity(R.layout.activity_chain) {
             when (val r = WgConfigText.prepare(pasted)) {
                 is TransferResult.Err -> TextTransferDialogs.message(this, r.error)
                 is TransferResult.Ok -> { applyChainWg(r.value); null }
-            }
-        }
-    }
-
-    @Suppress("MagicNumber") // read-buffer size and UTF-8 worst-case factor
-    private fun importWgFrom(uri: Uri) {
-        lifecycleScope.launch {
-            val raw = withContext(Dispatchers.IO) {
-                try {
-                    // Bounded read: a huge file must not exhaust memory.
-                    contentResolver.openInputStream(uri)?.use { input ->
-                        val limit = WgConfigText.MAX_CHARS * 4 // UTF-8 worst case
-                        val buf = java.io.ByteArrayOutputStream()
-                        val chunk = ByteArray(8192)
-                        while (true) {
-                            val n = input.read(chunk)
-                            if (n < 0) break
-                            buf.write(chunk, 0, n)
-                            if (buf.size() > limit) return@use null
-                        }
-                        buf.toByteArray().toString(Charsets.UTF_8)
-                    }
-                } catch (e: Exception) {
-                    Logger.e(Logger.LOG_TAG_PROXY, "chain wg import read failed: ${e.message}", e)
-                    null
-                }
-            }
-            when (val r = WgConfigText.prepare(raw)) {
-                is TransferResult.Err -> toast(TextTransferDialogs.message(this@ChainSettingsActivity, r.error))
-                is TransferResult.Ok -> applyChainWg(r.value)
             }
         }
     }

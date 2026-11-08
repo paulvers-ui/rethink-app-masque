@@ -30,6 +30,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import by.kirich1409.viewbindingdelegate.viewBinding
 import com.arcadesignpro.auroravpn.R
+import com.arcadesignpro.auroravpn.util.TextTransferDialogs
 import com.arcadesignpro.auroravpn.adapter.WgIncludeAppsAdapter
 import com.arcadesignpro.auroravpn.adapter.WgPeersAdapter
 import com.arcadesignpro.auroravpn.database.EventSource
@@ -52,8 +53,6 @@ import com.arcadesignpro.auroravpn.ui.activity.NetworkLogsActivity.Companion.RUL
 import com.arcadesignpro.auroravpn.ui.dialog.WgAddPeerDialog
 import com.arcadesignpro.auroravpn.ui.dialog.WgIncludeAppsDialog
 import com.arcadesignpro.auroravpn.util.Constants
-import com.arcadesignpro.auroravpn.util.TunnelExporter
-import androidx.activity.result.contract.ActivityResultContracts
 import com.arcadesignpro.auroravpn.util.Themes
 import com.arcadesignpro.auroravpn.util.UIUtils
 import com.arcadesignpro.auroravpn.util.UIUtils.fetchColor
@@ -73,7 +72,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
-import kotlin.getValue
 
 class WgConfigDetailActivity : AppCompatActivity(R.layout.activity_wg_detail) {
     private val b by viewBinding(ActivityWgDetailBinding::bind)
@@ -111,21 +109,6 @@ class WgConfigDetailActivity : AppCompatActivity(R.layout.activity_wg_detail) {
             }
         }
     }
-
-    private val downloadConfigLauncher =
-        registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
-            if (uri == null) return@registerForActivityResult
-            val cfg = WireguardManager.getConfigById(configId)
-            if (cfg == null) {
-                Utilities.showToastUiCentered(this, getString(R.string.wireguard_download_failure), Toast.LENGTH_LONG)
-                return@registerForActivityResult
-            }
-            lifecycleScope.launch {
-                val result = TunnelExporter.exportConfig(contentResolver, uri, cfg)
-                val msg = if (result.isSuccess) R.string.wireguard_download_success else R.string.wireguard_download_failure
-                Utilities.showToastUiCentered(this@WgConfigDetailActivity, getString(msg), Toast.LENGTH_LONG)
-            }
-        }
 
         override fun onCreate(savedInstanceState: Bundle?) {
         theme.applyStyle(Themes.getCurrentTheme(isDarkThemeOn(), persistentState.theme), true)
@@ -440,12 +423,18 @@ class WgConfigDetailActivity : AppCompatActivity(R.layout.activity_wg_detail) {
             openAppsDialog(proxyName)
         }
 
+        // Copy as .conf text instead of writing a file to phone storage.
+        b.downloadBtn.text = getString(R.string.wg_export_text_btn)
         b.downloadBtn.setOnClickListener {
-            val name = WireguardManager.getConfigName(configId).ifBlank { "wg-$configId" }
+            val cfg = WireguardManager.getConfigById(configId)
+            if (cfg == null) {
+                Utilities.showToastUiCentered(this, getString(R.string.wireguard_download_failure), Toast.LENGTH_LONG)
+                return@setOnClickListener
+            }
             try {
-                downloadConfigLauncher.launch("$name.conf")
+                TextTransferDialogs.showExport(this, getString(R.string.wg_export_text_title), cfg.toWgQuickString())
             } catch (e: Exception) {
-                Logger.e(LOG_TAG_PROXY, "download wg config failed: ${e.message}", e)
+                Logger.e(LOG_TAG_PROXY, "copy wg config failed: ${e.message}", e)
                 Utilities.showToastUiCentered(this, getString(R.string.wireguard_download_failure), Toast.LENGTH_LONG)
             }
         }
