@@ -79,6 +79,8 @@ object DnssecManager : KoinComponent {
     }
 
     /** Call from the VPN service when the underlying network changes. */
+    // gomobile surfaces every Go error as a plain java.lang.Exception.
+    @Suppress("TooGenericExceptionCaught")
     fun onNetworkChanged() {
         try {
             validator?.onNetworkChanged()
@@ -88,6 +90,9 @@ object DnssecManager : KoinComponent {
         lastRunElapsedMs = 0L // next refresh() re-probes on the new path
     }
 
+    // gomobile surfaces every Go error as a plain java.lang.Exception; any
+    // failure must map to UNKNOWN (fail closed), so the broad catch is intended.
+    @Suppress("TooGenericExceptionCaught")
     private fun runSelfTest(force: Boolean) {
         val now = SystemClock.elapsedRealtime()
         if (!force && lastRunElapsedMs != 0L && now - lastRunElapsedMs < MIN_INTERVAL_MS) return
