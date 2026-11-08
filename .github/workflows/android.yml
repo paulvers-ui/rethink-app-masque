@@ -99,7 +99,10 @@ jobs:
       - uses: nick-fields/retry@v3
         with:
           timeout_minutes: 15
-          max_attempts: 1
+          # One retry absorbs transient network failures (e.g. timeouts
+          # downloading the Gradle distribution from services.gradle.org).
+          max_attempts: 2
+          retry_wait_seconds: 30
           command: ./gradlew ${{ env.VARIANT }} -PfirestackRepo=local --info --warning-mode all --no-configuration-cache
       - run: ./gradlew testFdroidFullDebugUnitTest -PfirestackRepo=local --no-configuration-cache --continue
       - if: always()
