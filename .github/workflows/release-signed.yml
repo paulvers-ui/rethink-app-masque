@@ -48,7 +48,7 @@ jobs:
       NDKVER: "28.2.13676358"
       SDKVER: "36"
       # Same firestack commit release-apk.yml pins.
-      FIRESTACK_COMMIT: "c3e672cfdf3949e377adb47a0ec48efa997a5096"
+      FIRESTACK_COMMIT: "eef958620c1415c9b08030457ecceaccb195c1bf"
       INCLUDE_DEBUG: ${{ inputs.include_debug }}
     steps:
       - uses: actions/checkout@v6
