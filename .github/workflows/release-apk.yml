@@ -95,7 +95,7 @@ jobs:
       SDKVER: "36"
       # Same firestack commit android.yml and auto-build.yml pin (branch n2,
       # the API this Kotlin expects: 3-arg OnQuery, Gostr/Gobyte).
-      FIRESTACK_COMMIT: "eef958620c1415c9b08030457ecceaccb195c1bf"
+      FIRESTACK_COMMIT: "eb6d2aa43ee35eb4ce9bbca43289648334ee680c"
       VER: ${{ needs.auto-tag.outputs.new_tag || inputs.tag || github.event.release.tag_name }}
 
     steps:
