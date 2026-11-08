@@ -110,6 +110,10 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    # Forks start with GitHub's Dependency graph OFF, and this action errors
+    # until it is enabled (Settings -> Code security -> Dependency graph).
+    # Remove this line once it is on, so the job can block risky PRs.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
