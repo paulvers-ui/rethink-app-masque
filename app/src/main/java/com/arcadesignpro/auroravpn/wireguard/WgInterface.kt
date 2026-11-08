@@ -208,29 +208,29 @@ class WgInterface private constructor(builder: Builder) {
      * below is the sample file content for the Interface section, similar will be stored in the
      * wg[0-9].conf file
      * [Interface]
-     * Address = 100.80.213.126/32
+     * Address = 10.0.0.2/32
      * DNS = 10.255.255.3
-     * PrivateKey = KBdV2Iv+poXZkCOZukSo30modVHqyO5+GCdfhP4n40I=
+     * PrivateKey = <base64-private-key>
      *
      * [Peer]
      * AllowedIPs = 0.0.0.0/0, ::/0
-     * Endpoint = yul-359-wg.whiskergalaxy.com:443
-     * Endpoint = yul-359-wg.whiskergalaxy.com:443
-     * PreSharedKey = VQoBVQxMmgttgGh9JCBwOPiwnFYV6/Py1tRi/f38DEI=
-     * PublicKey = nfFRpFZ0ZXWVoz8C4gP5ti7V1snFT1gV8EcIxTWJtB4=
+     * Endpoint = vpn.example.com:443
+     * Endpoint = vpn.example.com:443
+     * PreSharedKey = <base64-preshared-key>
+     * PublicKey = <base64-peer-public-key>
      *
      * below is converted to wg-quick format
      * [Interface]
-     * Address = 100.80.213.126/32
+     * Address = 10.0.0.2/32
      * DNS = 10.255.255.3
-     * PrivateKey = KBdV2Iv+poXZkCOZukSo30modVHqyO5+GCdfhP4n40I=
+     * PrivateKey = <base64-private-key>
      *
      * [Peer]
      * AllowedIPs = 0.0.0.0/0, ::/0
-     * Endpoint = yul-359-wg.whiskergalaxy.com:443
-     * Endpoint = yul-359-wg.whiskergalaxy.com:443
-     * PreSharedKey = VQoBVQxMmgttgGh9JCBwOPiwnFYV6/Py1tRi/f38DEI=
-     * PublicKey = nfFRpFZ0ZXWVoz8C4gP5ti7V1snFT1gV8EcIxTWJtB4=
+     * Endpoint = vpn.example.com:443
+     * Endpoint = vpn.example.com:443
+     * PreSharedKey = <base64-preshared-key>
+     * PublicKey = <base64-peer-public-key>
      *
      */
     fun toWgQuickString(): String {
@@ -279,22 +279,22 @@ class WgInterface private constructor(builder: Builder) {
      *
      * below is the converted format for the userspace string
      *
-     * private_key=281755d88bfea685d9902399ba44a8df49a87551eac8ee7e18275f84fe27e342
-     * address=100.80.213.126/32
+     * private_key=<hex-private-key>
+     * address=10.0.0.2/32
      * dns=10.255.255.3
      * mtu=1280
      * replace_peers=true
-     * public_key=9df151a45674657595a33f02e203f9b62ed5d6c9c54f5815f04708c53589b41e
+     * public_key=<hex-peer-public-key>
      * allowed_ip=0.0.0.0/0
      * allowed_ip=::/0
-     * endpoint=172.98.68.207:443
-     * endpoint=yul-359-wg.whiskergalaxy.com:443
-     * preshared_key=550a01550c4c9a0b6d80687d24207038f8b09c5615ebf3f2d6d462fdfdfc0c42
+     * endpoint=192.0.2.10:443
+     * endpoint=vpn.example.com:443
+     * preshared_key=<hex-preshared-key>
      *
      * below is converted to amnezia userspace format
      *
-     * private_key=281755d88bfea685d9902399ba44a8df49a87551eac8ee7e18275f84fe27e342
-     * address=100.80.213.126/32
+     * private_key=<hex-private-key>
+     * address=10.0.0.2/32
      * dns=10.255.255.3
      * mtu=1280
      * jc=0
@@ -307,12 +307,12 @@ class WgInterface private constructor(builder: Builder) {
      * h3=0
      * h4=0
      * replace_peers=true
-     * public_key=9df151a45674657595a33f02e203f9b62ed5d6c9c54f5815f04708c53589b41e
+     * public_key=<hex-peer-public-key>
      * allowed_ip=0.0.0.0/0
      * allowed_ip=::/0
-     * endpoint=172.98.68.207:443
-     * endpoint=yul-359-wg.whiskergalaxy.com:443
-     * preshared_key=550a01550c4c9a0b6d80687d24207038f8b09c5615ebf3f2d6d462fdfdfc0c42
+     * endpoint=192.0.2.10:443
+     * endpoint=vpn.example.com:443
+     * preshared_key=<hex-preshared-key>
      *
      */
     fun toWgUserspaceString(skipListenPort: Boolean): String {
