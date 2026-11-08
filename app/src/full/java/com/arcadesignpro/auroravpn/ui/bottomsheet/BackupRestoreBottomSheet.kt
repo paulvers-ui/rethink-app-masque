@@ -351,7 +351,7 @@ class BackupRestoreBottomSheet : BottomSheetDialogFragment() {
         builder.setTitle(R.string.brbs_backup_dialog_failure_title)
         builder.setMessage(R.string.brbs_backup_dialog_failure_message)
         builder.setPositiveButton(getString(R.string.brbs_backup_dialog_failure_positive)) { _, _ ->
-            backup()
+            backupAsText() // retry uses the text flow (no file picker)
             observeBackupWorker()
         }
 
@@ -402,8 +402,7 @@ class BackupRestoreBottomSheet : BottomSheetDialogFragment() {
         builder.setMessage(R.string.brbs_restore_dialog_failure_message)
         builder.setPositiveButton(getString(R.string.brbs_restore_dialog_failure_positive)) { _, _
             ->
-            restore()
-            observeRestoreWorker()
+            restoreFromText() // retry uses the text flow; it observes the worker itself
         }
 
         builder.setNegativeButton(getString(R.string.lbl_dismiss)) { _, _ ->
