@@ -29,7 +29,6 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.isVisible
@@ -47,9 +46,7 @@ import com.arcadesignpro.auroravpn.databinding.ActivityWireguardMainBinding
 import com.arcadesignpro.auroravpn.service.EventLogger
 import com.arcadesignpro.auroravpn.service.PersistentState
 import com.arcadesignpro.auroravpn.service.WireguardManager
-import com.arcadesignpro.auroravpn.util.QrCodeFromFileScanner
 import com.arcadesignpro.auroravpn.util.Themes
-import com.arcadesignpro.auroravpn.util.TunnelExporter
 import com.arcadesignpro.auroravpn.util.TunnelImporter
 import com.arcadesignpro.auroravpn.util.UIUtils
 import com.arcadesignpro.auroravpn.util.UIUtils.fetchToggleBtnColors
@@ -59,7 +56,6 @@ import com.arcadesignpro.auroravpn.util.handleFrostEffectIfNeeded
 import com.arcadesignpro.auroravpn.viewmodel.WgConfigViewModel
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.zxing.qrcode.QRCodeReader
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Dispatchers
@@ -79,73 +75,6 @@ class WgMainActivity :
     private var oneWgConfigAdapter: OneWgConfigAdapter? = null
     private val wgConfigViewModel: WgConfigViewModel by viewModel()
 
-    companion object {
-        private const val IMPORT_LAUNCH_INPUT = "*/*"
-    }
-
-    private val tunnelFileImportResultLauncher =
-        registerForActivityResult(ActivityResultContracts.GetContent()) { data ->
-            if (data == null) return@registerForActivityResult
-            val contentResolver = contentResolver ?: return@registerForActivityResult
-            lifecycleScope.launch {
-                if (QrCodeFromFileScanner.validContentType(contentResolver, data)) {
-                    try {
-                        val qrCodeFromFileScanner =
-                            QrCodeFromFileScanner(contentResolver, QRCodeReader())
-                        val result = qrCodeFromFileScanner.scan(data)
-                        Logger.i(LOG_TAG_PROXY, "result: $result, data: $data")
-                        if (result != null) {
-                            withContext(Dispatchers.Main) {
-                                Logger.i(LOG_TAG_PROXY, "result: ${result.text}")
-                                TunnelImporter.importTunnel(result.text) {
-                                    Utilities.showToastUiCentered(
-                                        this@WgMainActivity,
-                                        it.toString(),
-                                        Toast.LENGTH_LONG
-                                    )
-                                    Logger.e(LOG_TAG_PROXY, it.toString())
-                                }
-                                logEvent("Wireguard import", "imported from file")
-                            }
-                        } else {
-                            val message =
-                                resources.getString(
-                                    R.string.generic_error,
-                                    getString(R.string.invalid_file_error)
-                                )
-                            Utilities.showToastUiCentered(
-                                this@WgMainActivity,
-                                message,
-                                Toast.LENGTH_LONG
-                            )
-                            Logger.e(LOG_TAG_PROXY, message)
-                        }
-                    } catch (e: Exception) {
-                        val message =
-                            resources.getString(
-                                R.string.generic_error,
-                                getString(R.string.invalid_file_error)
-                            )
-                        Utilities.showToastUiCentered(
-                            this@WgMainActivity,
-                            message,
-                            Toast.LENGTH_LONG
-                        )
-                        Logger.e(LOG_TAG_PROXY, e.message ?: "err tun import", e)
-                    }
-                } else {
-                    TunnelImporter.importTunnel(contentResolver, data) {
-                        Logger.e(LOG_TAG_PROXY, it.toString())
-                        Utilities.showToastUiCentered(
-                            this@WgMainActivity,
-                            it.toString(),
-                            Toast.LENGTH_LONG
-                        )
-                    }
-                }
-            }
-        }
-
     private val qrImportResultLauncher =
         registerForActivityResult(ScanContract()) { result ->
             val qrCode = result.contents
@@ -161,22 +90,6 @@ class WgMainActivity :
                         logEvent("Wireguard import", "imported via QR scanner")
                     }
                 }
-            }
-        }
-
-    private val downloadConfigsLauncher =
-        registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
-            if (uri == null) return@registerForActivityResult
-            lifecycleScope.launch {
-                val configs = WireguardManager.getAllConfigs()
-                if (configs.isEmpty()) {
-                    Utilities.showToastUiCentered(this@WgMainActivity, getString(R.string.wireguard_download_failure), Toast.LENGTH_LONG)
-                    return@launch
-                }
-                val result = TunnelExporter.exportConfigsZip(contentResolver, uri, configs)
-                val msg = if (result.isSuccess) R.string.wireguard_download_success else R.string.wireguard_download_failure
-                Utilities.showToastUiCentered(this@WgMainActivity, getString(msg), Toast.LENGTH_LONG)
-                logEvent("Wireguard export", "exported ${result.getOrDefault(0)} configs to zip")
             }
         }
 
@@ -358,19 +271,10 @@ class WgMainActivity :
                 expendFab()
             }
         }
-        b.importFab.setOnClickListener {
-            TextTransferDialogs.showSourceChooser(
-                this,
-                getString(R.string.wg_import_choose_title),
-                onPaste = { showWgPasteDialog() },
-                onFile = { launchWgFileImport() }
-            )
-        }
+        // Paste only: configs arrive as .conf text, never as files.
+        b.importFab.setOnClickListener { showWgPasteDialog() }
         b.qrCodeFab.setOnClickListener {
             launchQrImport()
-        }
-        b.downloadFab.setOnClickListener {
-            launchConfigsDownload()
         }
         b.createFab.setOnClickListener { openTunnelEditorActivity() }
         setupToggleListeners()
@@ -405,18 +309,6 @@ class WgMainActivity :
         }
     }
 
-    private fun launchWgFileImport() {
-            try {
-                tunnelFileImportResultLauncher.launch(IMPORT_LAUNCH_INPUT)
-            } catch (e: ActivityNotFoundException) {
-                Logger.e(LOG_TAG_PROXY, "err; anf; while launching file import: ${e.message}", e)
-                Utilities.showToastUiCentered(this, getString(R.string.blocklist_update_check_failure), Toast.LENGTH_SHORT)
-            } catch (e: Exception) {
-                Logger.e(LOG_TAG_PROXY, "err while launching file import: ${e.message}", e)
-                Utilities.showToastUiCentered(this, getString(R.string.blocklist_update_check_failure), Toast.LENGTH_SHORT)
-            }
-    }
-
     private fun launchQrImport() {
             try {
                 qrImportResultLauncher.launch(
@@ -431,16 +323,6 @@ class WgMainActivity :
             } catch (e: Exception) {
                 Logger.e(LOG_TAG_PROXY, "err while launching QR scanner: ${e.message}", e)
                 Utilities.showToastUiCentered(this, getString(R.string.blocklist_update_check_failure), Toast.LENGTH_SHORT)
-            }
-    }
-
-    private fun launchConfigsDownload() {
-            try {
-                val fileName = "wireguard-configs-${System.currentTimeMillis()}.zip"
-                downloadConfigsLauncher.launch(fileName)
-            } catch (e: Exception) {
-                Logger.e(LOG_TAG_PROXY, "download wg zip failed: ${e.message}", e)
-                Utilities.showToastUiCentered(this, getString(R.string.wireguard_download_failure), Toast.LENGTH_SHORT)
             }
     }
 
@@ -524,7 +406,7 @@ class WgMainActivity :
         b.createFab.visibility = View.VISIBLE
         b.importFab.visibility = View.VISIBLE
         b.qrCodeFab.visibility = View.VISIBLE
-        b.downloadFab.visibility = View.VISIBLE
+        b.downloadFab.visibility = View.GONE // zip export to phone storage removed
         b.createFab.animate().translationY(-resources.getDimension(R.dimen.standard_55))
         b.importFab.animate().translationY(-resources.getDimension(R.dimen.standard_105))
         b.qrCodeFab.animate().translationY(-resources.getDimension(R.dimen.standard_155))

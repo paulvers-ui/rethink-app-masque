@@ -1561,11 +1561,11 @@
     <string name="brbs_backup_restore_desc" translatable="true">Doesn\'t work across app versions</string>
 
     <string name="brbs_backup_dialog_title" translatable="true">Take backup</string>
-    <string name="brbs_backup_dialog_message" translatable="true">Backs up app settings, network, and dns logs to a file. This will restart the VPN.</string>
+    <string name="brbs_backup_dialog_message" translatable="true">Backs up app settings, network, and dns logs as an AuroraVPN text block to copy. No file is saved on the phone. This will restart the VPN.</string>
     <string name="brbs_backup_dialog_positive" translatable="true">Backup</string>
 
     <string name="brbs_restore_dialog_title" translatable="true">Restore backup</string>
-    <string name="brbs_restore_dialog_message" translatable="true">Restore app settings, network, and dns logs from a backup file. This will restart the app.</string>
+    <string name="brbs_restore_dialog_message" translatable="true">Restore app settings, network, and dns logs from an AuroraVPN backup text block (-----BEGIN AURORAVPN BACKUP-----). This will restart the app.</string>
     <string name="brbs_restore_dialog_positive" translatable="true">Restore</string>
 
     <string name="brbs_backup_dialog_failure_title" translatable="true">Backup failed</string>
@@ -2160,8 +2160,6 @@
     <string name="text_transfer_share" translatable="true">Share</string>
     <string name="text_transfer_import" translatable="true">Import</string>
     <string name="text_transfer_paste" translatable="true">Paste</string>
-    <string name="text_transfer_source_paste" translatable="true">Paste text</string>
-    <string name="text_transfer_source_file" translatable="true">Choose a file</string>
     <string name="text_transfer_export_info" translatable="true">%1$d characters. Anyone with this text can restore it, so keep it as private as a password.</string>
     <string name="text_transfer_copied" translatable="true">Copied. The clipboard will be cleared in %1$d seconds.</string>
     <string name="text_transfer_clipboard_empty" translatable="true">The clipboard is empty.</string>
@@ -2182,9 +2180,9 @@
     <string name="brbs_backup_text_too_large" translatable="true">This backup is too large for text. Use the file option instead.</string>
     <string name="brbs_restore_text_title" translatable="true">Restore from text</string>
     <string name="brbs_restore_text_hint" translatable="true">Paste the text that starts with -----BEGIN AURORAVPN BACKUP-----</string>
-    <string name="wg_import_choose_title" translatable="true">Import WireGuard config</string>
     <string name="wg_import_text_title" translatable="true">Paste WireGuard config</string>
     <string name="wg_import_text_hint" translatable="true">[Interface] … or an AuroraVPN text block</string>
     <string name="wg_import_text_success" translatable="true">WireGuard config imported.</string>
-    <string name="chain_wg_import_choose_title" translatable="true">Import wg0 config</string>
+    <string name="wg_export_text_btn" translatable="true">Copy as text</string>
+    <string name="wg_export_text_title" translatable="true">WireGuard config (.conf)</string>
 </resources>
