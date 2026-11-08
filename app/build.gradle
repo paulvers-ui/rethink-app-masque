@@ -64,17 +64,17 @@ def usquePinnedSha256 = providers.fileContents(layout.projectDirectory.file("$us
 
 android {
     compileSdkVersion(35)
-    namespace 'com.arcadesignpro.auroravpn'
+    namespace 'com.paulvers.auroravpn'
 
     defaultConfig {
-        // applicationId matches namespace -- both are com.arcadesignpro.auroravpn,
+        // applicationId matches namespace -- both are com.paulvers.auroravpn,
         // following the AuroraVPN rebrand from com.creatore.rethinkfork. Keeping
         // the two aligned avoids the exact scanner-confusion problem documented in
         // fdroid/RFP-4306-RESPONSE.md from the previous rename (celzero.bravedns ->
         // creatore.rethinkfork): a scanner reading `namespace` instead of
         // `applicationId` would attribute this app's identity to whatever package
         // used to live at that name.
-        applicationId "com.arcadesignpro.auroravpn"
+        applicationId "com.paulvers.auroravpn"
         minSdkVersion(23)
         targetSdkVersion 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
