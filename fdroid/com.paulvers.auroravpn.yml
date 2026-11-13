@@ -1,0 +1,71 @@
+AntiFeatures:
+  NonFreeNet:
+    en-US: The WARP feature connects to Cloudflare's proprietary WARP service.
+Categories:
+  - DNS & Hosts
+  - Security
+  - VPN & Proxy
+License: Apache-2.0
+AuthorName: paulvers-ui2
+SourceCode: https://github.com/paulvers-ui2/rethink-app-masque
+IssueTracker: https://github.com/paulvers-ui2/rethink-app-masque/issues
+Changelog: https://github.com/paulvers-ui2/rethink-app-masque/releases
+
+AutoName: AuroraVPN
+
+RepoType: git
+Repo: https://github.com/paulvers-ui2/rethink-app-masque.git
+
+Builds:
+  - versionName: v1.11.19
+    versionCode: 54
+    commit: f5809ccaa7b4c64dfb88e296649e6853608fe290
+    subdir: app
+    sudo:
+      - apt-get update
+      - apt-get install -y curl make
+      - curl -Lso /tmp/go.tar.gz https://go.dev/dl/go1.26.3.linux-amd64.tar.gz
+      - echo "2b2cfc7148493da5e73981bffbf3353af381d5f93e789c82c79aff64962eb556  /tmp/go.tar.gz"
+        | sha256sum -c -
+      - tar -C /usr/local -xzf /tmp/go.tar.gz
+      - rm /tmp/go.tar.gz
+    gradle:
+      - fdroidFull
+    srclibs:
+      - AuroraUsque@97795bc6a85071a73eff76fe58b3f1b06d460cfa
+      - AuroraFirestack@05a664580caca8e30a912b75f2ffe480560e70ae
+    rm:
+      - app/src/main/jniLibs/arm64-v8a/libusque.so
+      - app/src/main/jniLibs/arm64-v8a/libusque.so.bak
+      - app/src/main/jniLibs/arm64-v8a/libusque.so.prev
+      - app/src/main/jniLibs/arm64-v8a/libusque.so.doh10aug.26
+      - app/src/main/jniLibs/arm64-v8a/libusque.so.working.sha256
+    prebuild:
+      - sed -i -e 's/^org.gradle.unsafe.configuration-cache=true/org.gradle.unsafe.configuration-cache=false/'
+        -e 's/-Xmx2048m/-Xmx4g/' -e 's/^firestackRepo=.*/firestackRepo=local/' ../gradle.properties
+      - sed -i -e '/com.google.gms/d' -e '/com.google.firebase/d' -e '/firestackRepo
+        == "github"/,/^ *} else {/{/^ *} else {/!d}' ../build.gradle
+      - sed -i -e '/com.google.gms/d' -e '/[Ff]irebase/d' -e '/[Cc]rashlytics/d' build.gradle
+    build:
+      - export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
+      - pushd $$AuroraUsque$$
+      - GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"
+        -o libusque.so .
+      - popd
+      - mkdir -p src/main/jniLibs/arm64-v8a
+      - cp $$AuroraUsque$$/libusque.so src/main/jniLibs/arm64-v8a/libusque.so
+      - (cd src/main/jniLibs/arm64-v8a && sha256sum libusque.so > libusque.so.working.sha256)
+      - pushd $$AuroraFirestack$$
+      - ./make-aar nogo nodebug
+      - popd
+      - mkdir -p libs
+      - cp $$AuroraFirestack$$/firestack.aar libs/firestack-local.aar
+    ndk: 28.2.13676358
+    gradleprops:
+      - firestackRepo=local
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+$
+UpdateCheckData: gradle.properties|VERSION_CODE=(\d+)||
+CurrentVersion: v1.11.19
+CurrentVersionCode: 54

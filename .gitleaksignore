@@ -1,0 +1,44 @@
+# Reviewed gitleaks findings in existing history (2026-11-08).
+# Each line is commit:file:rule:line. Only these exact historical findings are ignored;
+# any NEW secret still fails the scan. Never add a real, live secret here: rotate it instead.
+
+# test fixtures: public WireGuard docs example keys and fake IDs
+3a28b594283bfe0d5ced4c99716e078855c6e664:app/src/test/java/com/celzero/bravedns/service/ProxyManagerTest.kt:generic-api-key:677
+3a28b594283bfe0d5ced4c99716e078855c6e664:app/src/test/java/com/celzero/bravedns/service/ProxyManagerTest.kt:generic-api-key:83
+3a28b594283bfe0d5ced4c99716e078855c6e664:app/src/test/java/com/celzero/bravedns/service/ProxyManagerTest.kt:generic-api-key:85
+603eb161ad1e6c80a3b4cf5ccf1af9a47cbc4712:app/src/test/java/com/arcadesignpro/auroravpn/service/KeyRedactionTest.kt:generic-api-key:23
+603eb161ad1e6c80a3b4cf5ccf1af9a47cbc4712:app/src/test/java/com/arcadesignpro/auroravpn/service/KeyRedactionTest.kt:generic-api-key:29
+
+# detekt baseline XML: rule IDs/hashes, not secrets
+afb4d8143d6ddd10e09a53af1f34c5e1a38892f2:.github/detekt-baseline.xml:generic-api-key:205
+afb4d8143d6ddd10e09a53af1f34c5e1a38892f2:.github/detekt-baseline.xml:generic-api-key:843
+afb4d8143d6ddd10e09a53af1f34c5e1a38892f2:.github/detekt-baseline.xml:generic-api-key:852
+b3cf61a9f9693666cf317c698a0446314d6cc00f:.github/detekt-baseline.xml:generic-api-key:205
+b3cf61a9f9693666cf317c698a0446314d6cc00f:.github/detekt-baseline.xml:generic-api-key:843
+b3cf61a9f9693666cf317c698a0446314d6cc00f:.github/detekt-baseline.xml:generic-api-key:852
+e4b61f96aab5b6c9ec6916455d61afca6a4e4b1f:.github/detekt-baseline.xml:generic-api-key:205
+e4b61f96aab5b6c9ec6916455d61afca6a4e4b1f:.github/detekt-baseline.xml:generic-api-key:843
+e4b61f96aab5b6c9ec6916455d61afca6a4e4b1f:.github/detekt-baseline.xml:generic-api-key:852
+
+# upstream sample Play purchase/product JSON in comments; redacted from the current tree in this PR
+92333553b385766804e747d85babf4fd65b6530a:app/src/play/java/com/celzero/bravedns/adapter/GooglePlaySubsAdapter.kt:generic-api-key:200
+afb4d8143d6ddd10e09a53af1f34c5e1a38892f2:app/src/play/java/com/creatore/rethinkfork/iab/InAppBillingHandler.kt:generic-api-key:718
+b3cf61a9f9693666cf317c698a0446314d6cc00f:app/src/play/java/com/arcadesignpro/auroravpn/iab/InAppBillingHandler.kt:generic-api-key:718
+c8e5cd6508982672f5a45a3bc952868b48090fce:app/src/play/java/com/celzero/bravedns/adapter/GooglePlaySubsAdapter.kt:generic-api-key:113
+c8e5cd6508982672f5a45a3bc952868b48090fce:app/src/play/java/com/celzero/bravedns/iab/InAppBillingHandler.kt:generic-api-key:678
+e4b61f96aab5b6c9ec6916455d61afca6a4e4b1f:app/src/play/java/com/celzero/bravedns/adapter/GooglePlaySubsAdapter.kt:generic-api-key:113
+e4b61f96aab5b6c9ec6916455d61afca6a4e4b1f:app/src/play/java/com/celzero/bravedns/iab/InAppBillingHandler.kt:generic-api-key:718
+
+# upstream Rethink Firebase *test* project config (deleted upstream); Firebase API keys are client identifiers, not secrets
+4673aac2fc6a1d4c7715462b29e3e001f33b48ef:app/google-services.json:gcp-api-key:18
+d570cd0b7d86206100778f91b715a74e8a849e95:app/google-services.json:gcp-api-key:18
+
+# upstream sample WireGuard config in doc comments; redacted from the current tree in this PR
+a33539f399a8af06e4ff3a128ee0099a14cb1303:app/src/main/java/com/celzero/bravedns/wireguard/WgInterface.kt:generic-api-key:163
+a33539f399a8af06e4ff3a128ee0099a14cb1303:app/src/main/java/com/celzero/bravedns/wireguard/WgInterface.kt:generic-api-key:169
+a33539f399a8af06e4ff3a128ee0099a14cb1303:app/src/main/java/com/celzero/bravedns/wireguard/WgInterface.kt:generic-api-key:176
+a33539f399a8af06e4ff3a128ee0099a14cb1303:app/src/main/java/com/celzero/bravedns/wireguard/WgInterface.kt:generic-api-key:182
+a33539f399a8af06e4ff3a128ee0099a14cb1303:app/src/main/java/com/celzero/bravedns/wireguard/WgInterface.kt:generic-api-key:223
+a33539f399a8af06e4ff3a128ee0099a14cb1303:app/src/main/java/com/celzero/bravedns/wireguard/WgInterface.kt:generic-api-key:233
+a73f7b550c2e52cf41003b7a31446f067b4fa645:app/src/main/java/com/celzero/bravedns/wireguard/WgInterface.kt:generic-api-key:290
+a73f7b550c2e52cf41003b7a31446f067b4fa645:app/src/main/java/com/celzero/bravedns/wireguard/WgInterface.kt:generic-api-key:309

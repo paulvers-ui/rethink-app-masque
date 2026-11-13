@@ -14,11 +14,13 @@ jobs:
     steps:
       - name: 🥏 Checkout
         uses: actions/checkout@v4
-      - name: ☕️ JREv17
+      - name: ☕️ JDKv17
         uses: actions/setup-java@v5
         with:
-          # default: jdk
-          java-package: 'jre'
+          # jdk, not jre: the runner image ships Temurin JDK 17 in its tool
+          # cache, so nothing is downloaded. The JRE is not cached and was
+          # fetched from Adoptium on every run, failing on HTTP 504s.
+          java-package: 'jdk'
           # github.com/actions/setup-java/blob/main/docs/advanced-usage.md#Java-version-file
           java-version: '17'
           # github.com/actions/setup-java?tab=readme-ov-file#supported-distributions

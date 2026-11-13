@@ -1,32 +1,13 @@
-# Publishes an UNSIGNED (debug-keystore-signed) APK to GitHub Releases
-# whenever release-apk.yml publishes a real release, and on every same-repo
-# pull request -- separate from release-apk.yml itself, which is the
-# signed, deliberate release channel for real distribution via Obtainium.
+# Publishes an UNSIGNED (debug-keystore-signed) APK for every same-repo pull
+# request (prerelease pr-<number>-b<run_number>) and on a manual run
+# (manual-<run_number>), so a change can be tried on a phone before it is
+# merged. It needs no secrets.
 #
-# This exists so automation can grab a fresh APK from Releases after every
-# commit without needing any secrets at all. Debug-signed APKs install fine
-# on a device for testing, but Android will refuse to install a debug-signed
-# update over a release-signed install (or vice-versa) -- these are NOT a
-# substitute for release-apk.yml's signed builds for anyone actually using
-# the app day to day.
-#
-# Tag scheme, so the channels never collide:
-#   push to main (via release-apk.yml's tag)  -> v1.0.0, v1.0.1, ... (real semver)
-#   same-repo PR                              -> pr-<number>-b<run_number>, prerelease
-#   workflow_dispatch                         -> manual-<run_number>, prerelease
-#
-# Deliberately does NOT run its own auto-tag job for push-to-main. Both
-# this workflow and release-apk.yml trigger on the identical `push` event;
-# two independent mathieudutour/github-tag-action runs racing on the same
-# push could each see a different "latest tag" and increment past each
-# other -- one real commit ending up consuming two version numbers (v1.0.5
-# from one workflow, v1.0.6 from the other, for a single push). Instead,
-# this workflow reacts to `release: types: [published]`, which fires only
-# after release-apk.yml has already tagged and published -- so it always
-# builds for the exact tag that already exists, and its unsigned APK is
-# uploaded as an extra asset on that SAME release (softprops/action-gh-release
-# adds to an existing release matching tag_name rather than erroring),
-# not a second, competing one.
+# Real releases are not made here: "Final release ultimate" (release-apk.yml)
+# tags every push to main and attaches this same unsigned/debug APK (only)
+# to that release. This workflow used to react to
+# `release: published` for that, but a release created with GITHUB_TOKEN does
+# not start other workflows, so it never ran for the automatic releases.
 #
 # Fork PRs are handled, not ignored: they build and upload as a workflow
 # artifact same as anything else, but the publish-to-Releases step is
@@ -36,14 +17,12 @@
 # triggered from a fork, regardless of any `permissions:` set here --
 # creating or updating a Release needs contents:write, which a fork PR
 # token never has.
-name: 🔁 Auto-build (unsigned, every release + PR)
+name: 🔁 Auto-build (unsigned, every PR)
 
 permissions:
   contents: write
 
 on:
-  release:
-    types: [published]
   pull_request:
   workflow_dispatch:
 
@@ -63,7 +42,7 @@ jobs:
       # importantly, the SAME cache key below, so this workflow normally
       # reuses whichever of the three already built firestack.aar today
       # instead of paying for gomobile again.
-      FIRESTACK_COMMIT: "05a664580caca8e30a912b75f2ffe480560e70ae"
+      FIRESTACK_COMMIT: "eb6d2aa43ee35eb4ce9bbca43289648334ee680c"
 
     steps:
       - uses: actions/checkout@v6
@@ -105,7 +84,7 @@ jobs:
         if: steps.firestack-cache.outputs.cache-hit != 'true'
         run: |
           set -eu
-          git clone -q https://github.com/paulvers-ui/firestack.git /tmp/firestack
+          git clone -q "https://github.com/${{ github.repository_owner }}/firestack.git" /tmp/firestack
           cd /tmp/firestack
           git checkout -q "${FIRESTACK_COMMIT}"
           chmod +x make-aar
@@ -169,7 +148,7 @@ jobs:
       - name: 🔎 Can this run publish a Release?
         id: can-publish
         run: |
-          # true for: push to main, workflow_dispatch, and a pull_request
+          # true for: workflow_dispatch, and a pull_request
           # whose head repo IS this repo (a same-repo branch PR, not a fork).
           # A fork PR's GITHUB_TOKEN is always read-only -- contents:write
           # is never available there, no matter what `permissions:` says.
@@ -182,30 +161,8 @@ jobs:
           fi
         shell: bash
 
-      # Two separate steps, not one with a conditional body, on purpose.
-      # For the `release` event, a Release for this tag already exists --
-      # release-apk.yml just published it, with its own real changelog.
-      # Whether softprops/action-gh-release treats an omitted field as
-      # "leave unchanged" or as "set to empty" on update isn't something
-      # this comment should guess at; the safe choice is to never pass
-      # name/body/generate_release_notes on that path at all, so there is
-      # nothing for either interpretation to clobber. tag_name + files is
-      # enough to attach the unsigned APK as an extra asset on the release
-      # that's already there.
-      - name: 📦 Attach unsigned APK to the existing Release
-        if: steps.can-publish.outputs.ok == 'true' && github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          files: |
-            ${{ steps.apk.outputs.apk_path }}
-            ${{ steps.apk.outputs.sha_path }}
-
-      # PR and workflow_dispatch builds have no pre-existing release to
-      # protect -- this creates a fresh one, so setting name/body here is
-      # safe and useful.
-      - name: 📦 Publish new prerelease (PR / manual build)
-        if: steps.can-publish.outputs.ok == 'true' && github.event_name != 'release'
+      - name: 📦 Publish prerelease (PR / manual build)
+        if: steps.can-publish.outputs.ok == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
@@ -213,8 +170,8 @@ jobs:
           prerelease: true
           body: |
             Unsigned debug build (`fdroidFull`, debug-keystore-signed) -- NOT
-            the signed release channel. For a real, signed release see the
-            `📦 Release APK` workflow / tags without a `pr-`/`manual-` prefix.
+            the signed release channel. Real releases come from the
+            `Final release ultimate` workflow (tags without a `pr-`/`manual-` prefix).
 
             Built from ${{ github.sha }}.
           files: |

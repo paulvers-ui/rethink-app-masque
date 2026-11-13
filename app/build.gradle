@@ -52,22 +52,33 @@ def getVersionCode = {
     return code
 }
 
+// ── libusque.so pin ────────────────────────────────────────────────────────────
+// usque CI publishes libusque.so together with libusque.so.working.sha256. The build
+// only goes ahead with the libusque.so that pin names (verifyLibusque below), and the
+// app gets the hash as BuildConfig.USQUE_SHA256 so it refuses any other binary on the
+// phone (UsqueBinary.check). Every build since Oct 9 is the same size, so the size
+// alone never told an old binary from a new one.
+def usqueJniDir = "src/main/jniLibs/arm64-v8a"
+def usquePinnedSha256 = providers.fileContents(layout.projectDirectory.file("$usqueJniDir/libusque.so.working.sha256"))
+        .asText.map { it.trim().split(/\s+/)[0].toLowerCase() }.getOrElse("")
+
 android {
     compileSdkVersion(35)
-    namespace 'com.arcadesignpro.auroravpn'
+    namespace 'com.paulvers.auroravpn'
 
     defaultConfig {
-        // applicationId matches namespace -- both are com.arcadesignpro.auroravpn,
+        // applicationId matches namespace -- both are com.paulvers.auroravpn,
         // following the AuroraVPN rebrand from com.creatore.rethinkfork. Keeping
         // the two aligned avoids the exact scanner-confusion problem documented in
         // fdroid/RFP-4306-RESPONSE.md from the previous rename (celzero.bravedns ->
         // creatore.rethinkfork): a scanner reading `namespace` instead of
         // `applicationId` would attribute this app's identity to whatever package
         // used to live at that name.
-        applicationId "com.arcadesignpro.auroravpn"
+        applicationId "com.paulvers.auroravpn"
         minSdkVersion(23)
         targetSdkVersion 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "USQUE_SHA256", "\"${usquePinnedSha256}\""
         resConfigs "en", "ab", "ang", "ar", "az", "be", "bg", "bn", "cs", "da", "de", "el", "es", "fa", "fi", "fr", "frr", "gay", "hi", "hu", "in", "it", "iw", "ja", "ko", "lir", "lt", "lv", "ml", "nb-rNO", "nl", "or", "peo", "pl", "prg", "pt", "pt-rBR", "ro", "ru", "si", "sk", "sr", "sv", "sw", "ta", "th", "tl", "tr", "tts", "uk", "ur", "uz", "vi", "zh-rCN", "zh-rHK", "zh-rTW"
     }
 
@@ -231,7 +242,55 @@ android {
 }
 
 
-def firestackRepo = project.findProperty("firestackRepo") ?: "ossrh"
+// Fails the build unless jniLibs/arm64-v8a/libusque.so is an arm64 ELF whose SHA-256 is
+// the one in libusque.so.working.sha256 (stops a stale or hand-copied .so, e.g. .prev or
+// .bak copied over it, from shipping). Up to date while neither file changes.
+def verifyLibusque = tasks.register("verifyLibusque") {
+    group = "verification"
+    description = "Checks libusque.so against libusque.so.working.sha256"
+    def bin = file("$usqueJniDir/libusque.so")
+    def pin = file("$usqueJniDir/libusque.so.working.sha256")
+    def stamp = layout.buildDirectory.file("intermediates/libusque/verified.sha256")
+    inputs.file(bin).withPropertyName("libusque").withPathSensitivity(PathSensitivity.NONE)
+    inputs.file(pin).withPropertyName("pin").withPathSensitivity(PathSensitivity.NONE)
+    outputs.file(stamp).withPropertyName("stamp")
+    doLast {
+        byte[] head = new byte[20]
+        int got = bin.withInputStream { it.read(head) }
+        boolean arm64Elf = got == 20 &&
+                (head[0] & 0xff) == 0x7f && (head[1] & 0xff) == 0x45 && (head[2] & 0xff) == 0x4c && (head[3] & 0xff) == 0x46 &&
+                (head[4] & 0xff) == 2 && (head[18] & 0xff) == 0xb7 && (head[19] & 0xff) == 0
+        if (!arm64Elf) {
+            throw new GradleException("${bin}: not a 64-bit ARM (aarch64) ELF binary")
+        }
+        String expected = pin.text.trim().split(/\s+/)[0].toLowerCase()
+        if (!(expected ==~ /[0-9a-f]{64}/)) {
+            throw new GradleException("${pin}: no SHA-256 in it ('${expected}')")
+        }
+        def md = java.security.MessageDigest.getInstance("SHA-256")
+        bin.withInputStream { s ->
+            byte[] buf = new byte[65536]
+            int n
+            while ((n = s.read(buf)) > 0) md.update(buf, 0, n)
+        }
+        String actual = md.digest().encodeHex().toString()
+        if (actual != expected) {
+            throw new GradleException(
+                    "libusque.so is not the pinned build:\n" +
+                    "  ${bin.name}  sha256 ${actual}\n" +
+                    "  ${pin.name}  sha256 ${expected}\n" +
+                    "Take both files from the same usque publish commit " +
+                    "(git checkout origin/main -- app/src/main/jniLibs/arm64-v8a) or re-run usque's " +
+                    "'Android chain .so' workflow. Never copy libusque.so.prev or .bak over libusque.so.")
+        }
+        def out = stamp.get().asFile
+        out.parentFile.mkdirs()
+        out.text = actual + "\n"
+    }
+}
+tasks.named("preBuild").configure { dependsOn(verifyLibusque) }
+
+def firestackRepo = project.findProperty("firestackRepo") ?: "local"
 def firestackCommit = project.findProperty("firestackCommit") ?: "0.5.5"
 
 def firestackDependency = { suffix = ":debug" ->

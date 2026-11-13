@@ -1,0 +1,174 @@
+name: 🛡️ CI & Security Scan
+
+# Tests plus CodeQL static analysis (SAST) for the app's Kotlin/Java code and
+# for these workflow files. Findings go to Security -> Code scanning.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 12 * * 1' # every Monday 12:00 UTC: new CodeQL queries find old bugs
+  workflow_dispatch:
+
+# Least privilege: read-only by default; only the CodeQL job may write results.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Same values and cache key as android.yml / release-apk.yml, so the
+  # firestack.aar those workflows built is normally restored from the cache.
+  NDKVER: "28.2.13676358"
+  FIRESTACK_COMMIT: "eb6d2aa43ee35eb4ce9bbca43289648334ee680c"
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          java-version: "17"
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - id: firestack-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /tmp/firestack-aar-cache/firestack.aar
+          key: firestack-aar-${{ env.FIRESTACK_COMMIT }}-ndk${{ env.NDKVER }}
+      - if: steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '>=1.26'
+          cache: false
+      - if: steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: ''
+      - name: Build firestack.aar (cache miss only)
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -eu
+          sdkmanager --install "ndk;${NDKVER}"
+          git clone -q "https://github.com/${OWNER}/firestack.git" /tmp/firestack
+          cd /tmp/firestack
+          git checkout -q "${FIRESTACK_COMMIT}"
+          chmod +x make-aar
+          ./make-aar nogo nodebug
+          mkdir -p /tmp/firestack-aar-cache
+          cp firestack.aar /tmp/firestack-aar-cache/firestack.aar
+      - name: Place firestack-local.aar
+        run: |
+          set -eu
+          test -s /tmp/firestack-aar-cache/firestack.aar
+          mkdir -p app/libs
+          cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack-local.aar
+      - name: Run unit tests
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          # Surface Kotlin compile errors and failing tests as annotations, so a
+          # red build says *why* on the PR page without opening the raw log.
+          if ! ./gradlew testFdroidFullDebugUnitTest -PfirestackRepo=local --no-configuration-cache 2>&1 | tee /tmp/unit.log; then
+            grep -E '^e: ' /tmp/unit.log | head -30 | while IFS= read -r line; do
+              f=$(printf '%s' "$line" | sed -nE 's#^e: file://[^ ]*/(app/src/[^:]+):([0-9]+):([0-9]+) (.*)#\1#p')
+              l=$(printf '%s' "$line" | sed -nE 's#^e: file://[^ ]*/(app/src/[^:]+):([0-9]+):([0-9]+) (.*)#\2#p')
+              m=$(printf '%s' "$line" | sed -nE 's#^e: file://[^ ]*/(app/src/[^:]+):([0-9]+):([0-9]+) (.*)#\4#p')
+              if [ -n "$f" ]; then echo "::error file=$f,line=$l::${m}"; else echo "::error::${line}"; fi
+            done
+            grep -E 'FAILED$|> Task .* FAILED|AAPT: error|error: resource' /tmp/unit.log | head -15 | while IFS= read -r line; do echo "::error::${line}"; done
+            exit 1
+          fi
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-unit-test-report
+          path: app/build/reports/tests/
+          retention-days: 14
+          if-no-files-found: warn
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write # upload results to Code scanning
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual # Kotlin needs a real compile to be analysed
+          - language: actions
+            build-mode: none # the workflow files themselves
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended,security-and-quality
+
+      - if: matrix.build-mode == 'manual'
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          java-version: "17"
+          distribution: temurin
+      - if: matrix.build-mode == 'manual'
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - id: firestack-cache
+        if: matrix.build-mode == 'manual'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /tmp/firestack-aar-cache/firestack.aar
+          key: firestack-aar-${{ env.FIRESTACK_COMMIT }}-ndk${{ env.NDKVER }}
+      - if: matrix.build-mode == 'manual' && steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '>=1.26'
+          cache: false
+      - if: matrix.build-mode == 'manual' && steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: ''
+      - name: Build firestack.aar (cache miss only)
+        if: matrix.build-mode == 'manual' && steps.firestack-cache.outputs.cache-hit != 'true'
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -eu
+          sdkmanager --install "ndk;${NDKVER}"
+          git clone -q "https://github.com/${OWNER}/firestack.git" /tmp/firestack
+          cd /tmp/firestack
+          git checkout -q "${FIRESTACK_COMMIT}"
+          chmod +x make-aar
+          ./make-aar nogo nodebug
+          mkdir -p /tmp/firestack-aar-cache
+          cp firestack.aar /tmp/firestack-aar-cache/firestack.aar
+      - name: Build the app for analysis
+        if: matrix.build-mode == 'manual'
+        run: |
+          set -eu
+          mkdir -p app/libs
+          cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack-local.aar
+          chmod +x gradlew
+          # No build cache, or CodeQL would not see the compiler run.
+          ./gradlew assembleFdroidFullDebug -PfirestackRepo=local --no-build-cache --no-configuration-cache --rerun-tasks
+
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:${{ matrix.language }}

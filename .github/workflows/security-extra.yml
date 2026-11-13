@@ -1,0 +1,151 @@
+name: 🔐 Secrets, Semgrep & dependency review
+
+# Complements ci-security.yml (CodeQL), sa.yml (detekt) and mobsf.yml.
+# Framework mapping: docs/security/SSDF.md (PS.1, PW.4, PW.7, RV.1).
+#
+# Tool versions are pinned and were at least two weeks old when chosen;
+# bump them deliberately (Dependabot only bumps `uses:` lines, not these).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '41 4 * * 3' # weekly
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-extra-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: Secret scan (gitleaks, full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # scan every commit, not just the tip
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '1.26'
+          cache: false
+      - name: Install gitleaks (built from source via the Go checksum DB)
+        run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
+      - name: Scan
+        # Fails the job on any finding. To accept a reviewed false positive,
+        # add its fingerprint to .gitleaksignore (never the secret itself).
+        # If a REAL secret is found: rotate it first, then rewrite history.
+        run: |
+          "$(go env GOPATH)/bin/gitleaks" git --redact --no-banner \
+            --report-format sarif --report-path gitleaks.sarif .
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gitleaks-report
+          path: gitleaks.sarif
+          retention-days: 7
+          if-no-files-found: ignore
+
+  semgrep:
+    name: Semgrep (Kotlin/Java + project rules)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Install semgrep
+        run: |
+          python3 -m venv /tmp/sg
+          /tmp/sg/bin/pip install --quiet semgrep==1.181.1
+      - name: Scan
+        # Report-only: findings land in Security -> Code scanning, where
+        # branch protection can require "no new high alerts" on PRs.
+        run: |
+          /tmp/sg/bin/semgrep scan --metrics=off --disable-version-check \
+            --config p/kotlin --config p/java --config p/secrets \
+            --config .semgrep/ \
+            --exclude 'app/src/test' --exclude 'app/src/androidTest' \
+            --sarif --output semgrep.sarif app/src || true
+      - uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  dependency-graph:
+    name: Submit Gradle dependency graph
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # required by the dependency submission API
+    # Resolution needs the published firestack artifact; never block on it.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          java-version: "17"
+          distribution: temurin
+      # Feeds GitHub's dependency graph, so Dependabot alerts cover the real
+      # resolved Gradle tree (transitives included), not just declared deps.
+      - uses: gradle/actions/dependency-submission@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+  dependency-review:
+    name: Dependency review (PRs)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    # Forks start with GitHub's Dependency graph OFF, and this action errors
+    # until it is enabled (Settings -> Code security -> Dependency graph).
+    # Remove this line once it is on, so the job can block risky PRs.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+          # Licences incompatible with redistributing the app under its licence.
+          deny-licenses: AGPL-3.0-only, AGPL-3.0-or-later, SSPL-1.0
+
+  osv:
+    name: OSV-Scanner (lockfiles)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '1.26'
+          cache: false
+      - run: go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0
+      - name: Scan
+        # Finds gradle.lockfile once dependency locking is enabled
+        # (docs/security/SSDF.md, PS.3 action item). Until then it reports
+        # "no package sources found", which is not a failure.
+        run: |
+          set +e
+          "$(go env GOPATH)/bin/osv-scanner" scan source -r --format table .
+          rc=$?
+          # 128 = no package sources found
+          if [ "$rc" -eq 128 ]; then echo "::notice::no lockfiles yet; enable Gradle dependency locking"; exit 0; fi
+          exit $rc

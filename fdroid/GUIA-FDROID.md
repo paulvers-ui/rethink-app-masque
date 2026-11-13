@@ -48,7 +48,7 @@ that's the branch to keep.
 Both being FOSS with public source is what makes this **possible** at all. If
 they were sourceless binaries, there'd be nothing to do here.
 
-The recipe in `com.arcadesignpro.auroravpn.yml` deletes them (`rm:`) and rebuilds
+The recipe in `com.paulvers.auroravpn.yml` deletes them (`rm:`) and rebuilds
 them (`prebuild:`) from `srclibs`. That's the whole trick.
 
 You also have to force `firestackRepo=local`: JitPack is **not** on the list
@@ -60,7 +60,7 @@ What's **not** a problem:
 - Firebase and Crashlytics only live in the `website` and `play` flavors. The
   `fdroid` flavor is clean, which is why the recipe builds `fdroidFull`.
 - The `applicationId` is already different from the original
-  (`com.arcadesignpro.auroravpn`), a hard requirement for a fork.
+  (`com.paulvers.auroravpn`), a hard requirement for a fork.
 - Apache-2.0 license, public repository.
 
 ## srclibs
@@ -106,8 +106,8 @@ git tag v1.0.0 && git push origin v1.0.0
 # fork gitlab.com/fdroid/fdroiddata from the web UI, then:
 git clone --depth=1 https://gitlab.com/YOUR_ACCOUNT/fdroiddata ~/fdroiddata
 cd ~/fdroiddata
-git checkout -b com.arcadesignpro.auroravpn
-cp <this repo>/fdroid/com.arcadesignpro.auroravpn.yml metadata/
+git checkout -b com.paulvers.auroravpn
+cp <this repo>/fdroid/com.paulvers.auroravpn.yml metadata/
 # also create srclibs/usque.yml and srclibs/firestack.yml (above)
 ```
 
@@ -145,9 +145,9 @@ export JAVA_HOME=$(java -XshowSettings:properties -version 2>&1 > /dev/null \
   | grep 'java.home' | awk -F'=' '{print $2}' | tr -d ' ')
 cd /build
 fdroid readmeta
-fdroid rewritemeta com.arcadesignpro.auroravpn
-fdroid lint com.arcadesignpro.auroravpn
-fdroid build com.arcadesignpro.auroravpn
+fdroid rewritemeta com.paulvers.auroravpn
+fdroid lint com.paulvers.auroravpn
+fdroid build com.paulvers.auroravpn
 ```
 
 If something fails, edit the `.yml` and repeat. This is where you'll adjust
@@ -157,9 +157,9 @@ take the most effort.
 **5. Submit the MR**
 
 ```bash
-git add metadata/com.arcadesignpro.auroravpn.yml srclibs/usque.yml srclibs/firestack.yml
+git add metadata/com.paulvers.auroravpn.yml srclibs/usque.yml srclibs/firestack.yml
 git commit -m "New app: AuroraVPN"
-git push origin com.arcadesignpro.auroravpn
+git push origin com.paulvers.auroravpn
 ```
 
 MR against `fdroiddata`, titled `New app: AuroraVPN`. Check that the

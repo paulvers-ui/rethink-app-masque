@@ -1,0 +1,303 @@
+# Manual "Signed release APK" workflow.
+#
+# Run it from Actions > "Signed release APK" > Run workflow.
+#   - tag empty  -> builds the newest v* tag
+#   - tag given  -> builds that existing tag (e.g. v1.11.1)
+#
+# It builds the fdroidFull RELEASE APK signed with the four RELEASE_* secrets
+# and FAILS (instead of silently shipping unsigned) if any secret is missing.
+# The unsigned/debug APK is optional (include_debug, on by default).
+#
+# Everything is attached to the GitHub Release of that tag, twice:
+#   AuroraVPN-<tag>.apk         versioned name (what Obtainium tracks)
+#   AuroraVPN.apk               stable name, so this link never changes:
+#     https://github.com/paulvers-ui2/rethink-app-masque/releases/latest/download/AuroraVPN.apk
+#   (same for AuroraVPN-<tag>-debug.apk / AuroraVPN-debug.apk)
+#
+# Never generate a new key to fill the secrets: Android refuses an update
+# signed by a different key than the installed app.
+
+name: Signed release APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build, e.g. v1.11.1. Leave empty for the latest v* tag.'
+        required: false
+        type: string
+      include_debug:
+        description: 'Also build and attach the unsigned (debug-keystore) APK'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signed-release-${{ inputs.tag || 'latest' }}
+  cancel-in-progress: false
+
+jobs:
+  signed-release:
+    name: 🔐 Build signed APK and attach to release
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      NDKVER: "28.2.13676358"
+      SDKVER: "36"
+      # Same firestack commit release-apk.yml pins.
+      FIRESTACK_COMMIT: "eb6d2aa43ee35eb4ce9bbca43289648334ee680c"
+      INCLUDE_DEBUG: ${{ inputs.include_debug }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ Resolve and check out the tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          tag="$INPUT_TAG"
+          if [ -z "$tag" ]; then
+            tag=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)
+          fi
+          if [ -z "$tag" ] || ! git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            echo "::error::Tag '$tag' not found. Pass an existing tag such as v1.11.1."
+            exit 1
+          fi
+          git checkout -q "$tag"
+          echo "VER=$tag" >> "$GITHUB_ENV"
+          echo "Building $tag"
+        shell: bash
+
+      - name: 🔎 Signing secrets present?
+        env:
+          KS: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -z "$KS" ] && missing="$missing RELEASE_KEYSTORE_BASE64"
+          [ -z "$KS_PASS" ] && missing="$missing RELEASE_KEYSTORE_PASSWORD"
+          [ -z "$KEY_ALIAS" ] && missing="$missing RELEASE_KEY_ALIAS"
+          [ -z "$KEY_PASS" ] && missing="$missing RELEASE_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Cannot sign $VER, missing secrets:$missing (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+        shell: bash
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '>=1.26'
+          cache: false
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: 🤖 Install SDK ${{ env.SDKVER }} + NDK ${{ env.NDKVER }}
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 1
+          command: |
+            sdkmanager --install "platforms;android-${SDKVER}" "build-tools;${SDKVER}.0.0"
+            sdkmanager --install "ndk;${NDKVER}" || echo "NDKVER=0" >> "$GITHUB_ENV"
+
+      - id: firestack-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/firestack-aar-cache/firestack.aar
+          key: firestack-aar-${{ env.FIRESTACK_COMMIT }}-ndk${{ env.NDKVER }}
+
+      - name: 🏗️ Build firestack.aar (${{ github.repository_owner }}/firestack@${{ env.FIRESTACK_COMMIT }})
+        if: steps.firestack-cache.outputs.cache-hit != 'true'
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 1
+          command: |
+            set -eu
+            git clone -q "https://github.com/${{ github.repository_owner }}/firestack.git" /tmp/firestack
+            cd /tmp/firestack
+            git checkout -q "${FIRESTACK_COMMIT}"
+            chmod +x make-aar
+            ./make-aar nogo nodebug
+            mkdir -p /tmp/firestack-aar-cache
+            cp firestack.aar /tmp/firestack-aar-cache/firestack.aar
+
+      - name: 📋 Place firestack-local.aar
+        run: |
+          set -eu
+          test -s /tmp/firestack-aar-cache/firestack.aar || {
+            echo "::error::firestack.aar missing after build/cache-restore step"
+            exit 1
+          }
+          mkdir -p app/libs
+          cp /tmp/firestack-aar-cache/firestack.aar app/libs/firestack-local.aar
+        shell: bash
+
+      - name: 🔑 Decode the keystore
+        env:
+          KS: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          set -eu
+          printf '%s' "$KS" | tr -d ' \r\n\t' | base64 -d > "${RUNNER_TEMP}/release.keystore"
+          test -s "${RUNNER_TEMP}/release.keystore" || { echo "::error::RELEASE_KEYSTORE_BASE64 decoded to nothing"; exit 1; }
+          echo "RELEASE_KEYSTORE_PATH=${RUNNER_TEMP}/release.keystore" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: 🧪 Validate keystore and passwords
+        env:
+          KS_PASS: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -u
+          ks="$RELEASE_KEYSTORE_PATH"
+          if ! out=$(keytool -list -keystore "$ks" -storepass "$KS_PASS" 2>&1); then
+            echo "::error title=Keystore check failed::RELEASE_KEYSTORE_PASSWORD is wrong, or RELEASE_KEYSTORE_BASE64 is not a valid keystore. keytool said: $(echo "$out" | head -3 | tr '\n' ' ')"
+            exit 1
+          fi
+          aliases=$(echo "$out" | grep -E 'PrivateKeyEntry' | cut -d, -f1 | tr '\n' ' ')
+          if ! echo "$aliases" | tr ' ' '\n' | grep -qxF -- "$KEY_ALIAS"; then
+            echo "::error title=Alias mismatch::RELEASE_KEY_ALIAS does not match any key in the keystore. Aliases in the keystore: ${aliases:-none}"
+            exit 1
+          fi
+          if echo "$out" | grep -qi 'Keystore type: PKCS12' && [ "$KEY_PASS" != "$KS_PASS" ]; then
+            echo "::error title=Key password mismatch::The keystore is PKCS12, so RELEASE_KEY_PASSWORD must be exactly the same value as RELEASE_KEYSTORE_PASSWORD."
+            exit 1
+          fi
+          echo "Keystore OK: alias '$KEY_ALIAS' present, passwords consistent."
+        shell: bash
+
+      - name: ⚙️ gradlew permissions
+        run: chmod +x gradlew
+
+      - name: 🚂 Build APKs (fdroidFull)
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -u
+          log="$RUNNER_TEMP/gradle.log"
+          : > "$log"
+          # gradle.properties caps the Gradle/Kotlin heap at 2 GB, which ran out
+          # of memory compiling two variants in one invocation. Raise it, and
+          # build the variants one after the other in separate invocations.
+          run_gradle() {
+            ./gradlew "$@" -PfirestackRepo=local --no-configuration-cache --warning-mode all \
+              "-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8" \
+              "-Pkotlin.daemon.jvmargs=-Xmx3g" 2>&1 | tee -a "$log"
+            return "${PIPESTATUS[0]}"
+          }
+          rc=0
+          run_gradle assembleFdroidFullRelease || rc=$?
+          if [ "$rc" -eq 0 ] && [ "$INCLUDE_DEBUG" = true ]; then
+            ./gradlew --stop > /dev/null 2>&1 || true
+            run_gradle assembleFdroidFullDebug || rc=$?
+          fi
+          if [ "$rc" -ne 0 ]; then
+            # Surface the real reason as an annotation and in the job summary.
+            why=$({ grep -A12 -m1 'What went wrong' "$log"; grep -m8 -E '^e: |error: |FAILED' "$log"; } | cut -c1-300 | head -20)
+            echo "::error title=Gradle build failed::$(echo "$why" | tr '\n' '|' | cut -c1-1500)"
+            { echo '### Gradle failure'; echo '```'; echo "$why"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$rc"
+        shell: bash
+
+      - name: 🔎 Verify and name the APKs
+        id: apks
+        run: |
+          set -eu
+          AAPT="$ANDROID_HOME/build-tools/${SDKVER}.0.0/aapt"
+          APKSIGNER="$ANDROID_HOME/build-tools/${SDKVER}.0.0/apksigner"
+
+          check() { # applicationId and arm64-only native code
+            local f="$1" appid natives
+            appid=$("$AAPT" dump badging "$f" | grep -oP "package: name='\K[^']+")
+            if [ "$appid" != "com.paulvers.auroravpn" ]; then
+              echo "::error::$f has applicationId '$appid', expected com.paulvers.auroravpn"
+              exit 1
+            fi
+            natives=$("$AAPT" dump badging "$f" | grep "native-code" || echo "native-code: (none)")
+            case "$natives" in
+              *armeabi-v7a*|*x86*) echo "::error::$f contains 32-bit/x86 native code ($natives); this project is arm64-only"; exit 1 ;;
+              *arm64-v8a*) ;;
+              *) echo "::error::$f has no arm64-v8a native code ($natives)"; exit 1 ;;
+            esac
+          }
+
+          one() { # the single APK a build type produced
+            local found
+            mapfile -t found < <(find "$1" -name "*.apk" 2>/dev/null)
+            test "${#found[@]}" -eq 1 || { echo "::error::expected one APK in $1, found ${#found[@]}" >&2; exit 1; }
+            echo "${found[0]}"
+          }
+
+          files=()
+
+          # --- signed release ---
+          src=$(one app/build/outputs/apk/fdroidFull/release)
+          "$APKSIGNER" verify "$src" > /dev/null 2>&1 || { echo "::error::$src failed signature verification; check the RELEASE_KEY* secrets"; exit 1; }
+          check "$src"
+          signed_apk="AuroraVPN-${VER}.apk"
+          cp "$src" "$signed_apk"
+          cp "$src" AuroraVPN.apk
+          sha256sum "$signed_apk" > "$signed_apk.sha256"
+          sha256sum AuroraVPN.apk > AuroraVPN.apk.sha256
+          files+=("$signed_apk" "$signed_apk.sha256" "AuroraVPN.apk" "AuroraVPN.apk.sha256")
+
+          # --- unsigned / debug-keystore (optional) ---
+          if [ "$INCLUDE_DEBUG" = true ]; then
+            src=$(one app/build/outputs/apk/fdroidFull/debug)
+            check "$src"
+            debug_apk="AuroraVPN-${VER}-debug.apk"
+            cp "$src" "$debug_apk"
+            cp "$src" AuroraVPN-debug.apk
+            sha256sum "$debug_apk" > "$debug_apk.sha256"
+            sha256sum AuroraVPN-debug.apk > AuroraVPN-debug.apk.sha256
+            files+=("$debug_apk" "$debug_apk.sha256" "AuroraVPN-debug.apk" "AuroraVPN-debug.apk.sha256")
+          fi
+
+          versionName=$("$AAPT" dump badging "$signed_apk" | grep -oP "versionName='\K[^']+")
+          versionCode=$("$AAPT" dump badging "$signed_apk" | grep -oP "versionCode='\K[^']+")
+          echo "$VER: signed versionName=$versionName versionCode=$versionCode"
+
+          {
+            echo "files<<APKEOF"
+            printf '%s\n' "${files[@]}"
+            echo "APKEOF"
+            echo "version_name=${versionName}"
+            echo "version_code=${versionCode}"
+          } >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: signed-apk-${{ env.VER }}
+          path: ${{ steps.apks.outputs.files }}
+          if-no-files-found: error
+
+      # Attaches to the existing release of the tag (creating it if needed);
+      # assets with the same name are replaced, the release notes are kept.
+      - name: 📦 Attach APKs to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VER }}
+          name: AuroraVPN ${{ env.VER }}
+          files: ${{ steps.apks.outputs.files }}
+          fail_on_unmatched_files: true

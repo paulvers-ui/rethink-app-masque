@@ -27,7 +27,8 @@ permissions:
 
 env:
   JNI_DIR: app/src/main/jniLibs/arm64-v8a
-  USQUE_REPO: paulvers-ui/usque
+  # Same owner as this repo (the repos moved from paulvers-ui to paulvers-ui2).
+  USQUE_REPO: ${{ github.repository_owner }}/usque
 
 jobs:
   build-and-commit:

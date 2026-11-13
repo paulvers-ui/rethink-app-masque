@@ -725,6 +725,14 @@
 
     <string name="dns_card_latency_active" translatable="true">%1$sms</string>
     <string name="dns_card_latency_inactive" translatable="true">Enable DNS mode.</string>
+    <!-- DNSSEC status line on the home-screen DNS card -->
+    <string name="dnssec_card_validating" translatable="true">DNSSEC ✓ validated</string>
+    <string name="dnssec_card_checking" translatable="true">DNSSEC: checking…</string>
+    <string name="dnssec_card_degraded" translatable="true">DNSSEC: partial</string>
+    <string name="dnssec_card_unreachable" translatable="true">DNSSEC: blocked on this network</string>
+    <string name="dnssec_card_broken" translatable="true">DNSSEC ✗ check failed</string>
+    <string name="dnssec_card_unknown" translatable="true">DNSSEC: tap to check</string>
+    <string name="dnssec_card_cd" translatable="true">DNSSEC status: %1$s. Double-tap to re-check.</string>
 
     <string name="firewall_card_universal_rules" translatable="true">%1$s universal rule(s)</string>
     <string name="rules_card_domain_count" translatable="true">%1$s domain rule(s)</string>
@@ -1254,6 +1262,33 @@
     <string name="firewall_rule_lockdown_wg" translatable="true">Lockdown Proxy</string>
     <string name="firewall_rule_proxy_error" translatable="true">Proxy Error</string>
     <string name="firewall_rule_temp_allow" translatable="false">Temporary Allow</string>
+    <string name="firewall_rule_block_country" translatable="true">Blocked country</string>
+    <string name="firewall_rule_block_country_desc" translatable="true"><![CDATA[This connection goes to a country you blocked.<br/><br/> To change go to <i>Firewall &#8594; Countries &amp; networks</i>.]]></string>
+    <string name="firewall_rule_block_asn" translatable="true">Blocked network</string>
+    <string name="firewall_rule_block_asn_desc" translatable="true"><![CDATA[This connection goes to a network (ASN) you blocked.<br/><br/> To change go to <i>Firewall &#8594; Countries &amp; networks</i>.]]></string>
+
+    <!-- Countries & networks firewall screen -->
+    <string name="cn_title">Countries &amp; networks</string>
+    <string name="cn_firewall_row_desc">Block connections to whole countries or networks (ASN).</string>
+    <string name="cn_intro">These come before every other rule: they apply to every app, including apps set to Bypass or Exclude. A connection to a blocked place is refused, and your own network (LAN) is never blocked.</string>
+    <string name="cn_countries_heading">Countries</string>
+    <string name="cn_mode_block">Block these countries</string>
+    <string name="cn_mode_allow">Allow only these</string>
+    <string name="cn_choose_countries">Choose countries</string>
+    <string name="cn_networks_heading">Networks (ASN)</string>
+    <string name="cn_networks_desc">Block everything a network (an autonomous system, such as a hosting company or an ISP) announces. AuroraVPN looks its address ranges up at RIPEstat and refreshes them weekly.</string>
+    <string name="cn_block_network">Block a network</string>
+    <string name="cn_no_countries">No countries yet.</string>
+    <string name="cn_no_networks">No networks yet.</string>
+    <string name="cn_blocked">blocked</string>
+    <string name="cn_allowed">allowed</string>
+    <string name="cn_remove">Remove</string>
+    <string name="cn_network_sub">Network blocked</string>
+    <string name="cn_block_network_hint" translatable="false">13335 or AS13335</string>
+    <string name="cn_block_network_msg">Enter the network\'s AS number. For example, AS13335 is Cloudflare and AS16509 is Amazon AWS.</string>
+    <string name="cn_bad_asn">Enter a network number like 13335 or AS13335</string>
+    <string name="cn_country_title" translatable="false">%1$s  %2$s</string>
+    <string name="cn_country_sub" translatable="false">%1$s · %2$s</string>
 
     <string name="firewall_rule_no_rule_desc" translatable="true">No firewall rules matched this connection.</string>
     <string name="firewall_rule_block_app_desc" translatable="true"><![CDATA[A user-set firewall rule blocked this <i>app</i>.<br/><br/> To change go to <i>All Apps</i> tab.]]></string>
@@ -1526,11 +1561,11 @@
     <string name="brbs_backup_restore_desc" translatable="true">Doesn\'t work across app versions</string>
 
     <string name="brbs_backup_dialog_title" translatable="true">Take backup</string>
-    <string name="brbs_backup_dialog_message" translatable="true">Backs up app settings, network, and dns logs to a file. This will restart the VPN.</string>
+    <string name="brbs_backup_dialog_message" translatable="true">Backs up app settings, network, and dns logs as an AuroraVPN text block to copy. No file is saved on the phone. This will restart the VPN.</string>
     <string name="brbs_backup_dialog_positive" translatable="true">Backup</string>
 
     <string name="brbs_restore_dialog_title" translatable="true">Restore backup</string>
-    <string name="brbs_restore_dialog_message" translatable="true">Restore app settings, network, and dns logs from a backup file. This will restart the app.</string>
+    <string name="brbs_restore_dialog_message" translatable="true">Restore app settings, network, and dns logs from an AuroraVPN backup text block (-----BEGIN AURORAVPN BACKUP-----). This will restart the app.</string>
     <string name="brbs_restore_dialog_positive" translatable="true">Restore</string>
 
     <string name="brbs_backup_dialog_failure_title" translatable="true">Backup failed</string>
@@ -1740,8 +1775,8 @@
         Example: key:"sender" value:"com.termux"\n\n
 
         Supported actions:\n
-        • Start VPN – com.arcadesignpro.auroravpn.intent.action.VPN_START\n
-        • Stop VPN – com.arcadesignpro.auroravpn.intent.action.VPN_STOP
+        • Start VPN – com.paulvers.auroravpn.intent.action.VPN_START\n
+        • Stop VPN – com.paulvers.auroravpn.intent.action.VPN_STOP
     </string>
     <string name="adv_tasker_dialog_edit_hint" translatable="true">Enter package name (example: net.dinglisch.android.taskerm)</string>
 
@@ -1977,6 +2012,8 @@
     <string name="warp_register_failed">WARP registration failed. Try again.</string>
     <string name="warp_not_registered">Register with WARP first</string>
     <string name="warp_start_failed">Failed to start WARP tunnel</string>
+    <string name="warp_start_failed_reason">Failed to start WARP tunnel: %1$s</string>
+    <string name="warp_status_connecting">Connecting…</string>
     <string name="warp_status_active">Connected — routing via Cloudflare WARP</string>
     <string name="warp_status_registered">Registered — tap Connect to enable</string>
     <string name="warp_status_unregistered">Not registered</string>
@@ -2035,6 +2072,7 @@
     <string name="chain_connected">Chain connected: the VPN now exits via WARP2 (apps → WARP2 → wg0 → WARP1)</string>
     <string name="chain_tunnel_title">WARP chain (WARP1 → wg0 → WARP2)</string>
     <string name="chain_connect_failed">Chain failed to start — see log</string>
+    <string name="chain_connect_failed_reason">Chain failed to start: %1$s</string>
     <string name="chain_not_ready">Finish steps 1–3 first</string>
     <string name="chain_status_connected">Connected</string>
     <string name="chain_status_ready">Ready — not connected</string>
@@ -2101,7 +2139,7 @@
     <string name="chain_args_title_warp1">WARP1 libusque.so flags</string>
     <string name="chain_args_title_wg">wg0 libusque.so flags</string>
     <string name="chain_args_title_warp2">WARP2 libusque.so flags</string>
-    <string name="chain_args_desc_warp1">Space-separated. {sni} is the SNI above. -m MTU, -i QUIC packet size, -P port, -k keepalive and -r reconnect delay (both also apply to WARP2), --http2-fallback-after N failed QUIC connects (0 = never).</string>
+    <string name="chain_args_desc_warp1">Space-separated. {sni} is the SNI above. -m MTU, -i QUIC packet size, -P port, -k keepalive and -r reconnect delay (both also apply to WARP2), --always-reconnect rebuilds WARP1 and WARP2 at once after a drop, --doh / --dnssec / --doh-url set how proxied names resolve. Optional: --http2-fallback-after N (0 = never).</string>
     <string name="chain_args_desc_wg">Only --wg-* flags. --wg-mtu 0 uses the MTU from wg0.conf; usque always caps it to WARP1 MTU − 60 (− 80 for an IPv6 endpoint). --wg-keepalive applies when wg0.conf sets none.</string>
     <string name="chain_args_desc_warp2">Only --exit-* flags. {exit_sni} is the exit SNI above. --exit-transport auto picks HTTP/2 inside wg0; --exit-mtu 1280–1500.</string>
     <string name="chain_args_effective">Effective (next start):</string>
@@ -2116,4 +2154,35 @@
     <string name="chain_cmd_full_label">Full command (next start):</string>
     <string name="chain_restart_ok">Chain restarted with the new settings</string>
     <string name="chain_restart_failed">Chain did not come back with the new settings: disconnected, see log</string>
+
+    <!-- Copy/paste transfer of backups and WireGuard configs (SecureTextTransfer.kt) -->
+    <string name="text_transfer_copy" translatable="true">Copy</string>
+    <string name="text_transfer_share" translatable="true">Share</string>
+    <string name="text_transfer_import" translatable="true">Import</string>
+    <string name="text_transfer_paste" translatable="true">Paste</string>
+    <string name="text_transfer_export_info" translatable="true">%1$d characters. Anyone with this text can restore it, so keep it as private as a password.</string>
+    <string name="text_transfer_copied" translatable="true">Copied. The clipboard will be cleared in %1$d seconds.</string>
+    <string name="text_transfer_clipboard_empty" translatable="true">The clipboard is empty.</string>
+    <string name="text_transfer_err_empty" translatable="true">Nothing to import. Paste the text first.</string>
+    <string name="text_transfer_err_too_large" translatable="true">This text is too large.</string>
+    <string name="text_transfer_err_too_large_for_clipboard" translatable="true">Too large for copy and paste. Use the file option instead.</string>
+    <string name="text_transfer_err_control" translatable="true">The text contains invalid characters.</string>
+    <string name="text_transfer_err_not_base64" translatable="true">This is not valid AuroraVPN text. Copy it again in full.</string>
+    <string name="text_transfer_err_wrong_kind" translatable="true">This text is a different kind of export.</string>
+    <string name="text_transfer_err_truncated" translatable="true">The text is incomplete. Copy it again, including the BEGIN and END lines.</string>
+    <string name="text_transfer_err_checksum" translatable="true">The text was changed or damaged in transit (checksum mismatch).</string>
+    <string name="text_transfer_err_not_backup" translatable="true">This text is not an AuroraVPN backup.</string>
+    <string name="text_transfer_err_not_wireguard" translatable="true">This is not a WireGuard config. It must contain an [Interface] section.</string>
+    <string name="text_transfer_err_generic" translatable="true">Something went wrong. Please try again.</string>
+    <string name="brbs_backup_text_btn" translatable="true">Copy as text</string>
+    <string name="brbs_restore_text_btn" translatable="true">Paste text</string>
+    <string name="brbs_backup_text_title" translatable="true">Backup as text</string>
+    <string name="brbs_backup_text_too_large" translatable="true">This backup is too large for text. Use the file option instead.</string>
+    <string name="brbs_restore_text_title" translatable="true">Restore from text</string>
+    <string name="brbs_restore_text_hint" translatable="true">Paste the text that starts with -----BEGIN AURORAVPN BACKUP-----</string>
+    <string name="wg_import_text_title" translatable="true">Paste WireGuard config</string>
+    <string name="wg_import_text_hint" translatable="true">[Interface] … or an AuroraVPN text block</string>
+    <string name="wg_import_text_success" translatable="true">WireGuard config imported.</string>
+    <string name="wg_export_text_btn" translatable="true">Copy as text</string>
+    <string name="wg_export_text_title" translatable="true">WireGuard config (.conf)</string>
 </resources>

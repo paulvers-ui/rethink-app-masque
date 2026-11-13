@@ -1,0 +1,45 @@
+Error: unknown flag: --always-reconnect
+Usage:
+  usque chain [flags]
+Error: unknown flag: --always-reconnect
+
+Flags:
+  -b, --bind string                   Address to bind the SOCKS proxy to (default "127.0.0.1")
+  -P, --connect-port int              Port for the WARP1 MASQUE connection (default 443)
+      --connect-timeout duration      Give up on one connect attempt after this long (0 = no limit) (default 15s)
+      --dnssec string                 DNSSEC enforcement for DoH answers: validate (reject bogus answers, and unauthenticated ones for names known to be signed), strict (require every answer to be authenticated) or off (default "validate")
+      --doh                           Resolve proxy target names with DNS-over-HTTPS (--doh-url) instead of plain UDP/53 to -d (default true)
+      --doh-url stringArray           DNS-over-HTTPS endpoints, tried in order; IP-literal hosts need no bootstrap lookup (default [https://1.1.1.1/dns-query,https://1.0.0.1/dns-query,https://[2606:4700:4700::1111]/dns-query,https://[2606:4700:4700::1001]/dns-query])
+      --exit-config string            usque config.json of the second WARP identity (exit hop)
+      --exit-connect-port int         Port for the WARP2 MASQUE connection (inside wg0) (default 443)
+      --exit-mtu int                  WARP2 (exit) tunnel MTU (default 1280)
+      --exit-sni string               SNI for the exit hop (hidden inside wg0, the ISP never sees it) (default "consumer-masque.cloudflareclient.com")
+      --exit-stall-timeout duration   Like --stall-timeout, for WARP2 (inside wg0); only checked while WARP1 is healthy (default 8s)
+      --exit-transport string         Exit hop transport: auto, h2 or h3. auto picks HTTP/2 because QUIC does not fit through wg0 inside WARP1 (default "auto")
+  -h, --help                          help for chain
+      --http2                         WARP1 over HTTP/2 instead of QUIC
+      --http2-fallback-after int      WARP1: switch from QUIC to HTTP/2 after this many failed connects in a row, for networks that block UDP 443 (0 = never) (default 2)
+      --idle-timeout duration         QUIC idle timeout: a connection that hears nothing for this long is rebuilt (0 = QUIC default, 30s)
+  -i, --initial-packet-size uint16    QUIC packet size for the MASQUE connection; a nonzero value turns off path MTU discovery. 0 starts at 1280 with path MTU discovery, which drops full-size tunnel packets until discovery grows the size (default 1350)
+      --insecure                      Disable endpoint certificate pinning (testing only)
+  -6, --ipv6                          Use IPv6 for the WARP1 MASQUE connection
+  -k, --keepalive-period duration     Keepalive period for MASQUE connections (default 30s)
+  -m, --mtu int                       WARP1 tunnel MTU; wg0's MTU is derived from it (default 1280)
+  -w, --password string               SOCKS password
+  -p, --port string                   Port to listen on for SOCKS proxy (default "1080")
+      --probe-addr string             host:port the stall probe connects to through the tunnel (default 1.1.1.1:443, or [2606:4700:4700::1111]:443 without tunnel IPv4)
+  -r, --reconnect-delay duration      Delay between reconnect attempts (default 1s)
+  -s, --sni-address string            SNI for WARP1 (the only hop the ISP sees) (default "consumer-masque.cloudflareclient.com")
+      --stall-timeout duration        Reconnect when packets go out but nothing comes back for this long and a TCP probe through the tunnel gets no answer either (0 = off) (default 3s)
+      --udp-timeout duration          Idle deadline for SOCKS5 UDP relays (default 1m0s)
+  -u, --username string               SOCKS username
+      --watch-network                 Reconnect at once when the local network changes (Wi-Fi <-> mobile data) or comes back after an outage (default true)
+      --wg string                     wg-quick config of the middle WireGuard hop (plain WireGuard)
+      --wg-keepalive int              PersistentKeepalive for wg0 when its config sets none; keeps Cloudflare's NAT open (default 25)
+      --wg-mtu int                    wg0 inner MTU; 0 = the config's MTU. Always capped to what fits inside WARP1 (-m minus 60, or 80 for an IPv6 endpoint)
+      --wg-verbose                    Verbose WireGuard logs
+
+Global Flags:
+  -c, --config string   config file (default is config.json) (default "config.json")
+      --secrets-stdin   Read the keys from stdin instead of files, as JSON: {"config": <config.json>, "exit_config": <config.json>, "wg": "<wg-quick text>"} (the last two for chain only). -c, --exit-config and --wg are then ignored
+
